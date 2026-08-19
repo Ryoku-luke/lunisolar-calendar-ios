@@ -1,5 +1,51 @@
 import Foundation
 
+// MARK: - 农历数据加载器（资源化 JSON + 内置 fallback）
+
+/// 农历数据提供器：优先从 Bundle JSON 加载，失败时回退到内置数据
+enum LunarDataProvider {
+    /// 从 lunar_calendar.json 加载，失败时使用内置 fallback
+    static let lunarInfo: [UInt32] = loadLunarInfo()
+
+    private static func loadLunarInfo() -> [UInt32] {
+        // 1. 尝试从 Bundle 加载 JSON
+        if let url = Bundle.module.url(forResource: "lunar_calendar", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let hexStrings = json["data"] as? [String] {
+            let values = hexStrings.compactMap { UInt32($0, radix: 16) }
+            if values.count == 201 { return values }
+        }
+        // 2. Fallback：内置数据（保证即使 JSON 加载失败也能工作）
+        return fallbackLunarInfo
+    }
+
+    /// 内置 fallback 数据（与 lunar_calendar.json 内容一致）
+    private static let fallbackLunarInfo: [UInt32] = [
+        0x04bd8,0x04ae0,0x0a570,0x054d5,0x0d260,0x0d950,0x16554,0x056a0,0x09ad0,0x055d2,
+        0x04ae0,0x0a5b6,0x0a4d0,0x0d250,0x1d255,0x0b540,0x0d6a0,0x0ada2,0x095b0,0x14977,
+        0x04970,0x0a4b0,0x0b4b5,0x06a50,0x06d40,0x1ab54,0x02b60,0x09570,0x052f2,0x04970,
+        0x06566,0x0d4a0,0x0ea50,0x06e95,0x05ad0,0x02b60,0x186e3,0x092e0,0x1c8d7,0x0c950,
+        0x0d4a0,0x1d8a6,0x0b550,0x056a0,0x1a5b4,0x025d0,0x092d0,0x0d2b2,0x0a950,0x0b557,
+        0x06ca0,0x0b550,0x15355,0x04da0,0x0a5b0,0x14573,0x052b0,0x0a9a8,0x0e950,0x06aa0,
+        0x0aea6,0x0ab50,0x04b60,0x0aae4,0x0a570,0x05260,0x0f263,0x0d950,0x05b57,0x056a0,
+        0x096d0,0x04dd5,0x04ad0,0x0a4d0,0x0d4d4,0x0d250,0x0d558,0x0b540,0x0b6a0,0x195a6,
+        0x095b0,0x049b0,0x0a974,0x0a4b0,0x0b27a,0x06a50,0x06d40,0x0af46,0x0ab60,0x09570,
+        0x04af5,0x04970,0x064b0,0x074a3,0x0ea50,0x06b58,0x055c0,0x0ab60,0x096d5,0x092e0,
+        0x0c960,0x0d954,0x0d4a0,0x0da50,0x07552,0x056a0,0x0abb7,0x025d0,0x092d0,0x0cab5,
+        0x0a950,0x0b4a0,0x0baa4,0x0ad50,0x055d9,0x04ba0,0x0a5b0,0x15176,0x052b0,0x0a930,
+        0x07954,0x06aa0,0x0ad50,0x05b52,0x04b60,0x0a6e6,0x0a4e0,0x0d260,0x0ea65,0x0d530,
+        0x05aa0,0x076a3,0x096d0,0x04afb,0x04ad0,0x0a4d0,0x1d0b6,0x0d250,0x0d520,0x0dd45,
+        0x0b5a0,0x056d0,0x055b2,0x049b0,0x0a577,0x0a4b0,0x0aa50,0x1b255,0x06d20,0x0ada0,
+        0x14b63,0x09370,0x049f8,0x04970,0x064b0,0x168a6,0x0ea50,0x06b20,0x1a6c4,0x0aae0,
+        0x0a2e0,0x0d2e3,0x0c960,0x0d557,0x0d4a0,0x0da50,0x05d55,0x056a0,0x0a6d0,0x055d4,
+        0x052d0,0x0a9b8,0x0a950,0x0b4a0,0x0b6a6,0x0ad50,0x055a0,0x0aba4,0x0a5b0,0x052b0,
+        0x0b273,0x06930,0x07337,0x06aa0,0x0ad50,0x14b55,0x04b60,0x0a570,0x054e4,0x0d160,
+        0x0e968,0x0d520,0x0daa0,0x16aa6,0x056d0,0x04ae0,0x0a9d4,0x0a2d0,0x0d150,0x0f252,
+        0x0d520
+    ]
+}
+
 // MARK: - 农历日期模型
 
 public struct LunarDate: Equatable, Hashable {
@@ -29,35 +75,6 @@ public struct LunarDate: Equatable, Hashable {
 
 public enum ChineseCalendar {
 
-    // 公历转农历核心数据表 (1900-2100)
-    // 每个整数编码了该年农历信息:
-    //   bit 0-3:  闰月月份 (0=无闰月)
-    //   bit 4-15: 12个月大小(1=30天, 0=29天), 从最高位开始对应正月到腊月
-    //   bit 16-19: 闰月大小(1=30天, 0=29天)
-    static let lunarInfo: [UInt32] = [
-        0x04bd8,0x04ae0,0x0a570,0x054d5,0x0d260,0x0d950,0x16554,0x056a0,0x09ad0,0x055d2,
-        0x04ae0,0x0a5b6,0x0a4d0,0x0d250,0x1d255,0x0b540,0x0d6a0,0x0ada2,0x095b0,0x14977,
-        0x04970,0x0a4b0,0x0b4b5,0x06a50,0x06d40,0x1ab54,0x02b60,0x09570,0x052f2,0x04970,
-        0x06566,0x0d4a0,0x0ea50,0x06e95,0x05ad0,0x02b60,0x186e3,0x092e0,0x1c8d7,0x0c950,
-        0x0d4a0,0x1d8a6,0x0b550,0x056a0,0x1a5b4,0x025d0,0x092d0,0x0d2b2,0x0a950,0x0b557,
-        0x06ca0,0x0b550,0x15355,0x04da0,0x0a5b0,0x14573,0x052b0,0x0a9a8,0x0e950,0x06aa0,
-        0x0aea6,0x0ab50,0x04b60,0x0aae4,0x0a570,0x05260,0x0f263,0x0d950,0x05b57,0x056a0,
-        0x096d0,0x04dd5,0x04ad0,0x0a4d0,0x0d4d4,0x0d250,0x0d558,0x0b540,0x0b6a0,0x195a6,
-        0x095b0,0x049b0,0x0a974,0x0a4b0,0x0b27a,0x06a50,0x06d40,0x0af46,0x0ab60,0x09570,
-        0x04af5,0x04970,0x064b0,0x074a3,0x0ea50,0x06b58,0x055c0,0x0ab60,0x096d5,0x092e0,
-        0x0c960,0x0d954,0x0d4a0,0x0da50,0x07552,0x056a0,0x0abb7,0x025d0,0x092d0,0x0cab5,
-        0x0a950,0x0b4a0,0x0baa4,0x0ad50,0x055d9,0x04ba0,0x0a5b0,0x15176,0x052b0,0x0a930,
-        0x07954,0x06aa0,0x0ad50,0x05b52,0x04b60,0x0a6e6,0x0a4e0,0x0d260,0x0ea65,0x0d530,
-        0x05aa0,0x076a3,0x096d0,0x04afb,0x04ad0,0x0a4d0,0x1d0b6,0x0d250,0x0d520,0x0dd45,
-        0x0b5a0,0x056d0,0x055b2,0x049b0,0x0a577,0x0a4b0,0x0aa50,0x1b255,0x06d20,0x0ada0,
-        0x14b63,0x09370,0x049f8,0x04970,0x064b0,0x168a6,0x0ea50,0x06b20,0x1a6c4,0x0aae0,
-        0x0a2e0,0x0d2e3,0x0c960,0x0d557,0x0d4a0,0x0da50,0x05d55,0x056a0,0x0a6d0,0x055d4,
-        0x052d0,0x0a9b8,0x0a950,0x0b4a0,0x0b6a6,0x0ad50,0x055a0,0x0aba4,0x0a5b0,0x052b0,
-        0x0b273,0x06930,0x07337,0x06aa0,0x0ad50,0x14b55,0x04b60,0x0a570,0x054e4,0x0d160,
-        0x0e968,0x0d520,0x0daa0,0x16aa6,0x056d0,0x04ae0,0x0a9d4,0x0a2d0,0x0d150,0x0f252,
-        0x0d520
-    ]
-
     public static let tianGan = ["甲","乙","丙","丁","戊","己","庚","辛","壬","癸"]
     public static let diZhi = ["子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥"]
     public static let zodiacs = ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]
@@ -68,29 +85,32 @@ public enum ChineseCalendar {
         "廿一","廿二","廿三","廿四","廿五","廿六","廿七","廿八","廿九","三十"
     ]
 
+    /// 支持的农历年份范围
+    public static let minYear = 1900
+    public static let maxYear = 2100
+
     // MARK: - 基础信息提取
 
     /// 获取该年闰月月份 (0=无闰月)
     public static func leapMonth(of year: Int) -> Int {
-        guard year >= 1900, year <= 2100 else { return 0 }
-        return Int(lunarInfo[year - 1900] & 0xF)
+        guard year >= minYear, year <= maxYear else { return 0 }
+        return Int(LunarDataProvider.lunarInfo[year - minYear] & 0xF)
     }
 
     /// 获取该年闰月天数
     public static func leapDays(of year: Int) -> Int {
         if leapMonth(of: year) != 0 {
-            return (lunarInfo[year - 1900] & 0x10000) != 0 ? 30 : 29
+            return (LunarDataProvider.lunarInfo[year - minYear] & 0x10000) != 0 ? 30 : 29
         }
         return 0
     }
 
     /// 获取该年农历总天数
     public static func daysInLunarYear(_ year: Int) -> Int {
-        guard year >= 1900, year <= 2100 else { return 354 }
-        // bit4-15 对应正月到腊月大小 (1=30天)
+        guard year >= minYear, year <= maxYear else { return 354 }
         var sum = 348 // 12 * 29 天
-        let info = lunarInfo[year - 1900]
-        var mask: UInt32 = 0x8000  // bit15 (正月) -> bit4 (腊月)
+        let info = LunarDataProvider.lunarInfo[year - minYear]
+        var mask: UInt32 = 0x8000
         for _ in 0..<12 {
             if info & mask != 0 { sum += 1 }
             mask >>= 1
@@ -100,13 +120,12 @@ public enum ChineseCalendar {
 
     /// 获取该农历月的天数
     public static func daysInLunarMonth(year: Int, month: Int, isLeap: Bool) -> Int {
-        guard year >= 1900, year <= 2100, month >= 1, month <= 12 else { return 30 }
+        guard year >= minYear, year <= maxYear, month >= 1, month <= 12 else { return 30 }
         if isLeap && leapMonth(of: year) == month {
             return leapDays(of: year)
         }
-        // bit15=正月 bit14=二月 ... bit4=腊月
         let mask: UInt32 = 0x10000 >> month
-        return (lunarInfo[year - 1900] & mask) != 0 ? 30 : 29
+        return (LunarDataProvider.lunarInfo[year - minYear] & mask) != 0 ? 30 : 29
     }
 
     // MARK: - 公历转农历
@@ -122,70 +141,74 @@ public enum ChineseCalendar {
         return Calendar.current.date(from: comps) ?? Date()
     }()
 
-    /// 公历 Date 转农历 LunarDate
+    /// 检查日期是否在支持范围内
+    public static func isSupported(_ date: Date) -> Bool {
+        let cal = Calendar(identifier: .gregorian)
+        let comps = cal.dateComponents([.year], from: cal.startOfDay(for: date))
+        let y = comps.year ?? 0
+        return y >= minYear && y <= maxYear
+    }
+
+    /// 公历 Date 转农历 LunarDate（安全版，越界返回 nil）
+    public static func lunarDateSafe(from date: Date) -> LunarDate? {
+        guard isSupported(date) else { return nil }
+        return lunarDate(from: date)
+    }
+
+    /// 公历 Date 转农历 LunarDate（越界降级为公历镜像）
     public static func lunarDate(from date: Date) -> LunarDate {
         let cal = Calendar(identifier: .gregorian)
-        // 归一化到当天 00:00，确保时分秒不影响天数差
         let normalized = cal.startOfDay(for: date)
         let baseNorm = cal.startOfDay(for: baseDate)
 
-        // 计算与基准日(1900年1月31日=农历1900年正月初一)的天数差
         let offsetComps = cal.dateComponents([.day], from: baseNorm, to: normalized)
         var offset = offsetComps.day ?? 0
 
         if offset < 0 {
-            // 1900年1月31日之前，降级为公历镜像（保证不崩溃）
             let gregorian = cal.dateComponents([.year, .month, .day], from: date)
             return LunarDate(
-                year: gregorian.year ?? 1900,
+                year: gregorian.year ?? minYear,
                 month: gregorian.month ?? 1,
                 day: gregorian.day ?? 1,
                 isLeapMonth: false
             )
         }
 
-        // 年循环：逐年递减天数，确定农历年
-        var year = 1900
-        while year <= 2100 {
+        var year = minYear
+        while year <= maxYear {
             let daysInYear = daysInLunarYear(year)
             if offset < daysInYear { break }
             offset -= daysInYear
             year += 1
         }
-        if year > 2100 {
-            // 超出数据表上界：降级处理
+        if year > maxYear {
             let gregorian = cal.dateComponents([.year, .month, .day], from: date)
             return LunarDate(
-                year: min(gregorian.year ?? 2100, 2100),
+                year: min(gregorian.year ?? maxYear, maxYear),
                 month: gregorian.month ?? 1,
                 day: gregorian.day ?? 1,
                 isLeapMonth: false
             )
         }
 
-        // 月循环：确定月份/闰月/日期
         let leapMonthIndex = leapMonth(of: year)
         var isLeap = false
         var month = 1
         var found = false
 
         while month <= 12 {
-            // 处理普通月
             let daysOfNormalMonth = daysInLunarMonth(year: year, month: month, isLeap: false)
 
             if offset < daysOfNormalMonth {
-                // 命中普通月
                 isLeap = false
                 found = true
                 break
             }
             offset -= daysOfNormalMonth
 
-            // 处理闰月（仅在该月刚好是闰月月份，且闰月还没处理过）
             if leapMonthIndex > 0 && month == leapMonthIndex && !isLeap {
                 let daysOfLeapMonth = leapDays(of: year)
                 if offset < daysOfLeapMonth {
-                    // 命中闰月
                     isLeap = true
                     found = true
                     break
@@ -197,7 +220,6 @@ public enum ChineseCalendar {
         }
 
         if !found {
-            // 兜底（理论上不会到达）
             month = 12
             isLeap = false
         }
@@ -209,6 +231,42 @@ public enum ChineseCalendar {
             day: day,
             isLeapMonth: isLeap
         )
+    }
+
+    // MARK: - 农历转公历（新增：反向查询）
+
+    /// 农历转公历：给定农历年月日，返回公历 Date（失败返回 nil）
+    public static func solarDate(fromLunar year: Int, month: Int, day: Int, isLeap: Bool) -> Date? {
+        guard year >= minYear, year <= maxYear, month >= 1, month <= 12, day >= 1, day <= 30 else { return nil }
+
+        let cal = Calendar(identifier: .gregorian)
+        var baseComps = DateComponents()
+        baseComps.year = 1900; baseComps.month = 1; baseComps.day = 31
+        guard var date = cal.date(from: baseComps) else { return nil }
+
+        // 逐年累加天数
+        for y in minYear..<year {
+            date = cal.date(byAdding: .day, value: daysInLunarYear(y), to: date) ?? date
+        }
+
+        // 逐月累加天数
+        let leapM = leapMonth(of: year)
+        for m in 1..<month {
+            date = cal.date(byAdding: .day, value: daysInLunarMonth(year: year, month: m, isLeap: false), to: date) ?? date
+            // 如果该月有闰月且不是目标闰月，加上闰月天数
+            if leapM == m && !(isLeap && m == month) {
+                date = cal.date(byAdding: .day, value: leapDays(of: year), to: date) ?? date
+            }
+        }
+
+        // 如果目标是闰月，需要先跳过普通月
+        if isLeap && leapM == month {
+            date = cal.date(byAdding: .day, value: daysInLunarMonth(year: year, month: month, isLeap: false), to: date) ?? date
+        }
+
+        // 加上天数
+        date = cal.date(byAdding: .day, value: day - 1, to: date) ?? date
+        return date
     }
 
     // MARK: - 显示辅助
@@ -244,6 +302,11 @@ public enum ChineseCalendar {
 public extension Date {
     public var lunar: LunarDate {
         ChineseCalendar.lunarDate(from: self)
+    }
+
+    /// 安全版农历（越界返回 nil）
+    public var lunarSafe: LunarDate? {
+        ChineseCalendar.lunarDateSafe(from: self)
     }
 
     public var startOfDay: Date {

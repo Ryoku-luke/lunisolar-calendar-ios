@@ -13,7 +13,15 @@ let package = Package(
     targets: [
         .target(
             name: "LunisolarCalendarApp",
-            path: "Sources/LunisolarCalendarApp"
+            path: "Sources/LunisolarCalendarApp",
+            resources: [
+                .copy("Resources")
+            ]
+        ),
+        .testTarget(
+            name: "LunisolarCalendarTests",
+            dependencies: ["LunisolarCalendarApp"],
+            path: "Tests/LunisolarCalendarTests"
         )
     ]
 )

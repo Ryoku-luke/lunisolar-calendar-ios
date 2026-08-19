@@ -29,12 +29,13 @@ public enum EventType: String, Codable, CaseIterable, Identifiable {
 // MARK: - 重复规则
 
 public enum RepeatRule: String, Codable, CaseIterable, Identifiable {
-    case never      = "不重复"
-    case daily      = "每天"
-    case workday    = "工作日"
-    case weekly     = "每周"
-    case monthly    = "每月"
-    case yearly     = "每年"
+    case never           = "不重复"
+    case daily           = "每天"
+    case workday         = "工作日"
+    case weekly          = "每周"
+    case monthly         = "每月"
+    case yearly          = "每年"
+    case lunarAnnually   = "农历每年"
 
     public var id: String { rawValue }
     public var title: String { rawValue }
@@ -79,6 +80,8 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable {
     public var repeatRule: RepeatRule
     public var priority: Priority
     public var isCompleted: Bool
+    /// 通知是否已触发（防止重复弹窗）
+    public var isNotified: Bool
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -113,6 +116,7 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable {
         self.repeatRule = repeatRule
         self.priority = priority
         self.isCompleted = isCompleted
+        self.isNotified = false
         self.createdAt = Date()
         self.updatedAt = Date()
     }
@@ -142,6 +146,12 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable {
             let tm = cal.dateComponents([.month, .day], from: target)
             let sm = cal.dateComponents([.month, .day], from: start)
             return target >= start && tm.month == sm.month && tm.day == sm.day
+        case .lunarAnnually:
+            // 农历每年重复：匹配农历月日（如父母农历生日、传统节日）
+            let targetLunar = ChineseCalendar.lunarDateSafe(from: date)
+            let startLunar = ChineseCalendar.lunarDateSafe(from: startDate)
+            guard let tl = targetLunar, let sl = startLunar else { return false }
+            return date >= startDate && tl.month == sl.month && tl.day == sl.day && tl.isLeapMonth == sl.isLeapMonth
         }
     }
 

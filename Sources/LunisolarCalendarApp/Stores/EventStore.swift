@@ -68,6 +68,14 @@ public final class EventStore {
         save()
     }
 
+    /// 标记事件通知已触发（防止重复弹窗）
+    public func markNotified(_ event: CalendarEvent) {
+        guard let idx = events.firstIndex(where: { $0.id == event.id }) else { return }
+        events[idx].isNotified = true
+        events[idx].updatedAt = Date()
+        save()
+    }
+
     // MARK: - 查询
 
     public func events(on date: Date) -> [CalendarEvent] {

@@ -63,20 +63,34 @@ struct CalendarMonthView: View {
                 ToolbarItem(placement: .principal) {
                     headerTitle
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            currentMonth = Date().firstDayOfMonth
+                            selectedDate = Date()
+                        }
+                    } label: {
+                        Text("今天")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.systemBlue)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button {
-                            currentMonth = Date().firstDayOfMonth
-                            selectedDate = Date()
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                currentMonth = Date().firstDayOfMonth
+                                selectedDate = Date()
+                            }
                         } label: {
                             Label("回到今天", systemImage: "calendar.circle")
                         }
                         Divider()
-                        Menu {
-                            Button("月视图 (推荐)") {}.disabled(true)
-                            Button("年视图 (敬请期待)") {}.disabled(true)
+                        NavigationLink {
+                            SettingsView()
+                                .environment(store)
                         } label: {
-                            Label("视图切换", systemImage: "square.grid.2x2")
+                            Label("设置", systemImage: "gearshape")
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
