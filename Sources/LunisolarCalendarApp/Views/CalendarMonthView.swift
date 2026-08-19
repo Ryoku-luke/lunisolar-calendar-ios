@@ -138,9 +138,9 @@ struct CalendarMonthView: View {
     // MARK: - 日历网格
 
     private var calendarGrid: some View {
-        let rows = [GridItem](repeating: GridItem(.flexible(), spacing: 2), count: 6)
+        let columns = [GridItem](repeating: GridItem(.flexible(), spacing: 2), count: 7)
 
-        return LazyVGrid(columns: rows, spacing: 2) {
+        return LazyVGrid(columns: columns, spacing: 2) {
             ForEach(daysForMonth()) { slot in
                 let date = slot.date
                 let lunar = date.lunar

@@ -13,7 +13,10 @@ enum LunarDataProvider {
            let data = try? Data(contentsOf: url),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let hexStrings = json["data"] as? [String] {
-            let values = hexStrings.compactMap { UInt32($0, radix: 16) }
+            let values = hexStrings.compactMap {
+                let hex = $0.hasPrefix("0x") ? String($0.dropFirst(2)) : $0
+                return UInt32(hex, radix: 16)
+            }
             if values.count == 201 { return values }
         }
         // 2. Fallback：内置数据（保证即使 JSON 加载失败也能工作）
@@ -238,6 +241,9 @@ public enum ChineseCalendar {
     /// 农历转公历：给定农历年月日，返回公历 Date（失败返回 nil）
     public static func solarDate(fromLunar year: Int, month: Int, day: Int, isLeap: Bool) -> Date? {
         guard year >= minYear, year <= maxYear, month >= 1, month <= 12, day >= 1, day <= 30 else { return nil }
+        // 闰月非法：请求闰月但该年无此闰月
+        let leapM = leapMonth(of: year)
+        if isLeap && leapM != month { return nil }
 
         let cal = Calendar(identifier: .gregorian)
         var baseComps = DateComponents()
@@ -250,7 +256,6 @@ public enum ChineseCalendar {
         }
 
         // 逐月累加天数
-        let leapM = leapMonth(of: year)
         for m in 1..<month {
             date = cal.date(byAdding: .day, value: daysInLunarMonth(year: year, month: m, isLeap: false), to: date) ?? date
             // 如果该月有闰月且不是目标闰月，加上闰月天数

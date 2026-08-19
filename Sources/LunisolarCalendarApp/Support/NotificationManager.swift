@@ -53,8 +53,8 @@ public final class NotificationManager {
     /// 为提醒事件调度本地通知
     public func scheduleNotification(for event: CalendarEvent) async {
         #if canImport(UserNotifications)
-        // 只处理 reminder 类型，且尚未通知过的
-        guard event.type == .reminder, !event.isNotified else { return }
+        // 只处理 reminder 类型，且尚未通知过的，且日期在未来
+        guard event.type == .reminder, !event.isNotified, event.startDate > Date() else { return }
 
         let center = UNUserNotificationCenter.current()
         let content = UNMutableNotificationContent()

@@ -12,10 +12,11 @@ import UIKit
 struct SettingsView: View {
     @Environment(EventStore.self) private var store
     @State private var notifStatus: NotificationAuthStatus = .unavailable
-    @State private var showExportOptions = false
     @State private var showImportPicker = false
     @State private var importedCount = 0
     @State private var showImportResult = false
+    @State private var shareURL: URL?
+    @State private var showShareSheet = false
 
     var body: some View {
         Form {
@@ -149,6 +150,13 @@ struct SettingsView: View {
         } message: {
             Text("成功导入 \(importedCount) 条事件")
         }
+        #if canImport(UIKit)
+        .sheet(isPresented: $showShareSheet) {
+            if let url = shareURL {
+                ShareSheet(items: [url])
+            }
+        }
+        #endif
     }
 
     // MARK: - 辅助视图
@@ -180,7 +188,8 @@ struct SettingsView: View {
             content: content,
             filename: "lunisolar_calendar_\(dateStr).ics"
         ) {
-            shareFile(url)
+            shareURL = url
+            showShareSheet = true
         }
     }
 
@@ -192,14 +201,9 @@ struct SettingsView: View {
             content: content,
             filename: "lunisolar_calendar_\(dateStr).csv"
         ) {
-            shareFile(url)
+            shareURL = url
+            showShareSheet = true
         }
-    }
-
-    private func shareFile(_ url: URL) {
-        // 在 iOS 上通过 UIDocumentInteractionController 或 ShareLink 分享
-        // 这里简单地写入临时文件，实际可用 ShareLink 包裹
-        print("导出文件路径: \(url.path)")
     }
 
     private func handleImportResult(_ result: Result<URL, Error>) {
@@ -228,5 +232,19 @@ struct SettingsView: View {
         #endif
     }
 }
+
+// MARK: - ShareSheet (UIActivityViewController 包装)
+
+#if canImport(UIKit)
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+#endif
 
 #endif

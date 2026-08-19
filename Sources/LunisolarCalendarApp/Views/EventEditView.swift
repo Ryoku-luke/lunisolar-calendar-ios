@@ -259,6 +259,11 @@ struct EventEditView: View {
 
         if let editing = editing {
             var updated = editing
+            // 如果开始时间或类型变了，重置通知状态并取消旧通知
+            if updated.startDate != s || updated.type != type {
+                updated.isNotified = false
+                NotificationManager.shared.cancelNotification(for: updated)
+            }
             updated.title = trimmed
             updated.type = type
             updated.startDate = s
@@ -270,6 +275,14 @@ struct EventEditView: View {
             updated.priority = priority
             updated.isCompleted = isCompleted
             store.update(updated)
+
+            // 如果是提醒且未通知，重新调度
+            if updated.type == .reminder && !updated.isNotified {
+                Task {
+                    _ = await NotificationManager.shared.requestAuthorization()
+                    await NotificationManager.shared.scheduleNotification(for: updated)
+                }
+            }
         } else {
             let event = CalendarEvent(
                 title: trimmed,
@@ -284,12 +297,22 @@ struct EventEditView: View {
                 isCompleted: false
             )
             store.add(event)
+
+            // 如果是提醒，申请权限并调度通知
+            if event.type == .reminder {
+                Task {
+                    _ = await NotificationManager.shared.requestAuthorization()
+                    await NotificationManager.shared.scheduleNotification(for: event)
+                }
+            }
         }
         dismiss()
     }
 
     private func delete() {
         guard let editing = editing else { return }
+        // 删除前取消关联的通知
+        NotificationManager.shared.cancelNotification(for: editing)
         store.delete(editing)
         dismiss()
     }
