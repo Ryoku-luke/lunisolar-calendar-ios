@@ -1,0 +1,23 @@
+# SwiftPM / Xcode / macOS
+.build/
+DerivedData/
+*.xcodeproj/
+xcuserdata/
+.swiftpm/xcode/
+Package.resolved
+
+# Xcode
+.DS_Store
+
+# 事件持久化数据文件 (本地沙箱)
+calendar_events.json
+*.json
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+*~
+
+# 日志
+*.log
