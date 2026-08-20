@@ -22,6 +22,9 @@ public final class EventStore {
 
     private let saveURL: URL
 
+    /// iCloud 同步协调器（可选）。设置后：默认 CRUD 自动 fire-and-forget 推送云端
+    public weak var syncCoordinator: EventSyncCoordinator?
+
     public init() {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         var docs = paths.first
@@ -41,40 +44,65 @@ public final class EventStore {
 
     // MARK: - CRUD
 
-    public func add(_ event: CalendarEvent) {
+    /// 添加事件
+    /// - Parameters:
+    ///   - event: 新事件
+    ///   - skipSync: true=不推送到协调器（pull 合并回本地时使用，避免回环）
+    public func add(_ event: CalendarEvent, skipSync: Bool = false) {
         events.append(event)
         sort()
         save()
+        if !skipSync { autoPush([event], deletedID: nil) }
     }
 
-    public func update(_ event: CalendarEvent) {
+    /// 更新事件
+    public func update(_ event: CalendarEvent, skipSync: Bool = false) {
         guard let idx = events.firstIndex(where: { $0.id == event.id }) else { return }
         var updated = event
         updated.updatedAt = Date()
         events[idx] = updated
         sort()
         save()
+        if !skipSync { autoPush([updated], deletedID: nil) }
     }
 
-    public func delete(_ event: CalendarEvent) {
+    /// 删除事件
+    public func delete(_ event: CalendarEvent, skipSync: Bool = false) {
         events.removeAll { $0.id == event.id }
         save()
+        if !skipSync { autoPush([], deletedID: event.id.uuidString) }
     }
 
-    public func toggleCompleted(_ event: CalendarEvent) {
+    public func toggleCompleted(_ event: CalendarEvent, skipSync: Bool = false) {
         guard let idx = events.firstIndex(where: { $0.id == event.id }) else { return }
         events[idx].isCompleted.toggle()
         events[idx].updatedAt = Date()
         save()
+        if !skipSync { autoPush([events[idx]], deletedID: nil) }
     }
 
     /// 标记事件通知已触发（防止重复弹窗）
-    public func markNotified(_ event: CalendarEvent) {
+    public func markNotified(_ event: CalendarEvent, skipSync: Bool = true) {
         guard let idx = events.firstIndex(where: { $0.id == event.id }) else { return }
         events[idx].isNotified = true
         events[idx].updatedAt = Date()
         save()
+        // markNotified 是内部状态，默认不同步（保持 isNotified 本地语义）
+        if !skipSync { autoPush([events[idx]], deletedID: nil) }
     }
+
+    // MARK: - 同步辅助
+
+    /// fire-and-forget 推送到 syncCoordinator（若已设置）
+    private func autoPush(_ events: [CalendarEvent], deletedID: String?) {
+        guard let co = syncCoordinator else { return }
+        var del: Set<String> = []
+        if let id = deletedID { del.insert(id) }
+        Task { @MainActor in
+            _ = try? await co.push(events: events, deletedIDs: del)
+        }
+    }
+
 
     // MARK: - 查询
 
