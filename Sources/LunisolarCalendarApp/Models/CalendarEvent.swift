@@ -151,10 +151,12 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable {
             // 民俗处理：
             // - 起始是平月：要求 target 也是平月 + 同月同日（避免闰月罕见触发"多一次"）
             // - 起始是闰月（闰五月初五）：只要求同月同日（五月初五 或 闰五月初五 都命中，保证每年至少一次）
+            // 日期门槛比较统一使用 startOfDay 归一化（和 never/daily/weekly/monthly/yearly 保持一致），
+            // 避免"起锚20:00的事件当天上午查不到"的一致性 BUG（BUG #1）。
             let targetLunar = ChineseCalendar.lunarDateSafe(from: date)
             let startLunar = ChineseCalendar.lunarDateSafe(from: startDate)
             guard let tl = targetLunar, let sl = startLunar else { return false }
-            guard date >= startDate else { return false }
+            guard target >= start else { return false }
             guard tl.month == sl.month && tl.day == sl.day else { return false }
             if sl.isLeapMonth {
                 return true
@@ -189,7 +191,9 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable {
             return "每月\(day)日"
         case .yearly:
             let c = Calendar.current.dateComponents([.month, .day], from: startDate)
-            return "公历 \(c.month ?? 0)月\(c.day ?? 0)日 · 每年"
+            let m = max(1, c.month ?? 1)
+            let d = max(1, c.day ?? 1)
+            return "公历 \(m)月\(d)日 · 每年"
         case .lunarAnnually:
             if let lunar = ChineseCalendar.lunarDateSafe(from: startDate) {
                 return "农历\(lunar.monthName)\(lunar.dayName) · 每年"
@@ -218,7 +222,9 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable {
             return "每月\(day)日 重复（锚点：\(Self.dateShort(anchor))）"
         case .yearly:
             let c = cal.dateComponents([.month, .day], from: anchor)
-            return "公历每年 \(c.month ?? 0) 月 \(c.day ?? 0) 日 重复（锚点：\(Self.dateShort(anchor))）"
+            let m = max(1, c.month ?? 1)
+            let d = max(1, c.day ?? 1)
+            return "公历每年 \(m) 月 \(d) 日 重复（锚点：\(Self.dateShort(anchor))）"
         case .lunarAnnually:
             if let lunar = ChineseCalendar.lunarDateSafe(from: anchor) {
                 let leapHint = lunar.isLeapMonth ? "（闰月生日在非闰月年按同月同日过）" : ""

@@ -366,6 +366,62 @@ final class CalendarEventTests: XCTestCase {
         XCTAssertTrue(csv.contains("标题,类型,开始时间"))
         XCTAssertTrue(csv.contains("CSV测试"))
     }
+
+    // MARK: BUG #1 回归：lunarAnnually 同一天内发生时间早于锚点时刻 也必须命中
+    // 其他规则统一使用 startOfDay 归一化 target/start 进行比较；
+    // 修复前 lunarAnnually 使用原始的 date >= startDate 导致 起锚20:00的事件 当天上午09:00查不到。
+    func testLunarAnnuallySameDayEarlyHourMustMatch() {
+        let cal = Calendar(identifier: .gregorian)
+        // 锚点：2025-10-06 20:00（农历八月十五当天的家宴时间）
+        var dcPM = DateComponents()
+        dcPM.year = 2025; dcPM.month = 10; dcPM.day = 6
+        dcPM.hour = 20; dcPM.minute = 0; dcPM.second = 0
+        let startPM = cal.date(from: dcPM)!
+        let ev = CalendarEvent(title: "中秋晚宴", startDate: startPM, repeatRule: .lunarAnnually)
+
+        // 当天 09:00：必须命中（虽然比锚点时刻早，但属于"当天的日期"）
+        var dcAM = DateComponents()
+        dcAM.year = 2025; dcAM.month = 10; dcAM.day = 6
+        dcAM.hour = 9; dcAM.minute = 0; dcAM.second = 0
+        let sameDayAM = cal.date(from: dcAM)!
+        XCTAssertTrue(ev.occurs(on: sameDayAM),
+                      "lunarAnnually 起锚20:00的事件，当天09:00查询必须命中（BUG #1 回归）")
+
+        // 昨天（10-05）：不命中
+        var dcY = DateComponents()
+        dcY.year = 2025; dcY.month = 10; dcY.day = 5
+        let yesterday = cal.date(from: dcY)!
+        XCTAssertFalse(ev.occurs(on: yesterday), "起锚前一天 不应命中")
+
+        // 对比 yearly/monthly/... 等规则都应该命中同一天的清晨时刻
+        for rule: RepeatRule in [.daily, .weekly, .monthly, .yearly] {
+            let e = CalendarEvent(title: "t", startDate: startPM, repeatRule: rule)
+            XCTAssertTrue(e.occurs(on: sameDayAM), "BUG #1 一致性校验：\(rule) 同一天清晨必须命中")
+        }
+    }
+
+    // MARK: BUG #2 回归：锚点超范围(1899/2101)时 label/anchor/occurs 都不能崩溃
+    func testLunarAnnuallyOutOfBoundsAnchorIsNilSafe() {
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents()
+        dc.year = 1899; dc.month = 12; dc.day = 31
+        let oob1899 = cal.date(from: dc)!
+        // 1. label：不崩（lunarDateSafe 返回 nil → 走 fallback）
+        let ev = CalendarEvent(title: "OOB", startDate: oob1899, repeatRule: .lunarAnnually)
+        XCTAssertFalse(ev.repeatRuleLabel.isEmpty, "超范围锚点的 repeatRuleLabel 应给出 fallback 文案")
+        // 2. anchor description：不崩
+        let desc = CalendarEvent.repeatAnchorDescription(rule: .lunarAnnually, anchor: oob1899)
+        XCTAssertTrue(desc.contains("公历锚点"), "超范围锚点的 anchorDescription 至少含公历锚点")
+        // 3. occurs：返回 false，不能崩溃
+        XCTAssertFalse(ev.occurs(on: Date()), "超范围锚点 occurs 必须返回 false")
+
+        var dc2 = DateComponents()
+        dc2.year = 2101; dc2.month = 1; dc2.day = 1
+        let oob2101 = cal.date(from: dc2)!
+        let ev2101 = CalendarEvent(title: "OOB2", startDate: oob2101, repeatRule: .lunarAnnually)
+        XCTAssertFalse(ev2101.repeatRuleLabel.isEmpty)
+        XCTAssertFalse(ev2101.occurs(on: Date()))
+    }
 }
 
 // MARK: - EventStore 测试
