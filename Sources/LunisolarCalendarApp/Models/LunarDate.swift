@@ -51,7 +51,7 @@ enum LunarDataProvider {
 
 // MARK: - 农历日期模型
 
-public struct LunarDate: Equatable, Hashable {
+public struct LunarDate: Equatable, Hashable, Sendable {
     public let year: Int
     public let month: Int
     public let day: Int

@@ -8,7 +8,8 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .library(name: "LunisolarCalendarApp", targets: ["LunisolarCalendarApp"])
+        .library(name: "LunisolarCalendarApp", targets: ["LunisolarCalendarApp"]),
+        .executable(name: "gen_huangli_db", targets: ["gen_huangli_db"])
     ],
     targets: [
         .target(
@@ -17,6 +18,11 @@ let package = Package(
             resources: [
                 .copy("Resources")
             ]
+        ),
+        .executableTarget(
+            name: "gen_huangli_db",
+            dependencies: ["LunisolarCalendarApp"],
+            path: "Tools/gen_huangli_db"
         ),
         .testTarget(
             name: "LunisolarCalendarTests",
