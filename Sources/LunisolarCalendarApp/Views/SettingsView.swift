@@ -23,6 +23,11 @@ struct SettingsView: View {
     // 冲突策略：导入时遇到同 id 事件怎么办
     @State private var conflictPolicy: ImportConflictPolicy = .keepLatest
     @State private var showConflictPolicy = false
+    // 系统导入：日历 / 联系人
+    @State private var isImportingSystem = false
+    @State private var importingSystemSource: SystemImportSource = .systemCalendar
+    @State private var importLunarToggle = false  // 联系人生日：true=按农历每年
+    @State private var showSystemImportSheet = false
 
     var body: some View {
         Form {
@@ -100,6 +105,58 @@ struct SettingsView: View {
                 Text("数据管理")
             } footer: {
                 Text(".json 备份保留全部字段（含农历生日重复规则、通知状态、创建时间）；.ics/.csv 适合与其他日历互通。")
+            }
+
+            // MARK: - 系统数据导入
+            Section {
+                Button {
+                    importingSystemSource = .systemCalendar
+                    showSystemImportSheet = true
+                } label: {
+                    row(icon: "calendar.badge.plus",
+                        text: "从系统日历导入",
+                        tint: Color.systemRed)
+                }
+                .disabled(isImportingSystem)
+
+                Button {
+                    importingSystemSource = .contacts
+                    showSystemImportSheet = true
+                } label: {
+                    row(icon: "person.crop.circle.badge.plus",
+                        text: "从联系人导入生日/纪念日",
+                        tint: Color.systemBlue)
+                }
+                .disabled(isImportingSystem)
+
+                if importingSystemSource == .contacts || importingSystemSource == .systemCalendar {
+                    Toggle(isOn: $importLunarToggle) {
+                        Label("联系人生日按农历每年", systemImage: "moon.stars.fill")
+                    }
+                    .font(.subheadline)
+                    .disabled(isImportingSystem)
+                }
+
+                if isImportingSystem {
+                    HStack(spacing: 8) {
+                        ProgressView().scaleEffect(0.8)
+                        Text("正在拉取并合并…")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.secondaryLabel)
+                    }
+                }
+            } header: {
+                Text("系统数据导入")
+            } footer: {
+                Text("系统日历事件按 RRULE 映射为重复规则；联系人生日默认按公历每年，可勾选按农历每年。重复导入同一条不会产生副本。")
+            }
+            .alert("导入系统数据", isPresented: $showSystemImportSheet) {
+                Button("导入") {
+                    Task { await performSystemImport(source: importingSystemSource) }
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("将申请 \(importingSystemSource.displayName) 权限并导入。冲突处理：\(conflictPolicy.title)。")
             }
 
             // MARK: - 冲突策略
@@ -375,6 +432,57 @@ struct SettingsView: View {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd_HHmm"
         return f.string(from: Date())
+    }
+
+    // MARK: - 系统数据导入（日历 / 联系人）
+
+    @MainActor
+    private func performSystemImport(source: SystemImportSource) async {
+        isImportingSystem = true
+        defer { isImportingSystem = false }
+
+        #if canImport(EventKit) && canImport(Contacts)
+        let provider: SystemImportProviding
+        switch source {
+        case .systemCalendar:
+            provider = CalendarImportProvider()
+        case .contacts:
+            provider = ContactsImportProvider(asLunarAnnually: importLunarToggle)
+        }
+        #else
+        // Linux：用占位 Provider（不可能成功，只走错误流程让 UI 显示不可用）
+        let provider = StubSystemImportProvider(
+            source: source, events: [], authorized: false
+        )
+        #endif
+
+        let (events, failures) = await SystemImportAggregator.gather(
+            providers: [provider],
+            conflictPolicy: conflictPolicy
+        )
+
+        if events.isEmpty {
+            if failures.contains(where: { if case .unauthorized = $0 { return true } else { return false } }) {
+                toast = .init(kind: .error,
+                              text: "\(source.displayName) 权限未授权，请前往系统设置开启")
+            } else if let f = failures.first {
+                toast = .init(kind: .warning, text: "导入失败：\(f)")
+            } else {
+                toast = .init(kind: .warning, text: "\(source.displayName) 中没有可导入的事件")
+            }
+            return
+        }
+
+        let r = store.merge(events, policy: conflictPolicy, skipSync: true)
+        importedResult = r
+        showImportResult = false
+        if r.added + r.updated > 0 {
+            toast = .init(kind: .success,
+                          text: "\(source.displayName) 导入：新增 \(r.added) · 更新 \(r.updated)")
+        } else {
+            toast = .init(kind: .warning,
+                          text: "\(source.displayName) 无新增（已存在或被策略跳过）")
+        }
     }
 
     private func openSystemSettings() {
