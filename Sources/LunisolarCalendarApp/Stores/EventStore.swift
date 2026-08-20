@@ -22,6 +22,10 @@ public final class EventStore {
 
     private let saveURL: URL
 
+    /// 可选 App Group ID：配了之后 EventStore.save() 会顺手写入 Widget 共享快照
+    /// （App Group 未配置时也不会崩，仅回退 Documents 路径，Widget 那边按"过期→占位"处理）
+    public var widgetAppGroupID: String?
+
     /// iCloud 同步协调器（可选）。设置后：默认 CRUD 自动 fire-and-forget 推送云端
     public weak var syncCoordinator: EventSyncCoordinator?
 
@@ -245,9 +249,40 @@ public final class EventStore {
         do {
             let data = try JSONEncoder().encode(events)
             try data.write(to: saveURL, options: .atomic)
+            writeWidgetSnapshotIfNeeded()
         } catch {
             print("保存事件失败: \(error)")
         }
+    }
+
+    /// 仅在 save 成功后触发：把今日统计写成小组件快照
+    private func writeWidgetSnapshotIfNeeded() {
+        let cal = Calendar(identifier: .gregorian)
+        let today = cal.startOfDay(for: Date())
+        let todays = events.filter { $0.occurs(on: today) }
+        let completed = todays.filter(\.isCompleted).count
+        let top = todays
+            .sorted { (l, r) -> Bool in
+                if l.priority != r.priority { return l.priority > r.priority }
+                return l.startDate < r.startDate
+            }
+            .prefix(5)
+            .map { ev in
+                WidgetTodoTitle(
+                    id: ev.id.uuidString,
+                    title: ev.title,
+                    isCompleted: ev.isCompleted,
+                    priorityHex: ev.priority.widgetHex
+                )
+            }
+        let snap = WidgetSharedSnapshot(
+            updatedAt: Date(),
+            targetDay: today,
+            todaysEventsCount: todays.count,
+            todaysCompletedCount: completed,
+            topTitles: top
+        )
+        _ = WidgetSnapshotStore.write(snap, appGroupID: widgetAppGroupID)
     }
 
     private func insertSampleData() {

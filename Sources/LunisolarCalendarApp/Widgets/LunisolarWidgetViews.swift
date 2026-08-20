@@ -429,11 +429,12 @@ public struct TodoProgressWidgetView: View {
 
             Divider().padding(.vertical, 4)
 
-            // 右：3 条占位列表（小组件里不读用户数据，给占位引导）
+            // 右：3 条真实待办（优先级排序）→ 没写快照时给占位引导
             VStack(alignment: .leading, spacing: 6) {
-                todoRow(title: "打开 Lunisolar 查看日程", done: true, idx: 0)
-                todoRow(title: "长按小组件可切换尺寸样式", done: false, idx: 1)
-                todoRow(title: "今日宜 \(entry.huangli?.yi.first ?? "祭祀")", done: false, idx: 2)
+                let rows = displayTodoRows(pick: 3)
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    todoRow(title: row.title, done: row.done, priorityHex: row.priorityHex)
+                }
                 if !entry.festivals.isEmpty {
                     HStack(spacing: 4) {
                         if let f = entry.festivals.first {
@@ -465,6 +466,24 @@ public struct TodoProgressWidgetView: View {
 
     // MARK: 辅助
 
+    private struct DisplayRow { let title: String; let done: Bool; let priorityHex: String }
+
+    /// 取主 App 写的前 `pick` 条，不够就用占位/黄历提示补齐
+    private func displayTodoRows(pick: Int) -> [DisplayRow] {
+        var rows: [DisplayRow] = entry.topTitles.prefix(pick).map {
+            DisplayRow(title: $0.title, done: $0.isCompleted, priorityHex: $0.priorityHex)
+        }
+        if rows.count < pick {
+            let fallbacks: [DisplayRow] = [
+                DisplayRow(title: "打开 Lunisolar 查看日程", done: true,  priorityHex: "#6B7280"),
+                DisplayRow(title: "长按小组件可切换尺寸样式", done: false, priorityHex: "#2563EB"),
+                DisplayRow(title: "今日宜 \(entry.huangli?.yi.first ?? "祭祀")", done: false, priorityHex: "#D97706")
+            ]
+            for f in fallbacks where rows.count < pick { rows.append(f) }
+        }
+        return Array(rows.prefix(pick))
+    }
+
     private var progressHintText: String {
         if entry.todaysEventsCount == 0 {
             return "今日还没安排 · 打开 App 添加 ✨"
@@ -478,10 +497,22 @@ public struct TodoProgressWidgetView: View {
     }
 
     private func todoRow(title: String, done: Bool, idx: Int) -> some View {
+        let fallbackHexes = ["#6B7280", "#2563EB", "#D97706"]
+        let hex = fallbackHexes[idx % fallbackHexes.count]
+        return todoRow(title: title, done: done, priorityHex: hex)
+    }
+
+    private func todoRow(title: String, done: Bool, priorityHex hex: String) -> some View {
         HStack(spacing: 7) {
-            Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(done ? accent : Color.secondary.opacity(0.5))
-                .font(.system(size: 12, weight: .heavy))
+            // 优先级色点 + 复选框（色点作为复选框的描边色点缀）
+            ZStack {
+                Circle()
+                    .stroke(Color(hex: hex), lineWidth: 1.2)
+                    .frame(width: 14, height: 14)
+                Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(done ? Color(hex: hex) : Color.secondary.opacity(0.55))
+                    .font(.system(size: 13, weight: .heavy))
+            }
             Text(title)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(done ? Color.secondary : Color.primary)
