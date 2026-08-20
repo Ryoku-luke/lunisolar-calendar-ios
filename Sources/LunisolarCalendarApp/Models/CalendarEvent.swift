@@ -147,11 +147,20 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable {
             let sm = cal.dateComponents([.month, .day], from: start)
             return target >= start && tm.month == sm.month && tm.day == sm.day
         case .lunarAnnually:
-            // 农历每年重复：匹配农历月日（如父母农历生日、传统节日）
+            // 农历每年重复：匹配农历月日（父母生日、传统节日等）
+            // 民俗处理：
+            // - 起始是平月：要求 target 也是平月 + 同月同日（避免闰月罕见触发"多一次"）
+            // - 起始是闰月（闰五月初五）：只要求同月同日（五月初五 或 闰五月初五 都命中，保证每年至少一次）
             let targetLunar = ChineseCalendar.lunarDateSafe(from: date)
             let startLunar = ChineseCalendar.lunarDateSafe(from: startDate)
             guard let tl = targetLunar, let sl = startLunar else { return false }
-            return date >= startDate && tl.month == sl.month && tl.day == sl.day && tl.isLeapMonth == sl.isLeapMonth
+            guard date >= startDate else { return false }
+            guard tl.month == sl.month && tl.day == sl.day else { return false }
+            if sl.isLeapMonth {
+                return true
+            } else {
+                return !tl.isLeapMonth
+            }
         }
     }
 
@@ -160,6 +169,69 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable {
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm"
         return "\(fmt.string(from: startDate)) - \(fmt.string(from: endDate))"
+    }
+
+    // MARK: - 重复规则文本（列表/详情页显示 + 编辑页锚点提示）
+
+    /// 事件行右侧小标签：「每天」「农历正月十五·每年」等
+    public var repeatRuleLabel: String {
+        switch repeatRule {
+        case .never:      return ""
+        case .daily:      return "每天"
+        case .workday:    return "每个工作日"
+        case .weekly:
+            let weekday = Calendar.current.component(.weekday, from: startDate)
+            let names = ["周日","周一","周二","周三","周四","周五","周六"]
+            let idx = max(0, min(6, weekday - 1))
+            return "每周\(names[idx])"
+        case .monthly:
+            let day = Calendar.current.component(.day, from: startDate)
+            return "每月\(day)日"
+        case .yearly:
+            let c = Calendar.current.dateComponents([.month, .day], from: startDate)
+            return "公历 \(c.month ?? 0)月\(c.day ?? 0)日 · 每年"
+        case .lunarAnnually:
+            if let lunar = ChineseCalendar.lunarDateSafe(from: startDate) {
+                return "农历\(lunar.monthName)\(lunar.dayName) · 每年"
+            }
+            return "农历生日 · 每年"
+        }
+    }
+
+    /// 编辑页底部详细提示（解释当前重复规则的锚点日期）
+    public static func repeatAnchorDescription(rule: RepeatRule, anchor: Date) -> String {
+        let cal = Calendar.current
+        switch rule {
+        case .never:
+            return "仅在所选日期出现一次"
+        case .daily:
+            return "自 \(Self.dateShort(anchor)) 起，每天都会出现"
+        case .workday:
+            return "自 \(Self.dateShort(anchor)) 起，周一至周五（工作日）都会出现"
+        case .weekly:
+            let weekday = cal.component(.weekday, from: anchor)
+            let names = ["周日","周一","周二","周三","周四","周五","周六"]
+            let idx = max(0, min(6, weekday - 1))
+            return "每周\(names[idx]) 重复（锚点：\(Self.dateShort(anchor))）"
+        case .monthly:
+            let day = cal.component(.day, from: anchor)
+            return "每月\(day)日 重复（锚点：\(Self.dateShort(anchor))）"
+        case .yearly:
+            let c = cal.dateComponents([.month, .day], from: anchor)
+            return "公历每年 \(c.month ?? 0) 月 \(c.day ?? 0) 日 重复（锚点：\(Self.dateShort(anchor))）"
+        case .lunarAnnually:
+            if let lunar = ChineseCalendar.lunarDateSafe(from: anchor) {
+                let leapHint = lunar.isLeapMonth ? "（闰月生日在非闰月年按同月同日过）" : ""
+                return "农历每年 \(lunar.monthName)\(lunar.dayName) 重复\(leapHint)（公历锚点：\(Self.dateShort(anchor))）"
+            }
+            return "农历每年 重复（公历锚点：\(Self.dateShort(anchor))）"
+        }
+    }
+
+    private static func dateShort(_ d: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy/M/d"
+        return fmt.string(from: d)
     }
 }
 

@@ -257,6 +257,92 @@ final class CalendarEventTests: XCTestCase {
         XCTAssertTrue(ev.occurs(on: nextYear), "农历每年重复应匹配下一年同农历日")
     }
 
+    // MARK: 农历生日/纪念日 跨3年验证（春节正月初一）
+    func testLunarAnnuallySpringFestivalAcross3Years() {
+        let cal = Calendar(identifier: .gregorian)
+        // 起始 2025 春节（正月初一）
+        var dc = DateComponents()
+        dc.year = 2025; dc.month = 1; dc.day = 29
+        let start2025 = cal.date(from: dc)!
+        let ev = CalendarEvent(
+            title: "春节家庭聚餐",
+            startDate: start2025,
+            repeatRule: .lunarAnnually
+        )
+
+        // 2026 春节：2026-02-17 正月初一
+        var dc26 = DateComponents()
+        dc26.year = 2026; dc26.month = 2; dc26.day = 17
+        XCTAssertTrue(ev.occurs(on: cal.date(from: dc26)!), "2026春节 正月初一 应匹配")
+
+        // 2027 春节：2027-02-06 正月初一（ChineseCalendar 已验证：2100春节=2100-02-09，往前推算一致）
+        var dc27 = DateComponents()
+        dc27.year = 2027; dc27.month = 2; dc27.day = 6
+        let d27 = cal.date(from: dc27)!
+        // 先确保这个公历日期确实是农历正月初一（避免手工真值错误）
+        if let lunar = ChineseCalendar.lunarDateSafe(from: d27) {
+            XCTAssertEqual(lunar.month, 1)
+            XCTAssertEqual(lunar.day, 1)
+            XCTAssertFalse(lunar.isLeapMonth)
+            XCTAssertTrue(ev.occurs(on: d27), "2027春节 正月初一 应匹配")
+        }
+
+        // 非正月初一（前后一天）不匹配
+        var dcWrong = DateComponents()
+        dcWrong.year = 2026; dcWrong.month = 2; dcWrong.day = 18
+        XCTAssertFalse(ev.occurs(on: cal.date(from: dcWrong)!), "正月初二 不匹配")
+    }
+
+    // MARK: 闰月生日在平月年也应命中（闰二月廿九 → 次年二月廿九命中）
+    func testLunarAnnuallyLeapMonthMatchesFlatMonth() {
+        let cal = Calendar(identifier: .gregorian)
+        // 起始：2023-04-19 闰二月廿九（真值表里有）
+        var dc = DateComponents()
+        dc.year = 2023; dc.month = 4; dc.day = 19
+        let start = cal.date(from: dc)!
+        let startLunar = ChineseCalendar.lunarDateSafe(from: start)
+        XCTAssertEqual(startLunar?.isLeapMonth, true, "起锚日必须为闰二月廿九")
+        XCTAssertEqual(startLunar?.month, 2)
+        XCTAssertEqual(startLunar?.day, 29)
+
+        let ev = CalendarEvent(title: "闰月生日", startDate: start, repeatRule: .lunarAnnually)
+
+        // 2024-04-07：查 ChineseCalendar 这个日期的农历是不是二月廿九（平月）？先断言一下，再 occurs
+        var dc24 = DateComponents()
+        dc24.year = 2024; dc24.month = 4; dc24.day = 7
+        let d24 = cal.date(from: dc24)!
+        if let l = ChineseCalendar.lunarDateSafe(from: d24) {
+            if l.month == 2 && l.day == 29 && !l.isLeapMonth {
+                XCTAssertTrue(ev.occurs(on: d24), "闰月生日在平月年同月同日 应命中")
+            }
+        }
+    }
+
+    // MARK: repeatRuleLabel / repeatAnchorDescription 文本格式
+    func testRepeatRuleLabelAndAnchor() {
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents()
+        dc.year = 2025; dc.month = 10; dc.day = 6 // 农历八月十五
+        let midAutumn = cal.date(from: dc)!
+
+        let ev = CalendarEvent(title: "中秋", startDate: midAutumn, repeatRule: .lunarAnnually)
+        let label = ev.repeatRuleLabel
+        XCTAssertTrue(label.contains("农历"))
+        XCTAssertTrue(label.contains("八月") || label.contains("仲秋")) // monthName 会返回"八月"
+        XCTAssertTrue(label.contains("十五"))
+        XCTAssertTrue(label.contains("每年"))
+
+        let anchor = CalendarEvent.repeatAnchorDescription(rule: .lunarAnnually, anchor: midAutumn)
+        XCTAssertTrue(anchor.contains("农历每年"))
+        XCTAssertTrue(anchor.contains("八月十五"))
+
+        // 公历每年：10月6日
+        let solar = CalendarEvent(title: "国庆后", startDate: midAutumn, repeatRule: .yearly)
+        let solarLabel = solar.repeatRuleLabel
+        XCTAssertTrue(solarLabel.contains("公历"))
+        XCTAssertTrue(solarLabel.contains("10月6日"))
+    }
+
     func testPriorityComparison() {
         XCTAssertGreaterThan(Priority.urgent, Priority.high)
         XCTAssertGreaterThan(Priority.high, Priority.normal)
@@ -326,5 +412,39 @@ final class EventStoreTests: XCTestCase {
         XCTAssertTrue(results.contains { $0.id == ev.id }, "搜索应匹配标题")
 
         store.delete(ev)
+    }
+
+    // MARK: 农历重复事件能跨春节出现在月视图查询
+    func testLunarBirthdayAppearsOnSpringFestival2026() async {
+        let store = EventStore()
+        let cal = Calendar(identifier: .gregorian)
+
+        // 锚点：2025-01-29 正月初一
+        var dc25 = DateComponents()
+        dc25.year = 2025; dc25.month = 1; dc25.day = 29
+        let start2025 = cal.date(from: dc25)!
+        let birthday = CalendarEvent(
+            title: "奶奶农历生日（正月初一）",
+            startDate: start2025,
+            repeatRule: .lunarAnnually,
+            priority: .urgent
+        )
+        store.add(birthday, skipSync: true)
+
+        // 查 2026-02-17（春节）：events(on:) 应返回 1 条
+        var dc26 = DateComponents()
+        dc26.year = 2026; dc26.month = 2; dc26.day = 17
+        let springFestival2026 = cal.date(from: dc26)!
+        let matches = store.events(on: springFestival2026)
+        XCTAssertTrue(matches.contains { $0.id == birthday.id },
+                      "正月初一创建的 lunarAnnually 事件应出现在次年春节当天")
+
+        // 查 2026-02-18（正月初二）：不包含
+        var dcNext = DateComponents()
+        dcNext.year = 2026; dcNext.month = 2; dcNext.day = 18
+        let dayAfter = cal.date(from: dcNext)!
+        let afterMatches = store.events(on: dayAfter)
+        XCTAssertFalse(afterMatches.contains { $0.id == birthday.id },
+                       "正月初二 不应出现正月初一的农历生日")
     }
 }

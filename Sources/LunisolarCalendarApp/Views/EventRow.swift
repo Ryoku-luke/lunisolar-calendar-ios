@@ -73,6 +73,27 @@ struct EventRow: View {
                     }
                 }
 
+                // 重复规则标签（农历生日高亮红色）
+                let ruleLabel = event.repeatRuleLabel
+                if !compact, !ruleLabel.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: event.repeatRule == .lunarAnnually ? "lamp.floor" : "repeat")
+                            .font(.system(size: 9))
+                            .foregroundStyle(
+                                event.repeatRule == .lunarAnnually
+                                    ? Color(hex: "#C41A1A")
+                                    : Color.tertiaryLabel
+                            )
+                        Text(ruleLabel)
+                            .font(.system(size: compact ? 9 : 10, weight: event.repeatRule == .lunarAnnually ? .semibold : .regular))
+                            .foregroundStyle(
+                                event.repeatRule == .lunarAnnually
+                                    ? Color(hex: "#C41A1A")
+                                    : Color.secondaryLabel
+                            )
+                    }
+                }
+
                 if !compact, let notes = event.notes, !notes.isEmpty {
                     Text(notes)
                         .font(.footnote)

@@ -166,9 +166,15 @@ struct EventEditView: View {
         Section {
             Picker("重复", selection: $repeatRule) {
                 ForEach(RepeatRule.allCases) { r in
-                    Text(r.title).tag(r)
+                    repeatRuleLabel(for: r).tag(r)
                 }
             }
+            .onChange(of: date) { _, _ in
+                // 日期变了 → 农历锚点提示需要刷新（body 会重新计算，这里留 hook）
+            }
+
+            // 锚点提示：农历每年会高亮显示 农历X月X日 · 每年
+            anchorHintRow
 
             Picker("优先级", selection: $priority) {
                 ForEach(Priority.allCases) { p in
@@ -181,6 +187,65 @@ struct EventEditView: View {
         } header: {
             Text("重复 & 优先级")
         }
+    }
+
+    /// Picker 里每项的标签：给「农历每年」加 🏮 图标和副标题
+    @ViewBuilder
+    private func repeatRuleLabel(for rule: RepeatRule) -> some View {
+        switch rule {
+        case .lunarAnnually:
+            Label {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(rule.title)
+                    Text("适合：农历生日 / 传统纪念日")
+                        .font(.caption2)
+                        .foregroundStyle(Color.secondary)
+                }
+            } icon: {
+                Image(systemName: "lamp.floor")
+                    .foregroundStyle(Color(hex: "#C41A1A"))
+            }
+        default:
+            Text(rule.title)
+        }
+    }
+
+    /// 当前重复规则的锚点解释行（农历每年高亮）
+    @ViewBuilder
+    private var anchorHintRow: some View {
+        let anchor = buildEventDate().start
+        let hint = CalendarEvent.repeatAnchorDescription(rule: repeatRule, anchor: anchor)
+        let isLunar = repeatRule == .lunarAnnually
+        let lunarPreview: String? = {
+            guard isLunar, let lunar = ChineseCalendar.lunarDateSafe(from: anchor) else { return nil }
+            return "\(lunar.monthName)\(lunar.dayName)"
+        }()
+
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: isLunar ? "calendar.badge.clock" : "repeat")
+                .foregroundStyle(isLunar ? Color(hex: "#C41A1A") : Color.secondaryLabel)
+                .frame(width: 22)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                if let lunar = lunarPreview {
+                    HStack(spacing: 6) {
+                        Text(lunar)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(Color(hex: "#C41A1A"))
+                        Text("· 每年")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.secondaryLabel)
+                    }
+                }
+                Text(hint)
+                    .font(.footnote)
+                    .foregroundStyle(Color.secondaryLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
     }
 
     private var detailsSection: some View {
