@@ -10,10 +10,10 @@ struct EventRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            // 左侧竖条 (颜色指示)
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
+            // 左侧竖条 (颜色指示，加宽到 4pt 提升可见度)
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                 .fill(event.priority.tintColor)
-                .frame(width: 3)
+                .frame(width: 4)
                 .padding(.vertical, 4)
 
             // 完成按钮 + 类型图标
@@ -85,7 +85,7 @@ struct EventRow: View {
                                     : Color.tertiaryLabel
                             )
                         Text(ruleLabel)
-                            .font(.system(size: compact ? 9 : 10, weight: event.repeatRule == .lunarAnnually ? .semibold : .regular))
+                            .font(.system(size: 10, weight: event.repeatRule == .lunarAnnually ? .semibold : .regular))
                             .foregroundStyle(
                                 event.repeatRule == .lunarAnnually
                                     ? Color(hex: "#C41A1A")

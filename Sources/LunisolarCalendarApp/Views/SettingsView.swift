@@ -27,7 +27,6 @@ struct SettingsView: View {
     @State private var isImportingSystem = false
     @State private var importingSystemSource: SystemImportSource = .systemCalendar
     @State private var importLunarToggle = false  // 联系人生日：true=按农历每年
-    @State private var showSystemImportSheet = false
 
     var body: some View {
         Form {
@@ -111,7 +110,7 @@ struct SettingsView: View {
             Section {
                 Button {
                     importingSystemSource = .systemCalendar
-                    showSystemImportSheet = true
+                    Task { await performSystemImport(source: .systemCalendar) }
                 } label: {
                     row(icon: "calendar.badge.plus",
                         text: "从系统日历导入",
@@ -121,7 +120,7 @@ struct SettingsView: View {
 
                 Button {
                     importingSystemSource = .contacts
-                    showSystemImportSheet = true
+                    Task { await performSystemImport(source: .contacts) }
                 } label: {
                     row(icon: "person.crop.circle.badge.plus",
                         text: "从联系人导入生日/纪念日",
@@ -129,11 +128,13 @@ struct SettingsView: View {
                 }
                 .disabled(isImportingSystem)
 
-                if importingSystemSource == .contacts || importingSystemSource == .systemCalendar {
+                // 仅当选择联系人时才显示农历 Toggle（日历事件不需要农历规则）
+                if importingSystemSource == .contacts {
                     Toggle(isOn: $importLunarToggle) {
                         Label("联系人生日按农历每年", systemImage: "moon.stars.fill")
                     }
                     .font(.subheadline)
+                    .tint(Color.systemIndigo)
                     .disabled(isImportingSystem)
                 }
 
@@ -149,14 +150,6 @@ struct SettingsView: View {
                 Text("系统数据导入")
             } footer: {
                 Text("系统日历事件按 RRULE 映射为重复规则；联系人生日默认按公历每年，可勾选按农历每年。重复导入同一条不会产生副本。")
-            }
-            .alert("导入系统数据", isPresented: $showSystemImportSheet) {
-                Button("导入") {
-                    Task { await performSystemImport(source: importingSystemSource) }
-                }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("将申请 \(importingSystemSource.displayName) 权限并导入。冲突处理：\(conflictPolicy.title)。")
             }
 
             // MARK: - 冲突策略
@@ -438,6 +431,7 @@ struct SettingsView: View {
 
     @MainActor
     private func performSystemImport(source: SystemImportSource) async {
+        importingSystemSource = source
         isImportingSystem = true
         defer { isImportingSystem = false }
 

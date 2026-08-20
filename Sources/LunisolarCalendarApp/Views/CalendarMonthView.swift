@@ -49,17 +49,16 @@ struct CalendarMonthView: View {
                     .environment(store)
                 } label: {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 48, weight: .light))
+                        .font(.system(size: 50, weight: .light))
                         .foregroundStyle(Color.systemBlue)
                         .background(
                             Circle()
                                 .fill(Color.systemBackground)
                                 .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
                         )
-                        .padding()
-                        .padding(.trailing, 8)
-                        .padding(.bottom, 16)
                 }
+                .padding(.trailing, 20)
+                .padding(.bottom, 24)
             }
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -114,7 +113,7 @@ struct CalendarMonthView: View {
                 .font(.title2.weight(.bold))
                 .foregroundStyle(Color.label)
             Spacer()
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         currentMonth = currentMonth.addingMonths(-1)
@@ -122,7 +121,7 @@ struct CalendarMonthView: View {
                 } label: {
                     Image(systemName: "chevron.left.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(Color.secondary, Color.secondarySystemBackground)
+                        .foregroundStyle(Color.secondaryLabel)
                 }
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -131,7 +130,7 @@ struct CalendarMonthView: View {
                 } label: {
                     Image(systemName: "chevron.right.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(Color.secondary, Color.secondarySystemBackground)
+                        .foregroundStyle(Color.secondaryLabel)
                 }
             }
         }
@@ -295,8 +294,7 @@ struct CalendarMonthView: View {
                     Image(systemName: isPanelExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
                         .font(.title3)
                         .foregroundStyle(
-                            hasFestival ? Color(hex: accentHex) : Color.secondary,
-                            Color.tertiarySystemBackground
+                            hasFestival ? Color(hex: accentHex) : Color.secondaryLabel
                         )
                 }
                 .contentShape(Rectangle())
@@ -344,10 +342,18 @@ struct CalendarMonthView: View {
                                 .environment(store)
                         }
                         if todaysEvents.count > 2 {
-                            Text("还有 \(todaysEvents.count - 2) 条 · 点击上方展开 ▲")
-                                .font(.caption2)
-                                .foregroundStyle(Color.tertiaryLabel)
-                                .padding(.horizontal, 6)
+                            HStack(spacing: 3) {
+                                Text("还有 \(todaysEvents.count - 2) 条")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.tertiaryLabel)
+                                Image(systemName: "chevron.up")
+                                    .font(.system(size: 8, weight: .semibold))
+                                    .foregroundStyle(Color.tertiaryLabel)
+                                Text("展开")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.tertiaryLabel)
+                            }
+                            .padding(.horizontal, 6)
                         }
                     }
                 }

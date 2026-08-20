@@ -165,12 +165,9 @@ struct DayDetailView: View {
         )
     }
 
+    /// 使用FlowLayout排列标签（每行按宽度自动换行，不依赖屏幕宽度硬编码）
     private func tagGrid(tags: [String], tint: Color) -> some View {
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-        let maxWidth: CGFloat = (ScreenHelper.width - 32 - 28 - 40) / 2 // 每行最多宽度
-
-        return ZStack(alignment: .topLeading) {
+        FlowLayout(spacing: 4, lineSpacing: 4) {
             ForEach(tags.indices, id: \.self) { idx in
                 Text(tags[idx])
                     .font(.caption2.weight(.medium))
@@ -181,24 +178,6 @@ struct DayDetailView: View {
                             .fill(tint.opacity(0.12))
                     )
                     .foregroundStyle(tint)
-                    .alignmentGuide(.leading) { d in
-                        if abs(width - d.width) > maxWidth {
-                            width = 0
-                            height -= d.height + 4
-                        }
-                        let res = width
-                        if idx == tags.count - 1 {
-                            width = 0
-                        } else {
-                            width -= d.width + 4
-                        }
-                        return res
-                    }
-                    .alignmentGuide(.top) { _ in
-                        let res = height
-                        if idx == tags.count - 1 { height = 0 }
-                        return res
-                    }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -309,7 +288,7 @@ struct DayDetailView: View {
 
     private var emptyEventsState: some View {
         VStack(spacing: 8) {
-            Image(systemName: "calendar.badge.exclamationmark")
+            Image(systemName: "moon.stars")
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(Color.tertiaryLabel)
             Text("这天还没有安排")

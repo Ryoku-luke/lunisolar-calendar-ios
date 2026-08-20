@@ -35,8 +35,58 @@ struct DayCellView: View {
     private let size: CGFloat = ScreenHelper.width / 7 - 6
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // 选中背景
+        VStack(spacing: 1) {
+            // 公历日期 + 今日圆点
+            ZStack(alignment: .topTrailing) {
+                Text("\(date.day)")
+                    .font(isToday ? .system(size: 17, weight: .bold) : .system(size: 16, weight: .medium))
+                    .foregroundStyle(dayForegroundColor)
+
+                if isToday {
+                    Circle()
+                        .fill(Color.systemRed)
+                        .frame(width: 5, height: 5)
+                        .padding(2)
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            // 农历日期 / 节日
+            Text(lunar.shortDisplayString)
+                .font(.system(size: 9))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .foregroundStyle(lunarForegroundColor)
+
+            Spacer(minLength: 2)
+
+            // 底部：吉日 badge 或事件点（共存不重叠）
+            HStack(spacing: 2) {
+                if huangli.isAuspicious && isCurrentMonth {
+                    Text("吉")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 14, height: 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(Color.auspicious)
+                        )
+                }
+                if hasEvents {
+                    Circle()
+                        .fill(eventPriority?.tintColor ?? Color.systemBlue)
+                        .frame(width: 5, height: 5)
+                }
+                if !(huangli.isAuspicious && isCurrentMonth) && !hasEvents {
+                    Color.clear.frame(width: 5, height: 5)
+                }
+            }
+            .frame(height: 12)
+        }
+        .padding(.vertical, 4)
+        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
+        .background {
             if isSelected {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color.systemBlue.opacity(0.15))
@@ -44,55 +94,6 @@ struct DayCellView: View {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(Color.systemBlue, lineWidth: 1.5)
                     )
-            }
-
-            VStack(spacing: 1) {
-                // 公历日期
-                Text("\(date.day)")
-                    .font(isToday ? .system(size: 17, weight: .bold) : .system(size: 16, weight: .medium))
-                    .foregroundStyle(dayForegroundColor)
-
-                // 农历日期 / 节日
-                Text(lunar.shortDisplayString)
-                    .font(.system(size: 9))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .foregroundStyle(lunarForegroundColor)
-
-                Spacer(minLength: 2)
-
-                // 黄道吉日标记
-                if huangli.isAuspicious && isCurrentMonth {
-                    Text("吉")
-                        .font(.system(size: 7, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 3)
-                        .padding(.vertical, 0.5)
-                        .background(
-                            Capsule().fill(Color.auspicious)
-                        )
-                }
-
-                // 事件指示点（按优先级颜色）
-                if hasEvents {
-                    Circle()
-                        .fill(eventPriority?.tintColor ?? Color.systemBlue)
-                        .frame(width: 5, height: 5)
-                        .padding(.bottom, 2)
-                } else {
-                    Color.clear.frame(width: 5, height: 5).padding(.bottom, 2)
-                }
-            }
-            .padding(.vertical, 4)
-            .frame(height: size * 1.05)
-            .frame(maxWidth: .infinity)
-
-            // 今日标记
-            if isToday {
-                Circle()
-                    .fill(Color.systemRed)
-                    .frame(width: 5, height: 5)
-                    .padding(6)
             }
         }
         .opacity(isCurrentMonth ? 1.0 : 0.35)
