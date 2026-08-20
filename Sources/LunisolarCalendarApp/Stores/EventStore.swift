@@ -135,6 +135,91 @@ public final class EventStore {
         }
     }
 
+    // MARK: - 导入合并 & 清空
+
+    /// 把一批导入事件合并进本地存储，按 id 去重 + 冲突策略处理；返回合并统计。
+    /// 用于 .ics 导入 / .json 备份恢复。调用方再决定是否弹出"有冲突"提示。
+    @discardableResult
+    public func merge(
+        _ incoming: [CalendarEvent],
+        policy: ImportConflictPolicy = .keepLatest,
+        skipSync: Bool = false
+    ) -> ImportMergeResult {
+        var result = ImportMergeResult()
+        var pushedP: [CalendarEvent] = [] // 用于最后批量 push 云端（若未 skipSync 且有 co）
+
+        for ev in incoming {
+            // 基本数据校验：标题非空 + end>start
+            if ev.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || ev.endDate <= ev.startDate {
+                result.invalid += 1
+                continue
+            }
+            if let existing = events.first(where: { $0.id == ev.id }) {
+                // 冲突：按 policy
+                switch policy {
+                case .overwrite:
+                    updateInPlace(id: existing.id, with: ev)
+                    pushedP.append(ev)
+                    result.updated += 1
+                case .keepLocal:
+                    result.skipped += 1
+                case .keepLatest:
+                    if ev.updatedAt >= existing.updatedAt {
+                        updateInPlace(id: existing.id, with: ev)
+                        pushedP.append(ev)
+                        result.updated += 1
+                    } else {
+                        result.skipped += 1
+                    }
+                }
+            } else {
+                events.append(ev)
+                pushedP.append(ev)
+                result.added += 1
+            }
+        }
+
+        sort()
+        save()
+        if !skipSync, !pushedP.isEmpty {
+            autoPush(pushedP, deletedID: nil)
+        }
+        return result
+    }
+
+    /// 清空全部事件（二次确认后的执行步骤）。返回被清空的数量（用于 UI 展示）。
+    @discardableResult
+    public func clearAll(skipSync: Bool = false) -> Int {
+        let removedCount = events.count
+        // 通知管理：逐个取消
+        #if canImport(UserNotifications)
+        for ev in events {
+            NotificationManager.shared.cancelNotification(for: ev)
+        }
+        #endif
+        // 同步：若有协调器，把被删的 id 批量打墓碑推送
+        if !skipSync, let co = syncCoordinator, !events.isEmpty {
+            let ids = Set(events.map { $0.id.uuidString })
+            Task { @MainActor in
+                _ = try? await co.push(events: [], deletedIDs: ids)
+            }
+        }
+        events.removeAll()
+        save()
+        return removedCount
+    }
+
+    // MARK: - 内部辅助
+
+    /// 更新某个 id 对应的事件；只写内部数组（不 sort/save/push），由调用方统一处理。
+    private func updateInPlace(id: UUID, with new: CalendarEvent) {
+        guard let idx = events.firstIndex(where: { $0.id == id }) else { return }
+        var applied = new
+        applied.updatedAt = Date()
+        events[idx] = applied
+    }
+
     // MARK: - 持久化
 
     private func sort() {

@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - 日程/记事 类型
 
-public enum EventType: String, Codable, CaseIterable, Identifiable {
+public enum EventType: String, Codable, CaseIterable, Identifiable, Sendable {
     case schedule
     case reminder
     case note
@@ -28,7 +28,7 @@ public enum EventType: String, Codable, CaseIterable, Identifiable {
 
 // MARK: - 重复规则
 
-public enum RepeatRule: String, Codable, CaseIterable, Identifiable {
+public enum RepeatRule: String, Codable, CaseIterable, Identifiable, Sendable {
     case never           = "不重复"
     case daily           = "每天"
     case workday         = "工作日"
@@ -43,7 +43,7 @@ public enum RepeatRule: String, Codable, CaseIterable, Identifiable {
 
 // MARK: - 优先级
 
-public enum Priority: String, Codable, CaseIterable, Identifiable, Comparable {
+public enum Priority: String, Codable, CaseIterable, Identifiable, Comparable, Sendable {
     case low        = "低"
     case normal     = "中"
     case high       = "高"
@@ -68,7 +68,7 @@ public enum Priority: String, Codable, CaseIterable, Identifiable, Comparable {
 
 // MARK: - 事件模型
 
-public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable {
+public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendable {
     public var id: UUID
     public var title: String
     public var type: EventType

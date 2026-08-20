@@ -13,10 +13,16 @@ struct SettingsView: View {
     @Environment(EventStore.self) private var store
     @State private var notifStatus: NotificationAuthStatus = .unavailable
     @State private var showImportPicker = false
-    @State private var importedCount = 0
+    @State private var importingFileType: ImportedFileType = .ics
+    @State private var importedResult: ImportMergeResult?
     @State private var showImportResult = false
     @State private var shareURL: URL?
     @State private var showShareSheet = false
+    @State private var showClearConfirm = false
+    @State private var toast: ToastMessage? = nil
+    // 冲突策略：导入时遇到同 id 事件怎么办
+    @State private var conflictPolicy: ImportConflictPolicy = .keepLatest
+    @State private var showConflictPolicy = false
 
     var body: some View {
         Form {
@@ -56,45 +62,87 @@ struct SettingsView: View {
                 Button {
                     exportAsICS()
                 } label: {
-                    HStack {
-                        Image(systemName: "square.and.arrow.up")
-                        Text("导出为 .ics 日历文件")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(Color.tertiaryLabel)
-                    }
+                    row(icon: "square.and.arrow.up", text: "导出为 .ics 日历文件")
                 }
 
                 Button {
                     exportAsCSV()
                 } label: {
-                    HStack {
-                        Image(systemName: "tablecells")
-                        Text("导出为 .csv 表格文件")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(Color.tertiaryLabel)
-                    }
+                    row(icon: "tablecells", text: "导出为 .csv 表格文件")
                 }
 
+                // JSON 全量备份（字段无损：农历生日 / 通知状态 / 创建时间等都保留）
                 Button {
-                    showImportPicker = true
+                    exportAsJSONBackup()
                 } label: {
-                    HStack {
-                        Image(systemName: "square.and.arrow.down")
-                        Text("从 .ics 文件导入")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(Color.tertiaryLabel)
+                    row(icon: "externaldrive.badge.checkmark", text: "全量备份为 .json",
+                        tint: Color(hex: "#C41A1A"))
+                }
+
+                Menu {
+                    Button {
+                        importingFileType = .ics
+                        showConflictPolicy = true
+                    } label: {
+                        Label("从 .ics 日历文件导入", systemImage: "calendar.badge.plus")
                     }
+                    Button {
+                        importingFileType = .json
+                        showConflictPolicy = true
+                    } label: {
+                        Label("从 .json 备份恢复", systemImage: "externaldrive.badge.plus")
+                    }
+                } label: {
+                    row(icon: "square.and.arrow.down", text: "导入/恢复数据",
+                        tint: Color(red: 0.25, green: 0.55, blue: 0.95))
                 }
             } header: {
                 Text("数据管理")
             } footer: {
-                Text("导出文件可保存至 Files 或通过微信/邮件分享。导入 .ics 文件支持从 iCloud/Files 选择。")
+                Text(".json 备份保留全部字段（含农历生日重复规则、通知状态、创建时间）；.ics/.csv 适合与其他日历互通。")
+            }
+
+            // MARK: - 冲突策略
+            Section {
+                NavigationLink {
+                    ConflictPolicyPicker(policy: $conflictPolicy)
+                        .environment(store)
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(Color.systemOrange)
+                        Text("导入冲突策略")
+                        Spacer()
+                        Text(conflictPolicy.title)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.secondaryLabel)
+                    }
+                }
+            } footer: {
+                Text("再次导入同一份文件或从多台设备合并时，遇到同一事件的处理方式。")
+            }
+
+            // MARK: - 清空数据
+            Section {
+                Button(role: .destructive) {
+                    showClearConfirm = true
+                } label: {
+                    HStack {
+                        Image(systemName: "trash")
+                        Text("清空全部事件")
+                        Spacer()
+                        if store.events.isEmpty {
+                            Text("0条")
+                                .font(.footnote)
+                                .foregroundStyle(Color.tertiaryLabel)
+                        }
+                    }
+                }
+                .disabled(store.events.isEmpty)
+            } header: {
+                Text("危险操作")
+            } footer: {
+                Text("清空后无法恢复，请先在上方「全量备份为 .json」导出备份再清空。")
             }
 
             // MARK: - 统计信息
@@ -140,15 +188,60 @@ struct SettingsView: View {
         #if canImport(UniformTypeIdentifiers)
         .fileImporter(
             isPresented: $showImportPicker,
-            allowedContentTypes: [UTType(filenameExtension: "ics") ?? .data]
+            allowedContentTypes: {
+                switch importingFileType {
+                case .ics:  return [UTType(filenameExtension: "ics") ?? .data]
+                case .json: return [UTType(filenameExtension: "json") ?? .data]
+                }
+            }()
         ) { result in
-            handleImportResult(result)
+            handleImportResult(result, fileType: importingFileType)
         }
         #endif
-        .alert("导入完成", isPresented: $showImportResult) {
+        .alert("导入结果", isPresented: $showImportResult) {
             Button("好") {}
         } message: {
-            Text("成功导入 \(importedCount) 条事件")
+            if let r = importedResult {
+                Text(importSummaryText(r))
+            } else {
+                Text("导入完成")
+            }
+        }
+        // 冲突策略确认弹框（用户点导入 → 先确认策略 → 再选文件）
+        .alert("导入前：冲突处理策略", isPresented: $showConflictPolicy) {
+            ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
+                Button(p.title + (p == conflictPolicy ? "（当前）" : "")) {
+                    conflictPolicy = p
+                    showImportPicker = true
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("当前策略：\(conflictPolicy.title) · \(conflictPolicy.subtitle)\n选完策略后会打开 Files 选择文件。")
+        }
+        // 清空二次确认
+        .alert("确认清空全部事件？", isPresented: $showClearConfirm) {
+            Button("清空全部 \(store.events.count) 条", role: .destructive) {
+                let n = store.clearAll()
+                toast = .init(kind: .success, text: "已清空 \(n) 条事件")
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("此操作不可恢复，强烈建议先点击「全量备份为 .json」导出备份。")
+        }
+        // Toast：导入/备份完成后短暂出现
+        .overlay(alignment: .top) {
+            if let t = toast {
+                ToastBannerView(message: t)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .padding(.top, 12)
+                    .onAppear {
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 2_200_000_000)
+                            if toast?.id == t.id { toast = nil }
+                        }
+                    }
+            }
         }
         #if canImport(UIKit)
         .sheet(isPresented: $showShareSheet) {
@@ -157,9 +250,22 @@ struct SettingsView: View {
             }
         }
         #endif
+        .animation(.easeInOut(duration: 0.2), value: toast)
     }
 
     // MARK: - 辅助视图
+
+    private func row(icon: String, text: String, tint: Color = Color.primary) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundStyle(tint)
+            Text(text)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(Color.tertiaryLabel)
+        }
+    }
 
     private func infoRow(label: String, value: String) -> some View {
         HStack {
@@ -178,50 +284,97 @@ struct SettingsView: View {
         }
     }
 
+    private func importSummaryText(_ r: ImportMergeResult) -> String {
+        var parts: [String] = []
+        if r.added > 0   { parts.append("新增 \(r.added)") }
+        if r.updated > 0 { parts.append("更新 \(r.updated)") }
+        if r.skipped > 0 { parts.append("保留本地 \(r.skipped)") }
+        if r.invalid > 0 { parts.append("无效 \(r.invalid)") }
+        let main = parts.isEmpty ? "没有可导入的事件" : parts.joined(separator: " · ")
+        if r.hasConflicts {
+            return main + "\n（检测到 \(r.updated + r.skipped) 条冲突，已按「\(conflictPolicy.title)」处理）"
+        }
+        return main
+    }
+
     // MARK: - 操作
 
     private func exportAsICS() {
         let content = DataPortability.exportICS(from: store.events)
-        let dateStr = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .none)
-            .replacingOccurrences(of: "/", with: "-")
+        let dateStr = isoDateStamp()
         if let url = DataPortability.writeToTempFile(
             content: content,
             filename: "lunisolar_calendar_\(dateStr).ics"
         ) {
             shareURL = url
             showShareSheet = true
+            toast = .init(kind: .success, text: "已生成 .ics 日历备份（\(store.events.count) 条）")
         }
     }
 
     private func exportAsCSV() {
         let content = DataPortability.exportCSV(from: store.events)
-        let dateStr = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .none)
-            .replacingOccurrences(of: "/", with: "-")
+        let dateStr = isoDateStamp()
         if let url = DataPortability.writeToTempFile(
             content: content,
             filename: "lunisolar_calendar_\(dateStr).csv"
         ) {
             shareURL = url
             showShareSheet = true
+            toast = .init(kind: .success, text: "已生成 .csv 表格（\(store.events.count) 条）")
         }
     }
 
-    private func handleImportResult(_ result: Result<URL, Error>) {
+    private func exportAsJSONBackup() {
+        let content = DataPortability.exportJSON(from: store.events)
+        let dateStr = isoDateStamp()
+        if let url = DataPortability.writeToTempFile(
+            content: content,
+            filename: "lunisolar_backup_\(dateStr).json"
+        ) {
+            shareURL = url
+            showShareSheet = true
+            toast = .init(kind: .success, text: "已生成全量 JSON 备份（\(store.events.count) 条）")
+        }
+    }
+
+    private func handleImportResult(_ result: Result<URL, Error>, fileType: ImportedFileType) {
         switch result {
         case .success(let url):
             guard url.startAccessingSecurityScopedResource() else { return }
             defer { url.stopAccessingSecurityScopedResource() }
-            if let content = try? String(contentsOf: url, encoding: .utf8) {
-                let imported = DataPortability.importICS(content)
-                for event in imported {
-                    store.add(event)
-                }
-                importedCount = imported.count
+            guard let content = try? String(contentsOf: url, encoding: .utf8) else {
+                importedResult = .init(invalid: 1)
                 showImportResult = true
+                return
+            }
+            let incoming: [CalendarEvent]
+            switch fileType {
+            case .ics:  incoming = DataPortability.importICS(content)
+            case .json: incoming = DataPortability.importJSON(content)
+            }
+            // merge 走统一策略；此处 skipSync 避免首次导入的纯本地数据推到云端
+            let r = store.merge(incoming, policy: conflictPolicy, skipSync: true)
+            importedResult = r
+            showImportResult = true
+            if r.added + r.updated > 0 {
+                toast = .init(kind: .success,
+                              text: "导入完成：新增 \(r.added) · 更新 \(r.updated)")
+            } else {
+                toast = .init(kind: .warning, text: "未导入任何新事件（已有或数据无效）")
             }
         case .failure(let error):
             print("导入失败: \(error)")
+            importedResult = .init(invalid: 1)
+            showImportResult = true
+            toast = .init(kind: .error, text: "导入失败：\(error.localizedDescription)")
         }
+    }
+
+    private func isoDateStamp() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd_HHmm"
+        return f.string(from: Date())
     }
 
     private func openSystemSettings() {
@@ -232,6 +385,132 @@ struct SettingsView: View {
         #endif
     }
 }
+
+// MARK: - 辅助：导入文件类型 / 冲突策略文案 / Toast
+
+enum ImportedFileType {
+    case ics
+    case json
+}
+
+extension ImportConflictPolicy {
+    public var title: String {
+        switch self {
+        case .keepLatest: return "保留最新（推荐）"
+        case .keepLocal:  return "保留本地"
+        case .overwrite:  return "覆盖本地"
+        }
+    }
+
+    public var subtitle: String {
+        switch self {
+        case .keepLatest: return "按 updatedAt 谁更新就用谁"
+        case .keepLocal:  return "同 id 的外部数据一律跳过"
+        case .overwrite:  return "同 id 一律用导入版本覆盖"
+        }
+    }
+}
+
+struct ToastMessage: Identifiable, Equatable {
+    enum Kind: Equatable { case success, warning, error }
+    var id = UUID()
+    var kind: Kind
+    var text: String
+}
+
+#if canImport(SwiftUI)
+struct ToastBannerView: View {
+    let message: ToastMessage
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: iconName)
+                .foregroundStyle(.white)
+            Text(message.text)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white)
+                .lineLimit(3)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(bgColor.shadow(.drop(color: .black.opacity(0.14), radius: 8, x: 0, y: 2)))
+        )
+        .padding(.horizontal, 20)
+    }
+
+    private var iconName: String {
+        switch message.kind {
+        case .success: return "checkmark.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .error:   return "xmark.octagon.fill"
+        }
+    }
+
+    private var bgColor: Color {
+        switch message.kind {
+        case .success: return Color(red: 0.21, green: 0.64, blue: 0.37)
+        case .warning: return Color(red: 0.90, green: 0.61, blue: 0.15)
+        case .error:   return Color(red: 0.87, green: 0.28, blue: 0.28)
+        }
+    }
+}
+
+struct ConflictPolicyPicker: View {
+    @Environment(EventStore.self) private var store
+    @Binding var policy: ImportConflictPolicy
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
+                    Button {
+                        policy = p
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(p.title).foregroundStyle(Color.primary)
+                                Text(p.subtitle)
+                                    .font(.footnote)
+                                    .foregroundStyle(Color.secondaryLabel)
+                            }
+                            Spacer()
+                            if policy == p {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(Color(hex: "#C41A1A"))
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            } header: {
+                Text("冲突处理策略")
+            } footer: {
+                Text("当导入的事件与本地事件 id 相同时如何处理。若选「保留最新」，会按 updatedAt 时间戳比较。")
+            }
+
+            Section {
+                info(label: "本地事件总数", value: "\(store.events.count)")
+            } header: {
+                Text("预览")
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("导入冲突策略")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func info(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value).foregroundStyle(Color.secondaryLabel)
+        }
+    }
+}
+#endif
 
 // MARK: - ShareSheet (UIActivityViewController 包装)
 
