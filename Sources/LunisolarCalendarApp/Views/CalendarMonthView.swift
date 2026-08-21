@@ -11,11 +11,26 @@ fileprivate struct DaySlot: Identifiable, Hashable {
 
 struct CalendarMonthView: View {
     @State private var currentMonth: Date = Date().firstDayOfMonth
-    @State private var selectedDate: Date = Date()
+    /// iPad 模式下从外部 Binding 注入；iPhone 模式下用本地 @State
+    @Binding private var selectedDate: Date
     /// 底部面板展开状态（点击就地显示完整时间轴）
     @State private var isPanelExpanded: Bool = false
 
     @Environment(EventStore.self) private var store
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+
+    /// iPhone 便捷初始化（内部自带 selectedDate State）
+    init(selectedDate: Binding<Date>? = nil) {
+        if let binding = selectedDate {
+            self._selectedDate = binding
+        } else {
+            var local = State(initialValue: Date())
+            self._selectedDate = local.projectedValue
+        }
+    }
+
+    /// 是否在 iPad 双栏模式下运行（隐藏底部面板、FAB等，改为右侧详情）
+    private var isIPadSplit: Bool { hSizeClass == .regular }
 
     var body: some View {
         NavigationStack {
@@ -34,31 +49,37 @@ struct CalendarMonthView: View {
                     .padding(.horizontal, 8)
                     .padding(.top, 2)
 
-                dayPreviewPanel
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-                    .padding(.bottom, 12)
+                // iPad 双栏模式隐藏底部面板（详情在右栏显示）
+                if !isIPadSplit {
+                    dayPreviewPanel
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                        .padding(.bottom, 12)
+                }
             }
             .background(Color.systemGroupedBackground.ignoresSafeArea())
             .overlay(alignment: .bottomTrailing) {
-                NavigationLink {
-                    EventEditView(
-                        editing: nil,
-                        defaultDate: selectedDate
-                    )
-                    .environment(store)
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 50, weight: .light))
-                        .foregroundStyle(Color.systemBlue)
-                        .background(
-                            Circle()
-                                .fill(Color.systemBackground)
-                                .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
+                // iPad 双栏模式不显示 FAB（右栏已有添加按钮）
+                if !isIPadSplit {
+                    NavigationLink {
+                        EventEditView(
+                            editing: nil,
+                            defaultDate: selectedDate
                         )
+                        .environment(store)
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 50, weight: .light))
+                            .foregroundStyle(Color.systemBlue)
+                            .background(
+                                Circle()
+                                    .fill(Color.systemBackground)
+                                    .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
+                            )
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 24)
                 }
-                .padding(.trailing, 20)
-                .padding(.bottom, 24)
             }
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -503,6 +524,13 @@ struct CalendarMonthView: View {
 
 #Preview {
     CalendarMonthView()
+        .environment(EventStore.shared)
+}
+
+// MARK: - iPad 双栏预览
+
+#Preview("iPad Split") {
+    iPadRootView()
         .environment(EventStore.shared)
 }
 

@@ -11,10 +11,45 @@ struct LunisolarCalendarApp: App {
 
     var body: some Scene {
         WindowGroup {
-            CalendarMonthView()
+            AdaptiveRootView()
                 .environment(store)
                 .preferredColorScheme(.none)
                 .tint(Color.systemBlue)
+        }
+    }
+}
+
+// MARK: - 自适应根视图：iPhone NavigationStack / iPad NavigationSplitView
+
+/// iPad (regular sizeClass) 用双栏 SplitView：左月历 + 右详情
+/// iPhone (compact) 保留单栏 NavigationStack
+struct AdaptiveRootView: View {
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+
+    var body: some View {
+        if hSizeClass == .regular {
+            // iPad：双栏布局
+            iPadRootView()
+        } else {
+            // iPhone：单栏布局
+            CalendarMonthView()
+        }
+    }
+}
+
+// MARK: - iPad 双栏根视图
+
+struct iPadRootView: View {
+    @State private var selectedDate: Date = Date()
+    @Environment(EventStore.self) private var store
+
+    var body: some View {
+        NavigationSplitView {
+            // 左栏：月历
+            CalendarMonthView(selectedDate: $selectedDate)
+        } detail: {
+            // 右栏：当日详情
+            DayDetailView(date: selectedDate)
         }
     }
 }

@@ -6,6 +6,7 @@ import SwiftUI
 struct EventEditView: View {
     @Environment(EventStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var hSizeClass
 
     let editing: CalendarEvent?
     let defaultDate: Date
@@ -81,6 +82,8 @@ struct EventEditView: View {
                 }
             }
             .formStyle(.grouped)
+            // iPad 宽屏下限制表单宽度，避免每行过宽影响可读性
+            .frame(maxWidth: hSizeClass == .regular ? 720 : .infinity)
             .navigationTitle(isEditing ? "编辑\(type.title)" : "新建\(type.title)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

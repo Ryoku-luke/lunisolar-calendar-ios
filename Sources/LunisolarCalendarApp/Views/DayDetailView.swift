@@ -5,7 +5,11 @@ import SwiftUI
 
 struct DayDetailView: View {
     @Environment(EventStore.self) private var store
+    @Environment(\.horizontalSizeClass) private var hSizeClass
     let date: Date
+
+    /// iPad regular 宽屏下约束内容最大宽度，避免文字行宽过大影响可读性
+    private var isRegular: Bool { hSizeClass == .regular }
 
     var body: some View {
         let huangli = HuangliGenerator.generate(for: date)
@@ -30,6 +34,8 @@ struct DayDetailView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
+            .frame(maxWidth: isRegular ? 720 : .infinity) // iPad 限宽
+            .frame(maxWidth: .infinity) // 居中
         }
         .background(Color.systemGroupedBackground.ignoresSafeArea())
         .navigationTitle(navTitle)

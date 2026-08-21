@@ -5,15 +5,18 @@ import SwiftUI
 
 struct WeekHeaderView: View {
     private let weekdays = ["日","一","二","三","四","五","六"]
+    @Environment(\.horizontalSizeClass) private var hSizeClass
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(0..<7, id: \.self) { idx in
                 Text(weekdays[idx])
-                    .font(.caption.weight(.semibold))
+                    .font(hSizeClass == .regular
+                          ? .body.weight(.semibold)
+                          : .caption.weight(.semibold))
                     .foregroundStyle(idx == 0 || idx == 6 ? Color.systemRed : Color.secondaryLabel)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, hSizeClass == .regular ? 8 : 6)
             }
         }
         .padding(.horizontal, 2)
@@ -32,20 +35,29 @@ struct DayCellView: View {
     let hasEvents: Bool
     let eventPriority: Priority?
 
-    private let size: CGFloat = ScreenHelper.width / 7 - 6
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+
+    /// iPad regular 宽屏字体放大；iPhone compact 保持原尺寸
+    private var isRegular: Bool { hSizeClass == .regular }
+    private var dayFontSize: CGFloat { isToday ? (isRegular ? 22 : 17) : (isRegular ? 20 : 16) }
+    private var lunarFontSize: CGFloat { isRegular ? 12 : 9 }
+    private var badgeFontSize: CGFloat { isRegular ? 10 : 8 }
+    private var badgeHeight: CGFloat { isRegular ? 16 : 12 }
+    private var dotSize: CGFloat { isRegular ? 7 : 5 }
+    private var cellCornerRadius: CGFloat { isRegular ? 14 : 10 }
 
     var body: some View {
-        VStack(spacing: 1) {
+        VStack(spacing: isRegular ? 3 : 1) {
             // 公历日期 + 今日圆点
             ZStack(alignment: .topTrailing) {
                 Text("\(date.day)")
-                    .font(isToday ? .system(size: 17, weight: .bold) : .system(size: 16, weight: .medium))
+                    .font(.system(size: dayFontSize, weight: isToday ? .bold : .medium))
                     .foregroundStyle(dayForegroundColor)
 
                 if isToday {
                     Circle()
                         .fill(Color.systemRed)
-                        .frame(width: 5, height: 5)
+                        .frame(width: dotSize, height: dotSize)
                         .padding(2)
                 }
             }
@@ -53,7 +65,7 @@ struct DayCellView: View {
 
             // 农历日期 / 节日
             Text(lunar.shortDisplayString)
-                .font(.system(size: 9))
+                .font(.system(size: lunarFontSize))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .foregroundStyle(lunarForegroundColor)
@@ -64,9 +76,9 @@ struct DayCellView: View {
             HStack(spacing: 2) {
                 if huangli.isAuspicious && isCurrentMonth {
                     Text("吉")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: badgeFontSize, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 14, height: 12)
+                        .frame(width: isRegular ? 18 : 14, height: badgeHeight)
                         .background(
                             RoundedRectangle(cornerRadius: 3, style: .continuous)
                                 .fill(Color.auspicious)
@@ -75,23 +87,23 @@ struct DayCellView: View {
                 if hasEvents {
                     Circle()
                         .fill(eventPriority?.tintColor ?? Color.systemBlue)
-                        .frame(width: 5, height: 5)
+                        .frame(width: dotSize, height: dotSize)
                 }
                 if !(huangli.isAuspicious && isCurrentMonth) && !hasEvents {
-                    Color.clear.frame(width: 5, height: 5)
+                    Color.clear.frame(width: dotSize, height: dotSize)
                 }
             }
-            .frame(height: 12)
+            .frame(height: badgeHeight)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, isRegular ? 6 : 4)
         .frame(maxHeight: .infinity)
         .frame(maxWidth: .infinity)
         .background {
             if isSelected {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: cellCornerRadius, style: .continuous)
                     .fill(Color.systemBlue.opacity(0.15))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: cellCornerRadius, style: .continuous)
                             .stroke(Color.systemBlue, lineWidth: 1.5)
                     )
             }

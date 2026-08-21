@@ -11,6 +11,7 @@ import UIKit
 
 struct SettingsView: View {
     @Environment(EventStore.self) private var store
+    @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var notifStatus: NotificationAuthStatus = .unavailable
     @State private var showImportPicker = false
     @State private var importingFileType: ImportedFileType = .ics
@@ -230,6 +231,8 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        // iPad 宽屏下限制表单宽度
+        .frame(maxWidth: hSizeClass == .regular ? 720 : .infinity)
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
         .task {
