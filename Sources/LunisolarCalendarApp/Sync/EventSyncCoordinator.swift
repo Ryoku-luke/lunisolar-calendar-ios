@@ -1,7 +1,5 @@
 import Foundation
-#if canImport(Combine)
-import Combine
-#endif
+import Observation
 
 // MARK: - 事件同步协调器（夹在 EventStore 与 ICloudSyncProvider 中间）
 
@@ -9,22 +7,16 @@ import Combine
 /// 1. EventStore 每次 add/update/delete 后调 `didChangeLocal(events:)` 或直接调 `push(event:)` 推到云端
 /// 2. 定期调用 `pullAndMerge()` 拉云端增量 → 合并进本地 EventStore（last-write-wins + 墓碑删除）
 /// 3. 持久化 lastSyncMs（写入 UserDefaults，下次启动继续增量同步）
-/// 4. 对外暴露 status，UI 可绑定显示同步状态（Apple 平台下：@Published + ObservableObject）
+/// 4. 对外暴露 status / lastResult（iOS 17+ 用 @Observable，UI 自动追踪）
 @MainActor
+@Observable
 public final class EventSyncCoordinator: @unchecked Sendable {
 
-    // MARK: - 对外状态（Combine 可用时为 @Published 响应式）
+    // MARK: - 对外状态（@Observable 自动追踪属性访问，UI 读取即订阅）
 
-    #if canImport(Combine)
-    @Published public private(set) var status: SyncStatus = .idle
-    /// 最近一次同步结果（成功/失败均记录）
-    @Published public private(set) var lastResult: SyncResult?
-    #else
-    /// 非 Apple 平台退化为普通属性
     public private(set) var status: SyncStatus = .idle
     /// 最近一次同步结果（成功/失败均记录）
     public private(set) var lastResult: SyncResult?
-    #endif
 
     /// 同步开关（默认 true；用户可在设置里关掉"iCloud 同步"）
     public var isEnabled: Bool = true {
@@ -314,13 +306,6 @@ public final class EventSyncCoordinator: @unchecked Sendable {
         defaults.removeObject(forKey: lastSyncKey)
     }
 }
-
-// MARK: - Combine 下自动获得 ObservableObject 能力（@Published 已经合成 objectWillChange）
-
-#if canImport(Combine)
-import Combine
-extension EventSyncCoordinator: ObservableObject {}
-#endif
 
 // MARK: - EventStore 集成：CRUD 后自动 push（通过 skipSync 防止回环）
 

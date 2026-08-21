@@ -17,11 +17,11 @@
 | 📤 数据逃离机制 | **.ics 导入导出** (iCalendar RFC5545，支持折叠行展开) + **.csv 导出** + **.json 全量备份**（含农历重复规则、通知状态）|
 | 🔄 数据合并策略 | 导入冲突处理：`keepLatest` / `keepLocal` / `overwrite`；合并统计（新增/更新/跳过/无效）|
 | 📱 系统数据导入 | **系统日历导入**（EventKit：EKEvent → CalendarEvent，RRULE 映射）+ **联系人导入**（CNContact 生日/纪念日，可选农历每年）；确定性 UUID 防重复导入 |
-| ☁️ iCloud 同步 | 抽象接口 `ICloudSyncProvider` 协议 + `MockCloudKitProvider` 内存模拟容器，支持增量推送/拉取/墓碑删除 |
+| ☁️ iCloud 同步 | **真实 CloudKit**（`RealCloudKitProvider`：私有 DB + Custom Zone + `CKQuery` 增量 + 墓碑 + `CKQuerySubscription`）+ `MockCloudKitProvider` 内存模拟容器；`ICloudSyncProvider` 协议抽象，UI 一键开关、状态展示、手动同步 |
 | 📊 Widget 小组件 | 3 种样式：**今日黄历概览**（宜忌+冲煞）、**农历日期卡片**（干支+节日）、**今日待办进度**（进度环+真实待办列表）；App Group 共享快照 |
 | 🎨 节日主题色 | 春节/中秋等传统节日自动切换背景渐变和主题色点缀 |
 | 📱 iPad 适配 | `NavigationSplitView` 双栏布局（左月历 + 右日详情），cell 尺寸自适应，Form 限宽 720pt；`horizontalSizeClass` 自动切换 |
-| ⚙️ 设置页 | 通知权限状态（异步查询）+ 重新调度、导入导出入口、系统数据导入、冲突策略、数据清空（二次确认）、数据统计、版本信息 |
+| ⚙️ 设置页 | 通知权限状态（异步查询）+ 重新调度、导入导出入口、系统数据导入、**iCloud 同步开关+状态+手动同步**、冲突策略、数据清空（二次确认）、数据统计、版本信息 |
 | 🧪 单元测试 | **53 个 XCTest** 覆盖农历真值 (17点) / 宜忌稳定性 / 冲煞 / ICS 往返 / CRUD / JSON 备份 / 合并策略 / Widget 快照 / 系统导入桥 |
 | 🎨 iOS UI | SwiftUI · `NavigationStack` / `NavigationSplitView` · `.formStyle(.grouped)` · 语义色 · SF Symbol · 深浅色自适应 · FlowLayout 自动换行标签 |
 
@@ -80,6 +80,18 @@ struct YourApp: App {
 2. 主 App 和 Widget Extension 同时勾上同一个 App Group Capability（例如 `group.com.you.lunisolar`）
 3. 主 App 启动时设置 `EventStore().widgetAppGroupID = "group.com.you.lunisolar"`
 
+### iCloud / CloudKit 接入（Xcode 工程）
+
+App 已内置 `RealCloudKitProvider`（私有数据库 + Custom Zone `LunisolarZone` + 墓碑删除 + `CKQuerySubscription`）。真机启用步骤：
+
+1. Xcode → 主 App Target → **Signing & Capabilities** → 添加 **iCloud** Capability
+2. 勾选 **CloudKit**，勾选/创建你的 iCloud Container（如 `iCloud.com.you.lunisolar`）
+3. （可选）在 [LunisolarCalendarApp.swift](Sources/LunisolarCalendarApp/App/LunisolarCalendarApp.swift) 里把 `RealCloudKitProvider(containerIdentifier:)` 指定为你自己的 Container ID
+4. 运行 App → 设置页 → 「iCloud 同步」开关打开 → 自动后台首次同步
+5. 多设备登录同一 iCloud 账号即可自动同步事件（增删改 + 墓碑 + last-write-wins 冲突解决）
+
+> 测试环境（Linux / SwiftPM）不链接 CloudKit，`RealCloudKitProvider` 整文件 `#if canImport(CloudKit)` 跳过，单元测试继续使用 `MockCloudKitProvider`。
+
 ## 🏗️ 项目结构
 
 ```
@@ -101,12 +113,15 @@ Sources/LunisolarCalendarApp/
 │   ├── HuangliGenerator.swift         # 黄历算法生成器（离线兜底）
 │   ├── LunarDataProvider.swift        # 农历数据表 JSON 资源加载器
 │   ├── WidgetSnapshotStore.swift      # Widget 共享快照（App Group → Documents → tmp 三级回退）
-│   ├── ICloudSyncProvider.swift       # iCloud 同步抽象协议 + SyncRecord + EventSyncCoordinator
-│   ├── MockCloudKitProvider.swift     # 内存模拟云端容器（本地测试/预览）
 │   ├── SystemImportBridge.swift       # 系统导入桥：DTO + 协议 + Mapper（确定性 UUID）+ Aggregator
 │   ├── CalendarImportProvider.swift   # EventKit 桥：EKEvent → CalendarEvent（#if canImport(EventKit)）
 │   ├── ContactsImportProvider.swift   # Contacts 桥：CNContact 生日/纪念日 → CalendarEvent（#if canImport(Contacts)）
 │   └── FlowLayout.swift               # Layout 协议流式标签排列（iOS 16+）
+├── Sync/
+│   ├── ICloudSyncProvider.swift       # 同步抽象协议 + SyncRecord + SyncResult + SyncCoders
+│   ├── MockCloudKitProvider.swift     # 内存模拟云端容器（本地测试/预览/Linux）
+│   ├── RealCloudKitProvider.swift     # 真实 CloudKit（私有DB+CustomZone+CKQuery+墓碑+订阅）（#if canImport(CloudKit)）
+│   └── EventSyncCoordinator.swift     # @Observable 协调器：push/pull/merge/双向同步 + 版本追踪
 ├── Widgets/
 │   ├── LunisolarWidgetProvider.swift  # Widget EntryProvider + Timeline
 │   └── LunisolarWidgetViews.swift     # 3 种样式视图
@@ -119,7 +134,7 @@ Sources/LunisolarCalendarApp/
     ├── DayDetailView.swift            # 黄历详情 + 当日日程列表（FlowLayout 标签）
     ├── EventEditView.swift            # 新建/编辑/删除（自动管理通知生命周期 + 农历重复规则UI）
     ├── EventRow.swift                 # 事件列表项（重复规则标签 + 优先级色条）
-    └── SettingsView.swift             # 设置页（通知+导入导出+系统导入+冲突策略+清空+Toast）
+    └── SettingsView.swift             # 设置页（通知+导入导出+系统导入+iCloud同步+冲突策略+清空+Toast）
 
 Tests/LunisolarCalendarTests/
 └── LunisolarCalendarTests.swift       # 53个 XCTest（农历/黄历/事件/导入导出/合并/Widget/系统导入）

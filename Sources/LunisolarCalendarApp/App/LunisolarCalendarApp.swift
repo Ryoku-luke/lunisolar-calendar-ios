@@ -8,6 +8,8 @@ import Observation
 struct LunisolarCalendarApp: App {
 
     @State private var store = EventStore.shared
+    /// 持有同步协调器强引用（EventStore.syncCoordinator 为 weak，需要这里保活）
+    @State private var syncCoordinator: EventSyncCoordinator?
 
     var body: some Scene {
         WindowGroup {
@@ -15,7 +17,43 @@ struct LunisolarCalendarApp: App {
                 .environment(store)
                 .preferredColorScheme(.none)
                 .tint(Color.systemBlue)
+                .task {
+                    await setupCloudSyncIfNeeded()
+                }
         }
+    }
+
+    // MARK: - iCloud 同步装配
+
+    /// 首次出现时装配 RealCloudKitProvider：
+    /// - 仅 Apple 平台（有 CloudKit）
+    /// - isEnabled 由 UserDefaults 控制（默认 opt-in = false，用户在设置里开启）
+    /// - 开启后自动后台同步一次（pull 增量 + push 本地变更）
+    private func setupCloudSyncIfNeeded() async {
+        guard syncCoordinator == nil else { return }
+        #if canImport(CloudKit)
+        // 防止用户禁用后又开时反复创建
+        let provider = RealCloudKitProvider()
+        let coordinator = EventSyncCoordinator(
+            eventStore: store,
+            provider: provider
+        )
+        // 读取持久化的开关状态（默认 false = 用户首次需在设置里显式开启）
+        let enabled = UserDefaults.standard.bool(forKey: "Lunisolar.sync.enabled")
+        coordinator.isEnabled = enabled
+        store.syncCoordinator = coordinator
+        syncCoordinator = coordinator
+
+        // 开启 → 后台首次同步
+        if enabled {
+            let available = await provider.isAvailable
+            if available {
+                _ = try? await coordinator.syncBidirectional()
+            } else {
+                coordinator.isEnabled = false
+            }
+        }
+        #endif
     }
 }
 

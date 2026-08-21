@@ -107,6 +107,62 @@ struct SettingsView: View {
                 Text(".json 备份保留全部字段（含农历生日重复规则、通知状态、创建时间）；.ics/.csv 适合与其他日历互通。")
             }
 
+            // MARK: - iCloud 同步
+            Section {
+                if let co = store.syncCoordinator {
+                    Toggle(isOn: Binding(
+                        get: { co.isEnabled },
+                        set: { newVal in handleSyncToggle(co, enabled: newVal) }
+                    )) {
+                        Label("启用 iCloud 同步", systemImage: "icloud")
+                    }
+                    .tint(Color.systemBlue)
+
+                    // 同步状态
+                    HStack {
+                        Text("同步状态")
+                        Spacer()
+                        Text(syncStatusText(co.status))
+                            .font(.subheadline)
+                            .foregroundStyle(syncStatusColor(co.status))
+                    }
+
+                    // 最近一次同步结果
+                    if let result = co.lastResult {
+                        infoRow(label: "最近同步", value: syncResultSummary(result))
+                        infoRow(label: "推送 / 拉取", value: "↑\(result.pushed)  ↓\(result.pulled)")
+                    }
+
+                    // 手动同步按钮
+                    Button {
+                        Task { _ = try? await co.syncBidirectional() }
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundStyle(Color.systemBlue)
+                            Text("立即同步")
+                            Spacer()
+                            if case .inProgress = co.status {
+                                ProgressView().scaleEffect(0.7)
+                            }
+                        }
+                    }
+                    .disabled(!co.isEnabled || isSyncing(co.status))
+                } else {
+                    // CloudKit 不可用（Linux / 未配置容器）
+                    HStack {
+                        Image(systemName: "icloud.slash")
+                            .foregroundStyle(Color.tertiaryLabel)
+                        Text("iCloud 同步不可用")
+                            .foregroundStyle(Color.secondaryLabel)
+                    }
+                }
+            } header: {
+                Text("iCloud 同步")
+            } footer: {
+                Text("通过 iCloud 私有数据库在多台设备间同步日历事件。需登录 iCloud 账号并启用 iCloud Drive。关闭后仅本地存储。")
+            }
+
             // MARK: - 系统数据导入
             Section {
                 Button {
@@ -489,6 +545,63 @@ struct SettingsView: View {
             UIApplication.shared.open(url)
         }
         #endif
+    }
+
+    // MARK: - iCloud 同步辅助
+
+    @MainActor
+    private func handleSyncToggle(_ co: EventSyncCoordinator, enabled: Bool) {
+        co.isEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "Lunisolar.sync.enabled")
+        if enabled {
+            // 开启 → 立即触发一次双向同步
+            Task { _ = try? await co.syncBidirectional() }
+        }
+    }
+
+    private func syncStatusText(_ status: SyncStatus) -> String {
+        switch status {
+        case .idle: return "空闲"
+        case .inProgress(let dir): return "同步中（\(dir == .push ? "↑推送" : dir == .pull ? "↓拉取" : "↑↓双向")）"
+        case .succeeded: return "已同步"
+        case .failed(let e): return "失败：\(syncErrorBrief(e))"
+        }
+    }
+
+    private func syncStatusColor(_ status: SyncStatus) -> Color {
+        switch status {
+        case .idle: return Color.secondaryLabel
+        case .inProgress: return Color.systemBlue
+        case .succeeded: return Color.systemGreen
+        case .failed: return Color.systemRed
+        }
+    }
+
+    private func syncErrorBrief(_ e: SyncError) -> String {
+        switch e {
+        case .notAvailable: return "iCloud 不可用"
+        case .networkUnavailable: return "无网络"
+        case .permissionDenied: return "权限被拒"
+        case .quotaExceeded: return "容量超限"
+        case .conflict: return "冲突"
+        case .recordNotFound: return "记录不存在"
+        case .invalidPayload: return "数据损坏"
+        case .rateLimited: return "请求过频"
+        case .unknown: return "未知错误"
+        }
+    }
+
+    private func syncResultSummary(_ r: SyncResult) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "MM-dd HH:mm"
+        let time = f.string(from: r.finishedAt)
+        let status = r.isSuccess ? "成功" : "部分失败"
+        return "\(time) · \(status)"
+    }
+
+    private func isSyncing(_ status: SyncStatus) -> Bool {
+        if case .inProgress = status { return true }
+        return false
     }
 }
 
