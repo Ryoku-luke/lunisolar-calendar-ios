@@ -161,14 +161,21 @@ struct CalendarMonthView: View {
 
     private var calendarGrid: some View {
         let columns = [GridItem](repeating: GridItem(.flexible(), spacing: 2), count: 7)
+        // 预计算本月所有 slot 的数据，避免 LazyVGrid 每帧对每个 cell 重算
+        let slots = daysForMonth()
+        // 预构建日期→事件映射，用 eventStats 单次遍历替代 hasEvents+highestPriority 双遍历
+        var eventMap: [Date: (has: Bool, prio: Priority?)] = [:]
+        for slot in slots {
+            let stats = store.eventStats(on: slot.date)
+            eventMap[slot.date] = (stats.has, stats.priority)
+        }
 
         return LazyVGrid(columns: columns, spacing: 2) {
-            ForEach(daysForMonth()) { slot in
+            ForEach(slots) { slot in
                 let date = slot.date
                 let lunar = date.lunar
                 let huangli = HuangliGenerator.generate(for: date)
-                let hasEvs = store.hasEvents(on: date)
-                let prio = store.highestPriority(on: date)
+                let (hasEvs, prio) = eventMap[date] ?? (false, nil)
 
                 DayCellView(
                     date: date,

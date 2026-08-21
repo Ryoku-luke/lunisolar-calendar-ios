@@ -27,7 +27,10 @@ public final class NotificationManager {
         #endif
     }
 
-    /// 检查当前授权状态
+    /// 检查当前授权状态（同步属性，仅用于 UI 状态展示）
+    /// 注意：iOS 上 UNUserNotificationCenter.getNotificationSettings 是异步的，
+    /// 此处用信号量同步等待结果，最多阻塞 2 秒。只在主线程空闲时调用（如
+    /// SettingsView.onAppear），不要在热路径中反复调用。
     public var authorizationStatus: NotificationAuthStatus {
         #if canImport(UserNotifications)
         let semaphore = DispatchSemaphore(value: 0)
@@ -38,6 +41,21 @@ public final class NotificationManager {
         }
         _ = semaphore.wait(timeout: .now() + 2)
         switch status {
+        case .authorized, .provisional: return .granted
+        case .denied: return .denied
+        case .ephemeral: return .granted
+        default: return .notDetermined
+        }
+        #else
+        return .unavailable
+        #endif
+    }
+
+    /// 异步获取授权状态（推荐在 View task 中使用，不阻塞主线程）
+    public func authorizationStatusAsync() async -> NotificationAuthStatus {
+        #if canImport(UserNotifications)
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
         case .authorized, .provisional: return .granted
         case .denied: return .denied
         case .ephemeral: return .granted

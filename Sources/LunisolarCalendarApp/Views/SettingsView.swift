@@ -236,7 +236,8 @@ struct SettingsView: View {
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            notifStatus = NotificationManager.shared.authorizationStatus
+            // 用异步版本避免阻塞主线程
+            notifStatus = await NotificationManager.shared.authorizationStatusAsync()
         }
         #if canImport(UniformTypeIdentifiers)
         .fileImporter(

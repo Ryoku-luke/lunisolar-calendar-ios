@@ -180,8 +180,21 @@ public enum DataPortability {
     /// 从 .ics 字符串解析事件列表
     public static func importICS(_ content: String) -> [CalendarEvent] {
         var events: [CalendarEvent] = []
-        var lines = content.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n").map(String.init)
-        lines = lines.map { $0.hasPrefix(" ") ? String($0.dropFirst()) : $0 } // 处理折叠行
+        // RFC 5545: 折叠行以空格或制表符开头，需拼接到上一行末尾
+        let rawLines = content
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+        // 展开折叠行
+        var lines: [String] = []
+        for line in rawLines {
+            if (line.hasPrefix(" ") || line.hasPrefix("\t")) && !lines.isEmpty {
+                lines[lines.count - 1] += String(line.dropFirst())
+            } else {
+                lines.append(line)
+            }
+        }
 
         var idx = 0
         let dfmtUTC = DateFormatter()

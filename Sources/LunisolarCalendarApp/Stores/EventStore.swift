@@ -124,9 +124,23 @@ public final class EventStore {
         events.contains { $0.occurs(on: date) }
     }
 
+    /// 单次遍历同时返回是否有事件和最高优先级，避免 calendarGrid 里调两次
+    public func eventStats(on date: Date) -> (has: Bool, priority: Priority?) {
+        var has = false
+        var best: Priority? = nil
+        for ev in events {
+            if ev.occurs(on: date) {
+                has = true
+                if best == nil || ev.priority > best! {
+                    best = ev.priority
+                }
+            }
+        }
+        return (has, best)
+    }
+
     public func highestPriority(on date: Date) -> Priority? {
-        let evs = events(on: date)
-        return evs.max { $0.priority < $1.priority }?.priority
+        eventStats(on: date).priority
     }
 
     public func search(query: String) -> [CalendarEvent] {
