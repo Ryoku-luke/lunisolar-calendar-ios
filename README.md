@@ -22,7 +22,7 @@
 | 🎨 节日主题色 | 春节/中秋等传统节日自动切换背景渐变和主题色点缀 |
 | 📱 iPad 适配 | `NavigationSplitView` 双栏布局（左月历 + 右日详情），cell 尺寸自适应，Form 限宽 720pt；`horizontalSizeClass` 自动切换 |
 | ⚙️ 设置页 | 通知权限状态（异步查询）+ 重新调度、导入导出入口、系统数据导入、**iCloud 同步开关+状态+手动同步**、冲突策略、数据清空（二次确认）、数据统计、版本信息 |
-| 🧪 单元测试 | **53 个 XCTest** 覆盖农历真值 (17点) / 宜忌稳定性 / 冲煞 / ICS 往返 / CRUD / JSON 备份 / 合并策略 / Widget 快照 / 系统导入桥 |
+| 🧪 单元测试 | **53 个 XCTest** / **9 个测试套件**：农历真值(17点) / 黄历算法 / 离散DB一致性 / 事件模型 / EventStore CRUD+合并 / 数据导入导出 / iCloud同步(Mock) / Widget快照 / 系统导入桥 |
 | 🎨 iOS UI | SwiftUI · `NavigationStack` / `NavigationSplitView` · `.formStyle(.grouped)` · 语义色 · SF Symbol · 深浅色自适应 · FlowLayout 自动换行标签 |
 
 ## 📱 系统要求
@@ -149,52 +149,88 @@ swift test         # 运行 53 个单元测试（Linux 仅模型层，Apple 平�
 
 > Linux 环境仅能验证模型层（农历 / 黄历 / 事件 CRUD / 导入导出 / 系统导入桥），SwiftUI 视图编译需要 iOS 或 macOS SDK。EventKit/Contacts/WidgetKit 代码用 `#if canImport` 包住，Linux 编译不报错。
 
-## 🧪 单元测试覆盖（53/53 通过）
+## 🧪 单元测试覆盖（53/53 通过 · 0 失败 · 0 警告）
 
-### LunarDateTests（4个）
-- `testLunarConversionAccuracy`：**17 个农历真值点**（基准日/2020闰四月/2023闰二月/春节/今日/2100上界）
-- `testLeapMonthYears`：2020→4 / 2023→2 / 2024→0
-- `testBoundaryNilSafe`：1899 & 2101 → `lunarDateSafe` 返回 nil
-- `testReverseConversion`：2024正月初一 → 公历2024-02-10
+```
+执行套件数:  9
+执行用例数:  53
+通过:        53 ✅
+失败:        0
+总耗时:      0.50s
+```
 
-### HuangliTests（3个）
-- 宜忌稳定性（同日5次连续调用一致）
-- 2024-10-01 冲龙煞北 验证
-- 黄道吉日判定无崩溃
+### LunarDateTests（4个） — 公历↔农历核心转换
+- `testLunarConversionAccuracy`：**17 个农历真值点**（基准日/2020闰四月/2023闰二月/春节/今日/2100上界），年/月/日/闰月标记四元组精确匹配
+- `testLeapMonthYears`：2020→闰四月 / 2023→闰二月 / 2024→无闰月
+- `testBoundaryNilSafe`：1899 & 2101 → `lunarDateSafe` 返回 nil；2026 → 非 nil
+- `testReverseConversion`：2024正月初一 → 公历 2024-02-10
 
-### CalendarEventTests（6个）
-- endDate≤startDate 自动兜底
-- 全天事件时长 = 86399s
-- `.lunarAnnually` 农历每年重复匹配（闰月/非闰月年）
-- 优先级排序（紧急>高>普通>低）
-- ICS 导出→导入往返一致性
-- CSV 导出格式正确
+### HuangliTests（3个） — 黄历算法生成
+- `testYiJiStability`：同一日期连续 2 次 generate → 宜忌结果完全一致
+- `testChongSha20241001`：2024-10-01 戊戌日 → 冲龙（地支+生肖验证）
+- `testAuspiciousIsBool`：吉日标记不崩溃
 
-### EventStoreTests（3个）
-- CRUD 完整流程
-- `markNotified` 防重复通知
-- 标题/地点/备注全文搜索
+### HuangliDBProviderTests（6个） — 离散黄历数据库
+- `testDiscreteDBHit20240101`：2024-01-01 命中离散库，宜忌/冲煞/五行/神位字段齐全
+- `testDiscreteDBHit20260819Today`：今日 2026-08-19 七月初七，离散库与算法生成 7 项字段逐字相等
+- `testDiscreteDBBoundaryTail`：2028-12-31 仍命中；2029-01-01 自动切回算法 fallback
+- `testOutOfRangeReturnsNil`：1899/2101 越界日期 source=algorithm
+- `testDBConsistentWithAlgorithmForRange`：2024-2028 区间随机 30 天抽样，DB 与算法在 yi/ji/chong/sha/wuxing/shenwei/auspicious 逐字相等
+- `testCoverageDescriptionNotEmpty`：coverageDescription 声明覆盖 2024-2028
 
-### DataPortabilityTests（4个）
-- JSON 往返保留农历重复规则和 isNotified
-- ICS 导入伪 UID 稳定性（重复导入不产生副本）
-- ICS RRULE 解析（FREQ/BYDAY → RepeatRule）
-- 三种合并策略（keepLatest/keepLocal/overwrite）
+### CalendarEventTests（11个） — 事件模型
+- `testEndDateAutoFix`：endDate ≤ startDate 时自动修正
+- `testAllDayEventDuration`：全天事件 duration = 86399 秒
+- `testLunarAnnuallyRepeat`：农历八月十五中秋节 → 次年同农历日匹配
+- `testLunarAnnuallySpringFestivalAcross3Years`：春节正月初一跨 3 年 occurs 命中；正月初二不命中
+- `testLunarAnnuallyLeapMonthMatchesFlatMonth`：闰月生日在平月年同月同日命中
+- `testRepeatRuleLabelAndAnchor`：label/anchor 文本格式正确
+- `testPriorityComparison`：urgent > high > normal > low
+- `testICSExportImport`：ICS 导出→导入字段无损
+- `testCSVExport`：CSV 导出含表头和标题
+- `testLunarAnnuallySameDayEarlyHourMustMatch`：**BUG #1 回归** — 20:00 起锚事件当天 09:00 查询必须命中
+- `testLunarAnnuallyOutOfBoundsAnchorIsNilSafe`：**BUG #2 回归** — 1899/2101 超范围锚点不崩溃
 
-### WidgetSnapshotTests（4个）
-- 快照读写往返
-- 过期/错日回 nil
-- 文件缺失回 nil
-- EventStore.save 自动写快照并按优先级排序
+### EventStoreTests（7个） — 事件存储
+- `testCRUD`：add → toggleCompleted → delete 全链路
+- `testMarkNotified`：isNotified 从 false → true
+- `testSearch`：关键词搜索命中标题
+- `testLunarBirthdayAppearsOnSpringFestival2026`：正月初一事件在 2026 春节出现
+- `testMergeAddNewNoDuplicate`：**副本 BUG 回归** — 同一事件第二次 merge 不产生副本
+- `testMergeConflictPoliciesAllThree`：keepLatest / keepLocal / overwrite 三种策略
+- `testClearAllReturnsCountAndResets`：clearAll 返回数量 + 事件归零
 
-### SystemImportTests（9个）
-- DTO → CalendarEvent 字段全保留
-- 确定性 UUID 稳定性（同 sourceID 多次映射同一 UUID）
-- 不同 sourceID 不同 UUID
-- Stub Provider 授权/未授权
-- Aggregator 多源合并 + 失败收集
-- 联系人生日 DTO 映射（yearly / lunarAnnually）
-- 端到端 Provider → Aggregator → merge 重复导入无副本
+### DataPortabilityTests（3个） — 数据导入导出
+- `testJSONRoundTripPreservesLunarAndFlags`：JSON 往返 version/exportedAt/count + 农历规则 + isNotified
+- `testICSImportPseudoUUIDStableAndRRULEParsed`：同一 ICS 两次导入伪 UUID 一致；RRULE WEEKLY/BYDAY 正确解析
+- `testMergeResultCounters`：合并统计 added=1, updated=1
+
+### ICloudSyncTests（6个） — iCloud 同步（Mock 驱动）
+- `testPushLocalEventsToCloud`：3 条本地 push → 云端 3 条
+- `testPullCloudIntoLocalMerge`：云端注入 → pullAndMerge → 本地 2 条
+- `testConflictLastWriteWins`：本地 v2 vs 云端 v3 → 云端胜出
+- `testIncrementalPull`：sinceMs 增量拉取仅返回新变更
+- `testOfflineGoOnlineBidirectionalSync`：离线新增 4 条 → syncBidirectional → 云端 4 条
+- `testTombstoneDeletePropagation`：跨设备墓碑删除传播
+
+### WidgetSnapshotTests（4个） — Widget 数据桥
+- `testWriteThenReadRoundTrip`：写入→读取 7 项字段全保留
+- `testReadIgnoresStaleSnapshot`：旧快照 targetDay 不匹配返回 nil
+- `testReadMissingReturnsNil`：不存在文件安全返回 nil
+- `testEventStoreAutoWritesSnapshotTodayCounts`：EventStore.add 后自动写快照
+
+### SystemImportTests（9个） — 系统导入桥
+- `testMapperPreservesAllFields`：DTO → Event 10 项字段全保留
+- `testDeterministicUUIDStableAcrossCalls`：同 sourceID → 同 UUID
+- `testDifferentSourceIDsDifferentUUIDs`：不同 sourceID → 不同 UUID
+- `testStubProviderFetchEvents`：Stub 正常授权
+- `testStubProviderUnauthorized`：未授权抛 unauthorized
+- `testAggregatorCombinesAndCollectsFailures`：多 Provider 聚合 + 失败收集
+- `testContactBirthdayDTOMapsToYearlyReminder`：联系人生日映射正确
+- `testContactBirthdayLunarAnnuallyToggle`：农历每年规则正确
+- `testEndToEndImportNoDuplicatesOnReimport`：**副本 BUG 回归** — 重复导入无副本
+
+> 详细测试报告见 [TEST_REPORT.md](TEST_REPORT.md)
 
 ## 📦 农历数据资源化
 
@@ -286,6 +322,45 @@ ICloudSyncProvider 协议
 | 2026-02-17 | 丙午年正月初一 | 丙午年春节 |
 | 2100-02-09 | 庚申年正月初一 | 数据表上界 |
 | 2026-08-19 | 丙午年七月初七 | 今日 |
+
+## 🐛 已修复 BUG 清单
+
+### BUG #1（🔴 致命）：数据损坏时 insertSampleData 覆盖用户数据
+- **文件**: `Stores/EventStore.swift`
+- **根因**: `load()` 解码失败时调用 `insertSampleData()`，直接覆盖用户所有本地数据
+- **修复**: 改为清空 events 数组 + 打印警告，不再用示例数据替换
+- **回归测试**: `testLunarAnnuallySameDayEarlyHourMustMatch`（关联 #1）
+
+### BUG #2（🔴 高）：ICS unescapeICS 处理顺序错误
+- **文件**: `Support/DataPortability.swift`
+- **根因**: 先处理 `\n` 再处理 `\\`，导致 `\\n`（字面反斜杠+n）被错误解析为换行符
+- **修复**: 先用 `\u{0000}` 占位 `\\`，再处理其他转义，最后还原
+- **回归测试**: `testICSImportPseudoUUIDStableAndRRULEParsed`
+
+### BUG #3（🟡 中）：autoPush 多任务并发竞争
+- **文件**: `Stores/EventStore.swift`
+- **根因**: 每次 CRUD 创建独立 `Task`，并发推送导致丢失/重复
+- **修复**: 改为序列化推送队列 `enqueuePush/drainPushQueue`，FIFO 执行
+
+### BUG #4（🟡 中）：syncBidirectional 竞态 + 全量推送
+- **文件**: `Sync/EventSyncCoordinator.swift`
+- **根因**: 无并发保护；`pendingDirtyEvents()` 全量推送
+- **修复**: 增加 `isSyncing` 防重入；改用 `dirtyEventIDs/deletedEventIDs` 增量追踪
+- **回归测试**: `testOfflineGoOnlineBidirectionalSync`
+
+### BUG #5（🟢 低）：MockCloudKitProvider 死代码
+- **文件**: `Sync/MockCloudKitProvider.swift`
+- **根因**: 无效 `await MainActor.run {}` 和空 `Task {}`
+- **修复**: 清理死代码和无效 await
+
+### BUG #6（🟢 低）：weekdaySymbol 数组越界
+- **文件**: `Models/LunarDate.swift`
+- **根因**: `weekday - 1` 可能越界
+- **修复**: 增加 `max(0, min(6, ...))` 边界保护
+
+### 附加改进
+- `skipSync: true` 仍标记 `dirtyEventIDs`，确保后续 `syncBidirectional()` 检出
+- `Date` 扩展清理冗余 `public` 修饰符，零警告构建
 
 ## 📄 License
 
