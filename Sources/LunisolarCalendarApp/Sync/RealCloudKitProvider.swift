@@ -17,13 +17,6 @@ import CloudKit
 /// - pull：`CKQuery`（`updatedAtMs > sinceMs`）+ cursor 分页
 /// - delete：写墓碑记录（`isDeleted=1`），不直接物理删除
 /// - subscription：`CKQuerySubscription`（zone 级变更推送）
-///
-/// 用法（App 入口）：
-/// ```swift
-/// let provider = RealCloudKitProvider()
-/// let coordinator = EventSyncCoordinator(eventStore: store, provider: provider)
-/// store.syncCoordinator = coordinator
-/// ```
 public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable {
 
     // MARK: - 配置
@@ -35,7 +28,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     /// iCloud 容器（nil identifier → `CKContainer.default()`）
     private let container: CKContainer
-    /// 私有数据库（用户私有，跨设备共享）
+    /// 私有数据库（iOS 17+ 用 `database(with:)`，旧版本回退 `privateDatabase`）
     private let database: CKDatabase
     /// Custom Zone（事件记录隔离区，支持增量查询与墓碑）
     private let zone: CKRecordZone
@@ -49,12 +42,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     // MARK: - Init
 
-    /// - Parameters:
-    ///   - containerIdentifier: iCloud 容器 ID（如 `iCloud.com.you.lunisolar`）。
-    ///     传 nil 使用 `CKContainer.default()`（需在 Entitlements 中配置默认容器）。
-    ///   - zoneName: Custom Zone 名称（默认 `LunisolarZone`）
-    ///   - recordType: CKRecord 类型名（默认 `CalendarEvent`）
-    ///   - deviceID: 设备唯一标识。传 nil 自动生成并持久化到 UserDefaults（跨启动稳定）
     public init(
         containerIdentifier: String? = nil,
         zoneName: String = "LunisolarZone",
@@ -69,7 +56,12 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         } else {
             self.container = .default()
         }
-        self.database = container.privateDatabase
+        // iOS 17+ 用 database(with:)；旧版本回退 privateDatabase
+        if #available(iOS 17.0, macOS 14.0, *) {
+            self.database = container.database(with: .private)
+        } else {
+            self.database = container.privateDatabase
+        }
         self.zone = CKRecordZone(zoneName: zoneName)
 
         // 设备 ID：跨启动稳定，持久化到 UserDefaults
@@ -107,8 +99,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
         let zoneID = zone.zoneID
         let ids = records.map { CKRecord.ID(recordName: $0.id, zoneID: zoneID) }
-        var idToSync: [String: SyncRecord] = [:]
-        for r in records { idToSync[r.id] = r }
 
         // 1. 批量 fetch 现有记录（取得 change tag，避免 serverRecordChanged 冲突）
         let fetchResults = await fetchRecords(ids: ids)
@@ -121,7 +111,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
                 apply(r, to: existing)
                 ckRecords.append(existing)
             } else {
-                // fetch 失败（recordNotFound 或其它）→ 视为新建
                 let fresh = CKRecord(recordType: recordType, recordID: recordID)
                 apply(r, to: fresh)
                 ckRecords.append(fresh)
@@ -143,7 +132,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         if sinceMs > 0 {
             predicate = NSPredicate(format: "updatedAtMs > %lld", sinceMs)
         } else {
-            predicate = NSPredicate(value: true) // 全量
+            predicate = NSPredicate(value: true)
         }
         let query = CKQuery(recordType: recordType, predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: "updatedAtMs", ascending: true)]
@@ -169,13 +158,12 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         try await ensureZoneExists()
         guard !recordIDs.isEmpty else { return (0, [:]) }
 
-        // 墓碑策略：写 isDeleted=1 的记录（与 Mock 行为一致）
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         var tombstones: [SyncRecord] = []
         for id in recordIDs {
             let tomb = SyncRecord(
                 id: id, kind: .event,
-                version: 1, // 真实 version 由 coordinator 维护；此处仅做"删除标记"
+                version: 1,
                 originDevice: currentDeviceID,
                 updatedAtMs: now, isDeleted: true, payloadJSON: "{}"
             )
@@ -187,7 +175,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     public func setupSubscription(enabled: Bool) async -> Bool {
         guard enabled else {
-            // 关闭 → 删除现有订阅
             try? await database.deleteSubscription(withID: subscriptionID)
             return true
         }
@@ -211,7 +198,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     // MARK: - Zone 管理
 
-    /// 确保 Custom Zone 存在（不存在则创建）。幂等，只执行一次。
     private func ensureZoneExists() async throws {
         zoneLock.lock()
         let alreadyEnsured = zoneEnsured
@@ -219,18 +205,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         if alreadyEnsured { return }
 
         do {
-            // 先尝试 fetch zone
             _ = try await database.recordZone(forID: zone.zoneID)
         } catch let error as CKError where error.code == .zoneNotFound {
-            // zone 不存在 → 创建
-            do {
-                _ = try await database.save(zone)
-            } catch {
-                // 创建失败（如 iCloud 未登录、配额）→ 映射并抛
-                throw mapCKError(error)
-            }
-        } catch let error as CKError where error.code == .userDeletedZone {
-            // 用户曾手动删除 zone → 重建
             do {
                 _ = try await database.save(zone)
             } catch {
@@ -247,7 +223,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     // MARK: - CKRecord ↔ SyncRecord 映射
 
-    /// 把 SyncRecord 的字段写入 CKRecord（新建或修改均用）
     private func apply(_ rec: SyncRecord, to ck: CKRecord) {
         ck["kind"] = rec.kind.rawValue as NSString
         ck["version"] = NSNumber(value: rec.version)
@@ -257,7 +232,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         ck["payloadJSON"] = rec.payloadJSON as NSString
     }
 
-    /// CKRecord → SyncRecord（字段缺失返回 nil）
     private func toSyncRecord(_ ck: CKRecord) -> SyncRecord? {
         guard let kindStr = ck["kind"] as? String,
               let kind = SyncRecord.Kind(rawValue: kindStr),
@@ -279,7 +253,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         )
     }
 
-    /// 从 CKRecord 取 Int64（CloudKit 可能返回 Int64 / Int / NSNumber，统一兼容）
     private func int64Value(_ key: String, from ck: CKRecord) -> Int64? {
         guard let value = ck[key] else { return nil }
         if let v = value as? Int64 { return v }
@@ -290,7 +263,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     // MARK: - 批量 fetch（取得 change tag）
 
-    /// 按 ID 批量 fetch CKRecord，返回每条的结果（成功/失败）
     private func fetchRecords(ids: [CKRecord.ID]) async -> [CKRecord.ID: Result<CKRecord, Error>] {
         guard !ids.isEmpty else { return [:] }
         let op = CKFetchRecordsOperation(recordIDs: ids)
@@ -299,18 +271,25 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         return await withCheckedContinuation { (cont: CheckedContinuation<[CKRecord.ID: Result<CKRecord, Error>], Never>) in
             var results: [CKRecord.ID: Result<CKRecord, Error>] = [:]
 
-            op.perRecordCompletionBlock = { record, recordID, error in
-                if let error = error {
-                    results[recordID] = .failure(error)
-                } else if let record = record {
-                    results[recordID] = .success(record)
-                } else {
-                    results[recordID] = .failure(
-                        NSError(domain: "RealCloudKitProvider", code: -1,
-                                userInfo: [NSLocalizedDescriptionKey: "fetch 返回空记录"])
-                    )
+            if #available(iOS 16.0, macOS 13.0, *) {
+                op.perRecordResultBlock = { recordID, result in
+                    results[recordID] = result
+                }
+            } else {
+                op.perRecordCompletionBlock = { record, recordID, error in
+                    if let error = error {
+                        results[recordID] = .failure(error)
+                    } else if let record = record {
+                        results[recordID] = .success(record)
+                    } else {
+                        results[recordID] = .failure(
+                            NSError(domain: "RealCloudKitProvider", code: -1,
+                                    userInfo: [NSLocalizedDescriptionKey: "fetch 返回空记录"])
+                        )
+                    }
                 }
             }
+
             op.fetchRecordsResultBlock = { _ in
                 cont.resume(returning: results)
             }
@@ -320,24 +299,35 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     // MARK: - 批量保存
 
-    /// 批量 save CKRecord，返回（成功列表, 失败列表）
     private func saveBatch(_ records: [CKRecord]) async throws -> (saved: [CKRecord], failed: [(CKRecord.ID, Error)]) {
         guard !records.isEmpty else { return ([], []) }
         let op = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
-        op.savePolicy = .ifServerRecordUnchanged // 默认乐观锁；fetch 过的记录有 change tag
+        op.savePolicy = .ifServerRecordUnchanged
         op.qualityOfService = .utility
 
         return await withCheckedContinuation { (cont: CheckedContinuation<(saved: [CKRecord], failed: [(CKRecord.ID, Error)]), Never>) in
             var saved: [CKRecord] = []
             var failed: [(CKRecord.ID, Error)] = []
 
-            op.perRecordCompletionBlock = { record, error in
-                if let error = error {
-                    failed.append((record.recordID, error))
-                } else {
-                    saved.append(record)
+            if #available(iOS 16.0, macOS 13.0, *) {
+                op.perRecordResultBlock = { recordID, result in
+                    switch result {
+                    case .success(let record):
+                        saved.append(record)
+                    case .failure(let error):
+                        failed.append((recordID, error))
+                    }
+                }
+            } else {
+                op.perRecordCompletionBlock = { record, error in
+                    if let error = error {
+                        failed.append((record.recordID, error))
+                    } else if let record = record {
+                        saved.append(record)
+                    }
                 }
             }
+
             op.modifyRecordsResultBlock = { _ in
                 cont.resume(returning: (saved, failed))
             }
@@ -347,7 +337,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     // MARK: - 查询 + cursor 翻页
 
-    /// 运行一次查询（首次用 query，后续用 cursor），返回（记录列表, 下一个 cursor）
     private func runQuery(query: CKQuery?, cursor: CKQueryOperation.Cursor?) async throws
         -> (records: [SyncRecord], cursor: CKQueryOperation.Cursor?) {
 
@@ -361,7 +350,6 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         }
         op.zoneID = zone.zoneID
         op.qualityOfService = .utility
-        // 每页最多 100 条（CloudKit 单次上限）
         op.resultsLimit = 100
 
         return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(records: [SyncRecord], cursor: CKQueryOperation.Cursor?), Error>) in
@@ -375,7 +363,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
                         records.append(sync)
                     }
                 case .failure:
-                    break // 单条失败跳过，不中断整体
+                    break
                 }
             }
             op.queryResultBlock = { result in
@@ -384,8 +372,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
                     switch cursorResult {
                     case .done:
                         nextCursor = nil
-                    case .let(let cursor):
-                        nextCursor = cursor
+                    case .let(let c):
+                        nextCursor = c
                     }
                     cont.resume(returning: (records, nextCursor))
                 case .failure(let error):
@@ -402,25 +390,27 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         guard let ckError = error as? CKError else {
             return .unknown(String(describing: error))
         }
+        // iOS 17+ 有效的 CKError.Code case
         switch ckError.code {
-        case .notAvailable, .serviceUnavailable, .requestRateLimited:
+        case .serviceUnavailable, .requestRateLimited, .initiallyUnavailable, .accountFailure:
             return .rateLimited
         case .quotaExceeded:
             return .quotaExceeded
         case .networkUnavailable, .networkFailure:
             return .networkUnavailable
-        case .userDeletedZone, .zoneNotFound, .zoneBusy:
+        case .notAuthenticated, .managedAccountRestricted:
+            return .permissionDenied
+        case .zoneNotFound:
             return .notAvailable
         case .serverRecordChanged:
-            return .conflict(ckError.serverRecord?.recordID.recordName ?? "")
+            let rid = ckError.serverRecord?.recordID.recordName ?? ""
+            return .conflict(rid)
         case .unknownItem, .serverRecordNotFound:
-            return .recordNotFound(ckError.userInfo[CKRecordChangedErrorServerRecordID] as? String ?? "")
-        case .incompatibleVersion, .serverRejected, .constraintViolation, .batchRequestFailed:
-            return .invalidPayload(ckError.errorDescription ?? "")
-        case .notAuthenticated, .managedAccountRestricted, .authenticationFailed:
-            return .permissionDenied
+            return .recordNotFound("")
+        case .constraintViolation:
+            return .invalidPayload(ckError.localizedDescription)
         default:
-            return .unknown(ckError.errorDescription ?? String(describing: error))
+            return .unknown(ckError.localizedDescription)
         }
     }
 
