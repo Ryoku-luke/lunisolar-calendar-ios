@@ -315,11 +315,16 @@ public enum DataPortability {
     }
 
     private static func unescapeICS(_ text: String) -> String {
+        // 顺序：先处理 \\ (反斜杠转义)，再处理 \n \t \, \;
+        // 否则 \\n 会被错误地先解析为换行再变成 \n
         text
+            .replacingOccurrences(of: "\\\\", with: "\u{0000}")  // 占位
             .replacingOccurrences(of: "\\n", with: "\n")
+            .replacingOccurrences(of: "\\N", with: "\n")
+            .replacingOccurrences(of: "\\t", with: "\t")
             .replacingOccurrences(of: "\\,", with: ",")
             .replacingOccurrences(of: "\\;", with: ";")
-            .replacingOccurrences(of: "\\\\", with: "\\")
+            .replacingOccurrences(of: "\u{0000}", with: "\\")
     }
 
     // MARK: - CSV 转义

@@ -242,18 +242,36 @@ public final class EventSyncCoordinator: @unchecked Sendable {
 
     @discardableResult
     public func syncBidirectional() async throws -> SyncResult {
+        // 防止并发：如果已经在同步，直接返回上次结果
+        guard !isSyncing else {
+            if let last = lastResult {
+                return last
+            }
+            throw SyncError.notAvailable
+        }
+        isSyncing = true
+        defer { isSyncing = false }
+
         let start = Date()
         status = .inProgress(.both)
 
         var pushed = 0, pulled = 0, conflicts = 0, allErrors: [SyncError] = []
 
-        do {
-            let r1 = try await push(events: pendingDirtyEvents())
-            pushed += r1.pushed; allErrors.append(contentsOf: r1.errors)
-        } catch {
-            allErrors.append(mapError(error))
+        // 1. 先 push 本地脏事件
+        let (dirtyEvents, deletedIDs) = eventStore.consumeDirtyEvents()
+        if !dirtyEvents.isEmpty || !deletedIDs.isEmpty {
+            do {
+                let r1 = try await push(events: dirtyEvents, deletedIDs: deletedIDs)
+                pushed += r1.pushed; allErrors.append(contentsOf: r1.errors)
+                if allErrors.isEmpty {
+                    eventStore.clearDirtyFlags()
+                }
+            } catch {
+                allErrors.append(mapError(error))
+            }
         }
 
+        // 2. 再 pull 合并云端增量
         do {
             let r2 = try await pullAndMerge()
             pulled += r2.pulled; conflicts += r2.conflictsResolved
@@ -270,6 +288,9 @@ public final class EventSyncCoordinator: @unchecked Sendable {
         lastResult = r
         return r
     }
+
+    /// 防止 syncBidirectional 并发执行的标记
+    private var isSyncing = false
 
     // MARK: - 4. 订阅开启（实时推送）
 
@@ -288,12 +309,6 @@ public final class EventSyncCoordinator: @unchecked Sendable {
 
     private func mapError(_ e: Error) -> SyncError {
         e as? SyncError ?? .unknown(String(describing: e))
-    }
-
-    /// 目前版本没有专门的 "dirty" 标记，这里退化为把 events 当 dirty 推
-    /// （真实实现里 EventStore 应该维护 dirtySet）
-    private func pendingDirtyEvents() -> [CalendarEvent] {
-        Array(eventStore.events)
     }
 
     // MARK: - 测试/调试辅助

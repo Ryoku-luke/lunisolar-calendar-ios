@@ -118,13 +118,7 @@ public final class MockCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         for r in records {
             let changed = await store.upsert(r)
             if changed { written += 1 }
-            // 更新 lastSyncMs 到最大
-            await MainActor.run {} // placeholder (为了让 await 语义保持)
-            Task { @MockCloudKitStore in
-                // 更新为最新 updatedAtMs
-            }
         }
-        // lastSyncMs 取所有 records 最大 updatedAtMs
         if let maxMs = records.map(\.updatedAtMs).max(), maxMs > lastSyncMs {
             lastSyncMs = maxMs
         }

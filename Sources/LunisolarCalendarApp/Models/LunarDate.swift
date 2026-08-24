@@ -305,57 +305,59 @@ public enum ChineseCalendar {
 // MARK: - Date 扩展
 
 public extension Date {
-    public var lunar: LunarDate {
+    var lunar: LunarDate {
         ChineseCalendar.lunarDate(from: self)
     }
 
     /// 安全版农历（越界返回 nil）
-    public var lunarSafe: LunarDate? {
+    var lunarSafe: LunarDate? {
         ChineseCalendar.lunarDateSafe(from: self)
     }
 
-    public var startOfDay: Date {
+    var startOfDay: Date {
         Calendar.current.startOfDay(for: self)
     }
 
-    public var isToday: Bool {
+    var isToday: Bool {
         Calendar.current.isDateInToday(self)
     }
 
-    public func addingDays(_ days: Int) -> Date {
+    func addingDays(_ days: Int) -> Date {
         Calendar.current.date(byAdding: .day, value: days, to: self) ?? self
     }
 
-    public func addingMonths(_ months: Int) -> Date {
+    func addingMonths(_ months: Int) -> Date {
         Calendar.current.date(byAdding: .month, value: months, to: self) ?? self
     }
 
-    public var year: Int { Calendar.current.component(.year, from: self) }
-    public var month: Int { Calendar.current.component(.month, from: self) }
-    public var day: Int { Calendar.current.component(.day, from: self) }
-    public var weekday: Int { Calendar.current.component(.weekday, from: self) }
+    var year: Int { Calendar.current.component(.year, from: self) }
+    var month: Int { Calendar.current.component(.month, from: self) }
+    var day: Int { Calendar.current.component(.day, from: self) }
+    var weekday: Int { Calendar.current.component(.weekday, from: self) }
 
-    public var firstDayOfMonth: Date {
+    var firstDayOfMonth: Date {
         let cal = Calendar.current
         var comps = cal.dateComponents([.year, .month], from: self)
         comps.day = 1
         return cal.date(from: comps) ?? self
     }
 
-    public var daysInMonth: Int {
+    var daysInMonth: Int {
         Calendar.current.range(of: .day, in: .month, for: self)?.count ?? 30
     }
 
-    public func isSameMonth(as other: Date) -> Bool {
+    func isSameMonth(as other: Date) -> Bool {
         Calendar.current.isDate(self, equalTo: other, toGranularity: .month)
     }
 
-    public func isSameDay(as other: Date) -> Bool {
+    func isSameDay(as other: Date) -> Bool {
         Calendar.current.isDate(self, inSameDayAs: other)
     }
 
-    public var weekdaySymbol: String {
+    var weekdaySymbol: String {
         let symbols = Calendar.current.shortWeekdaySymbols
-        return symbols[weekday - 1]
+        // weekday 返回 1-7 (Sun-Sat)，数组下标 0-6
+        let idx = max(0, min(6, weekday - 1))
+        return symbols[idx]
     }
 }

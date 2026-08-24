@@ -20,6 +20,14 @@ public final class EventStore {
 
     private(set) var events: [CalendarEvent] = []
 
+    /// 脏事件 ID 集合（已变更但未推送到云端的事件）
+    private var dirtyEventIDs: Set<String> = []
+    /// 已删除但未推送到云端的事件 ID
+    private var deletedEventIDs: Set<String> = []
+    /// 同步推送队列：序列化多个 push 请求，避免并发竞争
+    private var pushQueue: [() async -> Void] = []
+    private var isPushing = false
+
     private let saveURL: URL
 
     /// 可选 App Group ID：配了之后 EventStore.save() 会顺手写入 Widget 共享快照
@@ -56,7 +64,11 @@ public final class EventStore {
         events.append(event)
         sort()
         save()
-        if !skipSync { autoPush([event], deletedID: nil) }
+        // skipSync 时仍标记 dirty（供 syncBidirectional 等主动同步使用），只是不立即 enqueue
+        dirtyEventIDs.insert(event.id.uuidString)
+        if !skipSync {
+            enqueuePush()
+        }
     }
 
     /// 更新事件
@@ -67,14 +79,21 @@ public final class EventStore {
         events[idx] = updated
         sort()
         save()
-        if !skipSync { autoPush([updated], deletedID: nil) }
+        dirtyEventIDs.insert(updated.id.uuidString)
+        if !skipSync {
+            enqueuePush()
+        }
     }
 
     /// 删除事件
     public func delete(_ event: CalendarEvent, skipSync: Bool = false) {
         events.removeAll { $0.id == event.id }
         save()
-        if !skipSync { autoPush([], deletedID: event.id.uuidString) }
+        dirtyEventIDs.remove(event.id.uuidString)
+        deletedEventIDs.insert(event.id.uuidString)
+        if !skipSync {
+            enqueuePush()
+        }
     }
 
     public func toggleCompleted(_ event: CalendarEvent, skipSync: Bool = false) {
@@ -82,7 +101,10 @@ public final class EventStore {
         events[idx].isCompleted.toggle()
         events[idx].updatedAt = Date()
         save()
-        if !skipSync { autoPush([events[idx]], deletedID: nil) }
+        dirtyEventIDs.insert(events[idx].id.uuidString)
+        if !skipSync {
+            enqueuePush()
+        }
     }
 
     /// 标记事件通知已触发（防止重复弹窗）
@@ -91,20 +113,70 @@ public final class EventStore {
         events[idx].isNotified = true
         events[idx].updatedAt = Date()
         save()
-        // markNotified 是内部状态，默认不同步（保持 isNotified 本地语义）
-        if !skipSync { autoPush([events[idx]], deletedID: nil) }
+        dirtyEventIDs.insert(events[idx].id.uuidString)
+        if !skipSync {
+            enqueuePush()
+        }
     }
 
     // MARK: - 同步辅助
 
-    /// fire-and-forget 推送到 syncCoordinator（若已设置）
-    private func autoPush(_ events: [CalendarEvent], deletedID: String?) {
-        guard let co = syncCoordinator else { return }
-        var del: Set<String> = []
-        if let id = deletedID { del.insert(id) }
-        Task { @MainActor in
-            _ = try? await co.push(events: events, deletedIDs: del)
+    /// 将 push 操作入队（序列化执行，避免并发竞争）
+    private func enqueuePush() {
+        pushQueue.append { @MainActor [weak self] in
+            guard let self = self else { return }
+            await self.flushDirtyAndDeleted()
         }
+        // 只有当前没有在执行时才启动
+        if !isPushing {
+            isPushing = true
+            Task { @MainActor in
+                await self.drainPushQueue()
+            }
+        }
+    }
+
+    /// 序列化执行 push 队列中的所有操作
+    private func drainPushQueue() async {
+        while !pushQueue.isEmpty {
+            let next = pushQueue.removeFirst()
+            await next()
+        }
+        isPushing = false
+    }
+
+    /// 将当前 dirty + deleted 的事件批量推送到协调器，推送成功后清空集合
+    private func flushDirtyAndDeleted() async {
+        guard let co = syncCoordinator else {
+            dirtyEventIDs.removeAll()
+            deletedEventIDs.removeAll()
+            return
+        }
+        // 收集脏事件
+        let dirtyEvents = events.filter { dirtyEventIDs.contains($0.id.uuidString) }
+        let deletedIDs = deletedEventIDs
+        do {
+            _ = try await co.push(events: dirtyEvents, deletedIDs: deletedIDs)
+            // 推送成功后清空已推送的 ID
+            dirtyEventIDs.removeAll()
+            deletedEventIDs.removeAll()
+        } catch {
+            // 推送失败：保留 dirty 标记，下次重试
+            print("[EventStore] 推送云端失败: \(error)，将在下次同步时重试")
+        }
+    }
+
+    /// 同步协调器可调用：获取当前脏事件（用于 syncBidirectional 等主动同步场景）
+    public func consumeDirtyEvents() -> (events: [CalendarEvent], deletedIDs: Set<String>) {
+        let evs = events.filter { dirtyEventIDs.contains($0.id.uuidString) }
+        let del = deletedEventIDs
+        return (evs, del)
+    }
+
+    /// 清空脏标记（推送成功后由协调器调用）
+    public func clearDirtyFlags() {
+        dirtyEventIDs.removeAll()
+        deletedEventIDs.removeAll()
     }
 
 
@@ -200,8 +272,12 @@ public final class EventStore {
 
         sort()
         save()
-        if !skipSync, !pushedP.isEmpty {
-            autoPush(pushedP, deletedID: nil)
+        // skipSync 时仍标记 dirty（供后续主动同步使用），只是不立即 enqueue
+        for ev in pushedP {
+            dirtyEventIDs.insert(ev.id.uuidString)
+        }
+        if !skipSync {
+            enqueuePush()
         }
         return result
     }
@@ -217,10 +293,10 @@ public final class EventStore {
         }
         #endif
         // 同步：若有协调器，把被删的 id 批量打墓碑推送
-        if !skipSync, let co = syncCoordinator, !events.isEmpty {
-            let ids = Set(events.map { $0.id.uuidString })
-            Task { @MainActor in
-                _ = try? await co.push(events: [], deletedIDs: ids)
+        if !events.isEmpty {
+            deletedEventIDs.formUnion(Set(events.map { $0.id.uuidString }))
+            if !skipSync {
+                enqueuePush()
             }
         }
         events.removeAll()
@@ -254,8 +330,10 @@ public final class EventStore {
             events = try JSONDecoder().decode([CalendarEvent].self, from: data)
             sort()
         } catch {
-            print("加载事件失败: \(error)")
-            insertSampleData()
+            // 数据损坏：不覆盖用户数据，保留空数组 + 打印告警
+            // 用户之前的文件已损坏无法恢复，但避免 insertSampleData 直接"替换"导致误以为数据还在
+            print("[EventStore] 警告：本地数据文件损坏 (\(error))，已清空。请从备份/云端恢复。")
+            events = []
         }
     }
 
