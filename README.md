@@ -358,6 +358,28 @@ ICloudSyncProvider 协议
 - **根因**: `weekday - 1` 可能越界
 - **修复**: 增加 `max(0, min(6, ...))` 边界保护
 
+### BUG #7（🔴 高）：iCloud 同步关闭→重开后变更永久丢失
+- **文件**: `Stores/EventStore.swift`
+- **根因**: `flushDirtyAndDeleted()` 中当 `syncCoordinator` 为 nil（用户关闭 iCloud 或尚未初始化）时，直接清空 `dirtyEventIDs` 和 `deletedEventIDs`。用户关闭同步期间的所有变更，在重新打开同步后永远不会被推送到云端
+- **修复**: 移除 `syncCoordinator` 为 nil 时的清空逻辑，改为保留 dirty 标记，等用户重新启用 iCloud 同步后通过 `syncBidirectional()` 推送
+
+### BUG #8（🟡 中）：LunarDate baseDate 日历体系不一致
+- **文件**: `Models/LunarDate.swift`
+- **根因**: `baseDate`（农历计算基准日 1900-01-31）使用 `Calendar.current` 计算，而核心转换函数统一使用 `Calendar(identifier: .gregorian)`。当用户在 iOS 设置中切换日历偏好（如日本历、佛历），`Calendar.current` 返回非公历实例，导致基准日偏差
+- **修复**: `baseDate` 改用 `Calendar(identifier: .gregorian)` 计算，与全模块保持一致
+
+### BUG #9（🔴 Xcode）：CloudKit API 变更导致多处编译错误
+- **文件**: `Sync/RealCloudKitProvider.swift`
+- **根因**: CloudKit 在新版 SDK（Xcode 16+）中多处 API 变更：
+  - `CKContainer.privateDatabase` 已移除 → `database(with: .private)`
+  - `CKDatabase.recordZone(forID:)` → `recordZone(for:)`
+  - `CKModifyRecordsOperation.perRecordResultBlock` → `perRecordCompletionBlock`
+  - `CKFetchRecordsOperation.perRecordResultBlock` → `perRecordCompletionBlock`
+  - `queryResultBlock` cursor 处理错误（结果类型改为 `Cursor?`）
+  - `CKError.Code.initiallyUnavailable` → `.temporarilyUnavailable`
+  - `CKError.Code.accountFailure` 已移除
+- **修复**: 重写 `RealCloudKitProvider`，统一使用新 API，移除 `#available(iOS 17)` 分支，修正 cursor 翻页逻辑
+
 ### 附加改进
 - `skipSync: true` 仍标记 `dirtyEventIDs`，确保后续 `syncBidirectional()` 检出
 - `Date` 扩展清理冗余 `public` 修饰符，零警告构建

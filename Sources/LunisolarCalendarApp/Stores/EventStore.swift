@@ -148,8 +148,7 @@ public final class EventStore {
     /// 将当前 dirty + deleted 的事件批量推送到协调器，推送成功后清空集合
     private func flushDirtyAndDeleted() async {
         guard let co = syncCoordinator else {
-            dirtyEventIDs.removeAll()
-            deletedEventIDs.removeAll()
+            // 无协调器时保留 dirty 标记，等用户重新启用 iCloud 同步后再推送
             return
         }
         // 收集脏事件

@@ -134,6 +134,7 @@ public enum ChineseCalendar {
     // MARK: - 公历转农历
 
     private static let baseDate: Date = {
+        let cal = Calendar(identifier: .gregorian)
         var comps = DateComponents()
         comps.year = 1900
         comps.month = 1
@@ -141,7 +142,7 @@ public enum ChineseCalendar {
         comps.hour = 0
         comps.minute = 0
         comps.second = 0
-        return Calendar.current.date(from: comps) ?? Date()
+        return cal.date(from: comps) ?? Date()
     }()
 
     /// 检查日期是否在支持范围内
