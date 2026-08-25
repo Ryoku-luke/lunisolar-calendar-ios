@@ -28,7 +28,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     /// iCloud 容器（nil identifier → `CKContainer.default()`）
     private let container: CKContainer
-    /// 私有数据库（iOS 17+ 用 `database(with:)`，旧版本回退 `privateDatabase`）
+    /// 私有数据库（iOS 17+：`database(with: .private)`）
     private let database: CKDatabase
     /// Custom Zone（事件记录隔离区，支持增量查询与墓碑）
     private let zone: CKRecordZone
@@ -56,12 +56,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         } else {
             self.container = .default()
         }
-        // iOS 17+ 用 database(with:)；旧版本回退 privateDatabase
-        if #available(iOS 17.0, macOS 14.0, *) {
-            self.database = container.database(with: .private)
-        } else {
-            self.database = container.privateDatabase
-        }
+        self.database = container.database(with: .private)
         self.zone = CKRecordZone(zoneName: zoneName)
 
         // 设备 ID：跨启动稳定，持久化到 UserDefaults
@@ -175,8 +170,12 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     public func setupSubscription(enabled: Bool) async -> Bool {
         guard enabled else {
-            try? await database.deleteSubscription(withID: subscriptionID)
-            return true
+            do {
+                try await database.deleteSubscription(withID: subscriptionID)
+                return true
+            } catch {
+                return false
+            }
         }
         do {
             try await ensureZoneExists()
@@ -205,7 +204,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         if alreadyEnsured { return }
 
         do {
-            _ = try await database.recordZone(forID: zone.zoneID)
+            _ = try await database.recordZone(for: zone.zoneID)
         } catch let error as CKError where error.code == .zoneNotFound {
             do {
                 _ = try await database.save(zone)
@@ -271,22 +270,16 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         return await withCheckedContinuation { (cont: CheckedContinuation<[CKRecord.ID: Result<CKRecord, Error>], Never>) in
             var results: [CKRecord.ID: Result<CKRecord, Error>] = [:]
 
-            if #available(iOS 16.0, macOS 13.0, *) {
-                op.perRecordResultBlock = { recordID, result in
-                    results[recordID] = result
-                }
-            } else {
-                op.perRecordCompletionBlock = { record, recordID, error in
-                    if let error = error {
-                        results[recordID] = .failure(error)
-                    } else if let record = record {
-                        results[recordID] = .success(record)
-                    } else {
-                        results[recordID] = .failure(
-                            NSError(domain: "RealCloudKitProvider", code: -1,
-                                    userInfo: [NSLocalizedDescriptionKey: "fetch 返回空记录"])
-                        )
-                    }
+            op.perRecordCompletionBlock = { record, recordID, error in
+                if let error = error {
+                    results[recordID] = .failure(error)
+                } else if let record = record {
+                    results[recordID] = .success(record)
+                } else {
+                    results[recordID] = .failure(
+                        NSError(domain: "RealCloudKitProvider", code: -1,
+                                userInfo: [NSLocalizedDescriptionKey: "fetch 返回空记录"])
+                    )
                 }
             }
 
@@ -309,22 +302,11 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             var saved: [CKRecord] = []
             var failed: [(CKRecord.ID, Error)] = []
 
-            if #available(iOS 16.0, macOS 13.0, *) {
-                op.perRecordResultBlock = { recordID, result in
-                    switch result {
-                    case .success(let record):
-                        saved.append(record)
-                    case .failure(let error):
-                        failed.append((recordID, error))
-                    }
-                }
-            } else {
-                op.perRecordCompletionBlock = { record, error in
-                    if let error = error {
-                        failed.append((record.recordID, error))
-                    } else if let record = record {
-                        saved.append(record)
-                    }
+            op.perRecordCompletionBlock = { record, error in
+                if let error = error {
+                    failed.append((record?.recordID ?? CKRecord.ID(recordName: UUID().uuidString), error))
+                } else if let record = record {
+                    saved.append(record)
                 }
             }
 
@@ -368,13 +350,9 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             }
             op.queryResultBlock = { result in
                 switch result {
-                case .success(let cursorResult):
-                    switch cursorResult {
-                    case .done:
-                        nextCursor = nil
-                    case .let(let c):
-                        nextCursor = c
-                    }
+                case .success(let cursor):
+                    // cursor 为 nil 表示无更多数据；非 nil 表示继续翻页
+                    nextCursor = cursor
                     cont.resume(returning: (records, nextCursor))
                 case .failure(let error):
                     cont.resume(throwing: error)
@@ -390,15 +368,14 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         guard let ckError = error as? CKError else {
             return .unknown(String(describing: error))
         }
-        // iOS 17+ 有效的 CKError.Code case
         switch ckError.code {
-        case .serviceUnavailable, .requestRateLimited, .initiallyUnavailable, .accountFailure:
+        case .serviceUnavailable, .requestRateLimited, .temporarilyUnavailable:
             return .rateLimited
         case .quotaExceeded:
             return .quotaExceeded
         case .networkUnavailable, .networkFailure:
             return .networkUnavailable
-        case .notAuthenticated, .managedAccountRestricted:
+        case .notAuthenticated, .managedAccountRestricted, .restrictedAccount:
             return .permissionDenied
         case .zoneNotFound:
             return .notAvailable
