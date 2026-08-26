@@ -377,7 +377,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         op.savePolicy = .ifServerRecordUnchanged
         op.qualityOfService = .utility
 
-        return try await withThrowingCheckedContinuation { (cont: CheckedContinuation<(saved: [CKRecord], failed: [(CKRecord.ID, Error)]), Error>) in
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(saved: [CKRecord], failed: [(CKRecord.ID, Error)]), Error>) in
             var saved: [CKRecord] = []
             var failed: [(CKRecord.ID, Error)] = []
 
@@ -493,7 +493,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         op.savePolicy = .ifServerRecordUnchanged
         op.qualityOfService = .utility
 
-        return try await withThrowingCheckedContinuation { (cont: CheckedContinuation<(deletedIDs: [CKRecord.ID], failed: [(CKRecord.ID, Error)]), Error>) in
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(deletedIDs: [CKRecord.ID], failed: [(CKRecord.ID, Error)]), Error>) in
             var deletedIDs: [CKRecord.ID] = []
             var failed: [(CKRecord.ID, Error)] = []
 

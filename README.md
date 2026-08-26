@@ -465,12 +465,17 @@ ICloudSyncProvider 协议
 ### BUG #20（🔴 Xcode 16 · Swift 6）：`CKModifyRecordsOperation.perRecordCompletionBlock` 回调参数类型已变化
 - **文件**: `Sources/LunisolarCalendarApp/Sync/RealCloudKitProvider.swift:386,501`
 - **根因**: Swift 6 后 `perRecordCompletionBlock` 签名变为 `(CKRecord, Error?)`，`record` 参数已为非可选。旧代码 `record?.recordID` 对非可选值使用可选链触发 "Cannot use optional chaining on non-optional value of type 'CKRecord'" 编译器错误
-- **修复**: 移除多余的 `?`，直接使用 `record.recordID`；`saveBatch` 同时改为 `withThrowingCheckedContinuation`（函数声明为 `throws`），与新 API 签名一致
+- **修复**: 移除多余的 `?`，直接使用 `record.recordID`；`saveBatch` 同时改为 `withCheckedThrowingContinuation`（函数声明为 `throws`），与新 API 签名一致
 
 ### BUG #21（🔴 Xcode 16 · Swift 6）：`async throws` 函数内部未标记 `try`
 - **文件**: `Sources/LunisolarCalendarApp/Sync/RealCloudKitProvider.swift:149`
 - **根因**: `push(records:)` 调用 `saveBatch` 时直接 `await saveBatch(...)` 未加 `try`，但 `saveBatch` 签名为 `async throws` → 触发 "Call can throw but is not marked with 'try'"
 - **修复**: 改为 `try await saveBatch(ckRecords)`
+
+### BUG #22（🔴 Xcode 16 · Swift 6.2）：`withThrowingCheckedContinuation` 已不存在（API 命名回退）
+- **文件**: `Sources/LunisolarCalendarApp/Sync/RealCloudKitProvider.swift:380,496`
+- **根因**: 先前为适配 Swift 6 曾将 continuation 切换为 `withThrowingCheckedContinuation`。在 Swift 6.2（Xcode 16.4+）中，该命名被移除/未实际提供，编译器报 "Cannot find 'withThrowingCheckedContinuation' in scope"；实际可用的稳定 API 为 `withCheckedThrowingContinuation`（`throws` 版本）
+- **修复**: 回退为 `withCheckedThrowingContinuation`（原 Swift 5.10 引入、Swift 6 仍保留的 throws 版本 continuation），与同文件 `runQuery` 中已使用的写法保持一致
 
 ### 性能 & 稳定性微调
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
