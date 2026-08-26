@@ -159,7 +159,7 @@ public struct HuangliOverviewWidgetView: View {
             if items.isEmpty {
                 Text("诸事不宜")
                     .font(.system(size: wide ? 11 : 9))
-                    .foregroundStyle(Color.tertiary)
+                    .foregroundStyle(Color.secondary.opacity(0.6))
             } else {
                 ForEach(items, id: \.self) { it in
                     Text("· " + it)
@@ -267,7 +267,7 @@ public struct LunarCardWidgetView: View {
                             .font(.system(size: 20, weight: .heavy, design: .serif))
                             .foregroundStyle(Color.white.opacity(0.92))
                     }
-                    Text(entry.lunar?.ganZhiYear ?? "")
+                    Text(entry.lunar?.yearGanZhi ?? "")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.78))
                     Text("\(entry.date.year) 年 \(entry.date.month) 月 \(entry.date.day) 日 · \(entry.date.weekdaySymbol)")

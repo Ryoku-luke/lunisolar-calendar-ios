@@ -477,6 +477,16 @@ ICloudSyncProvider 协议
 - **根因**: 先前为适配 Swift 6 曾将 continuation 切换为 `withThrowingCheckedContinuation`。在 Swift 6.2（Xcode 16.4+）中，该命名被移除/未实际提供，编译器报 "Cannot find 'withThrowingCheckedContinuation' in scope"；实际可用的稳定 API 为 `withCheckedThrowingContinuation`（`throws` 版本）
 - **修复**: 回退为 `withCheckedThrowingContinuation`（原 Swift 5.10 引入、Swift 6 仍保留的 throws 版本 continuation），与同文件 `runQuery` 中已使用的写法保持一致
 
+### BUG #23（🔴 Xcode 16 · SwiftUI）：`Color.tertiary` 在 iOS 18 / macOS 15 中被移除
+- **文件**: `Sources/LunisolarCalendarApp/Widgets/LunisolarWidgetViews.swift:162`
+- **根因**: Widget 视图中使用了 `Color.tertiary` 作为"诸事不宜"占位文字颜色。该符号在 iOS 18 / macOS 15 SDK 中已被移除（或无法从 `Color` 类型直接访问），编译器报错 "Instance member 'tertiary' cannot be used on type 'Color'; did you mean to use a view"
+- **修复**: 改用 `Color.secondary.opacity(0.6)` 表达同等语义的弱化辅助色（Widget 浅/深配色下均能自适应）
+
+### BUG #24（🔴 Xcode 16 · 数据模型）：Widget 视图引用不存在的 `ganZhiYear` 属性
+- **文件**: `Sources/LunisolarCalendarApp/Widgets/LunisolarWidgetViews.swift:270`
+- **根因**: `LunarCardWidgetView.mediumView` 使用了 `entry.lunar?.ganZhiYear` 显示干支年。但 `LunarDate` 模型中实际定义的属性为 `yearGanZhi`（对应 `ChineseCalendar.ganZhiOfYear(year)`），`ganZhiYear` 并未声明 → 编译器报 "Value of type 'LunarDate' has no member 'ganZhiYear'"
+- **修复**: 统一命名，改为 `yearGanZhi`，与 `LunarDate` 结构体的其他属性（`yearGanZhi` / `yearAnimal` / `monthName` / `dayName`）风格一致
+
 ### 性能 & 稳定性微调
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
 - `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）
