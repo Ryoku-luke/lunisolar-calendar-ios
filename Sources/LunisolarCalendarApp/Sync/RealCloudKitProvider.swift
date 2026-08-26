@@ -279,7 +279,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         guard !expiredIDs.isEmpty else { return 0 }
 
         // 3) 用 CKModifyRecordsOperation(recordsToSave:nil, recordIDsToDelete:expiredIDs) 物理删除
-        let (_, failedDeletes) = await deleteBatch(recordIDsToDelete: expiredIDs)
+        let (_, failedDeletes) = try await deleteBatch(recordIDsToDelete: expiredIDs)
         return expiredIDs.count - failedDeletes.count
     }
 
@@ -389,8 +389,17 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
                 }
             }
 
-            op.modifyRecordsResultBlock = { _ in
-                cont.resume(returning: (saved, failed))
+            op.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    cont.resume(returning: (saved, failed))
+                case .failure(let error):
+                    if saved.isEmpty && failed.isEmpty {
+                        cont.resume(throwing: error)
+                    } else {
+                        cont.resume(returning: (saved, failed))
+                    }
+                }
             }
             database.add(op)
         }
@@ -486,7 +495,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     // MARK: - 批量物理删除（配合墓碑 TTL 使用）
 
-    private func deleteBatch(recordIDsToDelete: [CKRecord.ID]) async
+    private func deleteBatch(recordIDsToDelete: [CKRecord.ID]) async throws
         -> (deletedIDs: [CKRecord.ID], failed: [(CKRecord.ID, Error)]) {
         guard !recordIDsToDelete.isEmpty else { return ([], []) }
         let op = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: recordIDsToDelete)
@@ -506,8 +515,17 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
                 }
             }
 
-            op.modifyRecordsResultBlock = { _ in
-                cont.resume(returning: (deletedIDs, failed))
+            op.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    cont.resume(returning: (deletedIDs, failed))
+                case .failure(let error):
+                    if deletedIDs.isEmpty && failed.isEmpty {
+                        cont.resume(throwing: error)
+                    } else {
+                        cont.resume(returning: (deletedIDs, failed))
+                    }
+                }
             }
             database.add(op)
         }

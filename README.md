@@ -487,6 +487,14 @@ ICloudSyncProvider 协议
 - **根因**: `LunarCardWidgetView.mediumView` 使用了 `entry.lunar?.ganZhiYear` 显示干支年。但 `LunarDate` 模型中实际定义的属性为 `yearGanZhi`（对应 `ChineseCalendar.ganZhiOfYear(year)`），`ganZhiYear` 并未声明 → 编译器报 "Value of type 'LunarDate' has no member 'ganZhiYear'"
 - **修复**: 统一命名，改为 `yearGanZhi`，与 `LunarDate` 结构体的其他属性（`yearGanZhi` / `yearAnimal` / `monthName` / `dayName`）风格一致
 
+### BUG #25（🔴 Xcode 16 · Swift Concurrency）：`withCheckedThrowingContinuation` 要求函数声明 `throws`
+- **文件**: `Sources/LunisolarCalendarApp/Sync/RealCloudKitProvider.swift:489`
+- **根因**: `deleteBatch` 方法签名为 `async`（非 `throws`），但内部使用了 `withCheckedThrowingContinuation`（throws 版本 continuation）。Swift 6/Xcode 16 对此严格检查，编译器报 "Errors thrown from here are not handled" — 因为 continuation 内部 `cont.resume(throwing:)` 路径可达，但函数未声明 `throws`
+- **修复**: 
+  1. `deleteBatch` 签名改为 `async throws`
+  2. 调用方 `purgeExpiredTombstones` 改为 `try await deleteBatch(...)`
+  3. `saveBatch` / `deleteBatch` 的 `modifyRecordsResultBlock` 改为检查 `Result`：全量失败时 `resume(throwing:)`，部分成功时保留已处理记录返回（容错设计）
+
 ### 性能 & 稳定性微调
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
 - `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）
