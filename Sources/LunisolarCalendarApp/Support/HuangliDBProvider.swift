@@ -75,7 +75,7 @@ public enum HuangliDBProvider {
             self.df = df
 
             var loaded: HuangliDBRoot?
-            if let url = Bundle.module.url(forResource: "huangli_db", withExtension: "json") {
+            if let url = Bundle.resources.url(forResource: "huangli_db", withExtension: "json") {
                 if let data = try? Data(contentsOf: url) {
                     loaded = try? JSONDecoder().decode(HuangliDBRoot.self, from: data)
                 }

@@ -9,7 +9,7 @@ enum LunarDataProvider {
 
     private static func loadLunarInfo() -> [UInt32] {
         // 1. 尝试从 Bundle 加载 JSON
-        if let url = Bundle.module.url(forResource: "lunar_calendar", withExtension: "json"),
+        if let url = Bundle.resources.url(forResource: "lunar_calendar", withExtension: "json"),
            let data = try? Data(contentsOf: url),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let hexStrings = json["data"] as? [String] {

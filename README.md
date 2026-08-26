@@ -495,6 +495,11 @@ ICloudSyncProvider 协议
   2. 调用方 `purgeExpiredTombstones` 改为 `try await deleteBatch(...)`
   3. `saveBatch` / `deleteBatch` 的 `modifyRecordsResultBlock` 改为检查 `Result`：全量失败时 `resume(throwing:)`，部分成功时保留已处理记录返回（容错设计）
 
+### BUG #26（🔴 Xcode 16 · Bundle 资源定位）：`Bundle.module` 在 iOS App Target 中不存在
+- **文件**: `Sources/LunisolarCalendarApp/Support/HuangliDBProvider.swift:78`, `Sources/LunisolarCalendarApp/Models/LunarDate.swift:12`
+- **根因**: 项目同时以 SPM Package（`Package.swift`）和 Xcode iOS App Target 两种方式构建。SPM 上下文下 `Bundle.module` 指向包内资源 bundle；但 Xcode 直接构建 iOS App 时，`Bundle.module` 符号不存在 → 编译器报 "Type 'Bundle' has no member 'module'"
+- **修复**: 新建 `Bundle+Resources.swift`，通过 `#if SWIFT_PACKAGE` 条件编译区分上下文：SPM 下返回 `.module`，Xcode App 下返回 `.main`。两处资源加载点（黄历 DB + 农历数据表）统一改用 `Bundle.resources`，跨平台编译通过
+
 ### 性能 & 稳定性微调
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
 - `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）
