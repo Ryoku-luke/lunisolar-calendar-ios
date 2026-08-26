@@ -31,22 +31,24 @@ public struct ContactsImportProvider: SystemImportProviding {
     }
 
     public func requestAuthorization() async throws -> Bool {
-        let granted: Bool
-        if #available(iOS 18.0, *) {
-            granted = (try? await store.requestAuthorization(for: .contacts)) ?? false
-        } else {
-            let status = CNContactStore.authorizationStatus(for: .contacts)
-            switch status {
-            case .authorized:
-                granted = true
-            case .notDetermined:
-                granted = (try? await store.requestAccess(for: .contacts)) ?? false
-            default:
-                granted = false
+        let entityType = CNEntityType.contacts
+        let status = CNContactStore.authorizationStatus(for: entityType)
+        switch status {
+        case .authorized, .limited:
+            return true
+        case .notDetermined:
+            return try await withCheckedThrowingContinuation { continuation in
+                store.requestAccess(for: entityType) { granted, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: granted)
+                    }
+                }
             }
+        @unknown default:
+            return false
         }
-        if !granted { throw SystemImportError.unauthorized(source: source) }
-        return granted
     }
 
     public func fetchEvents() async throws -> [SystemImportEvent] {
@@ -84,7 +86,7 @@ public struct ContactsImportProvider: SystemImportProviding {
                         if let ev = self.anniversaryToEvent(contactID: contact.identifier,
                                                             label: d.label,
                                                             name: displayName,
-                                                            dateComponents: d.dateComponents) {
+                                                            dateComponents: d.value) {
                             results.append(ev)
                         }
                     }
