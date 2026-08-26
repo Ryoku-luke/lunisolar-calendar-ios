@@ -38,6 +38,14 @@ import Foundation
     /// 是否有
     func contains(_ id: String) -> Bool { records[id] != nil }
 
+    /// 物理删除 isDeleted=true 且 updatedAtMs < olderThanMs 的墓碑，返回删除条数
+    func purgeExpiredTombstones(olderThanMs: Int64) -> Int {
+        let toRemove = records.values.filter { $0.isDeleted && $0.updatedAtMs < olderThanMs }.map(\.id)
+        guard !toRemove.isEmpty else { return 0 }
+        for id in toRemove { records.removeValue(forKey: id) }
+        return toRemove.count
+    }
+
     /// 删除（写墓碑）：直接 upsert 一个 isDeleted=true 的 record
     func markDeleted(id: String, version: Int64, originDevice: String, updatedAtMs: Int64) {
         let tombstone = SyncRecord(
@@ -163,6 +171,13 @@ public final class MockCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         guard iCloudAvailable else { return false }
         subscriptionEnabled = enabled
         return true
+    }
+
+    public func purgeExpiredTombstones(olderThanMs: Int64) async throws -> Int {
+        try await simulateLatency()
+        guard isOnline else { throw SyncError.networkUnavailable }
+        guard iCloudAvailable else { throw SyncError.notAvailable }
+        return await store.purgeExpiredTombstones(olderThanMs: olderThanMs)
     }
 
     // MARK: - 内部

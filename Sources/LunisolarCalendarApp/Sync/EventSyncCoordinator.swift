@@ -280,6 +280,16 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             allErrors.append(mapError(error))
         }
 
+        // 3. 墓碑 TTL 清理（P3 修复）：默认 30 天 = 30 * 86400 * 1000 ms
+        //    失败不影响整体同步结果，只把错误追加（用户可在日志里看到）
+        do {
+            let ttlMs: Int64 = 30 * 86400 * 1000
+            let cutoffMs = Int64(Date().timeIntervalSince1970 * 1000) - ttlMs
+            _ = try await provider.purgeExpiredTombstones(olderThanMs: cutoffMs)
+        } catch {
+            allErrors.append(mapError(error))
+        }
+
         let end = Date()
         let r = SyncResult(direction: .both, pushed: pushed, pulled: pulled,
                            conflictsResolved: conflicts, errors: allErrors,
@@ -291,6 +301,8 @@ public final class EventSyncCoordinator: @unchecked Sendable {
 
     /// 防止 syncBidirectional 并发执行的标记
     private var isSyncing = false
+    /// 墓碑 TTL（毫秒）：30 天
+    public static let tombstoneTTLMs: Int64 = 30 * 86400 * 1000
 
     // MARK: - 4. 订阅开启（实时推送）
 

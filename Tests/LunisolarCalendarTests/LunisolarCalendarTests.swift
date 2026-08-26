@@ -424,13 +424,27 @@ final class CalendarEventTests: XCTestCase {
     }
 }
 
+// MARK: - 测试辅助：创建隔离存储目录的 EventStore（P4 dirty 标记持久化后避免跨用例污染）
+
+@MainActor
+fileprivate func makeIsolatedEventStore(file: StaticString = #file, line: UInt = #line) -> EventStore {
+    let baseDir = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("lunisolar-test-\(UUID().uuidString)", isDirectory: true)
+    do {
+        try FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
+    } catch {
+        XCTFail("创建测试隔离目录失败：\(error)", file: file, line: line)
+    }
+    return EventStore(storageBaseDir: baseDir)
+}
+
 // MARK: - EventStore 测试
 
 @MainActor
 final class EventStoreTests: XCTestCase {
 
     func testCRUD() async {
-        let store = EventStore()
+        let store = makeIsolatedEventStore()
         let today = Date()
         let initial = store.events(on: today).count
 
@@ -447,7 +461,7 @@ final class EventStoreTests: XCTestCase {
     }
 
     func testMarkNotified() async {
-        let store = EventStore()
+        let store = makeIsolatedEventStore()
         let ev = CalendarEvent(title: "通知测试", startDate: Date().addingTimeInterval(3600))
         store.add(ev)
 
@@ -460,7 +474,7 @@ final class EventStoreTests: XCTestCase {
     }
 
     func testSearch() async {
-        let store = EventStore()
+        let store = makeIsolatedEventStore()
         let ev = CalendarEvent(title: "可搜索的会议", startDate: Date(), location: "会议室A")
         store.add(ev)
 
@@ -472,7 +486,7 @@ final class EventStoreTests: XCTestCase {
 
     // MARK: 农历重复事件能跨春节出现在月视图查询
     func testLunarBirthdayAppearsOnSpringFestival2026() async {
-        let store = EventStore()
+        let store = makeIsolatedEventStore()
         let cal = Calendar(identifier: .gregorian)
 
         // 锚点：2025-01-29 正月初一
@@ -506,7 +520,7 @@ final class EventStoreTests: XCTestCase {
 
     // MARK: merge(+clearAll) 单元测试：三种策略 + 重复导入无副本
     func testMergeAddNewNoDuplicate() async {
-        let store = EventStore()
+        let store = makeIsolatedEventStore()
         // 先清空：EventStore() 首次创建会插入示例数据 → 用 clearAll 抹掉
         let sampleCount = store.events.count
         _ = store.clearAll(skipSync: true)
@@ -532,7 +546,7 @@ final class EventStoreTests: XCTestCase {
     }
 
     func testMergeConflictPoliciesAllThree() async {
-        let store = EventStore()
+        let store = makeIsolatedEventStore()
         _ = store.clearAll(skipSync: true)
         let cal = Calendar(identifier: .gregorian)
         let id = UUID()
@@ -558,7 +572,7 @@ final class EventStoreTests: XCTestCase {
     }
 
     func testClearAllReturnsCountAndResets() async {
-        let store = EventStore()
+        let store = makeIsolatedEventStore()
         let before = store.events.count
         let s = Date()
         store.add(CalendarEvent(title: "A", startDate: s), skipSync: true)
@@ -667,7 +681,7 @@ final class DataPortabilityTests: XCTestCase {
         let s = Date()
         var existing = CalendarEvent(id: id, title: "A", startDate: s, priority: .normal)
         existing.updatedAt = Date.distantPast
-        let store = EventStore()
+        let store = makeIsolatedEventStore()
         store.merge([existing], policy: .keepLatest, skipSync: true)
 
         var incoming = CalendarEvent(id: id, title: "A-v2", startDate: s, priority: .urgent)
@@ -759,7 +773,7 @@ final class WidgetSnapshotTests: XCTestCase {
     // EventStore.save 后会自动写一份快照：今日统计能真实反映 events 状态
     @MainActor
     func testEventStoreAutoWritesSnapshotTodayCounts() {
-        let store = EventStore()
+        let store = makeIsolatedEventStore()
         // 先清空，避免示例数据干扰
         _ = store.clearAll(skipSync: true)
 
@@ -931,7 +945,7 @@ final class SystemImportTests: XCTestCase {
     // 端到端：Stub Provider → Aggregator → EventStore.merge → 无重复
     @MainActor
     func testEndToEndImportNoDuplicatesOnReimport() async {
-        let store = EventStore()
+        let store = makeIsolatedEventStore()
         _ = store.clearAll(skipSync: true)
 
         let dtos = [

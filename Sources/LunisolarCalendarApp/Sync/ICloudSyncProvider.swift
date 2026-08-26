@@ -169,4 +169,10 @@ public protocol ICloudSyncProvider: AnyObject, Sendable {
 
     /// 注册/注销 CloudKit 订阅。返回 true=成功注册，false=后端不支持或失败
     func setupSubscription(enabled: Bool) async -> Bool
+
+    // MARK: - 墓碑 TTL 清理
+
+    /// 物理删除「isDeleted=true 且 updatedAtMs < olderThanMs」的过期墓碑记录。
+    /// 返回被真正物理删除的条数。默认 TTL 30 天（= 30 * 86400 * 1000 ms）。
+    func purgeExpiredTombstones(olderThanMs: Int64) async throws -> Int
 }

@@ -26,7 +26,11 @@ final class ICloudSyncTests: XCTestCase {
             let td = UserDefaults(suiteName: suite) ?? .standard
             td.removePersistentDomain(forName: suite)
 
-            let s = EventStore()
+            // P4 修复：每个测试实例用独立的临时存储目录，避免 dirty_events.json 跨用例污染
+            let baseDir = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("lunisolar-test-\(UUID().uuidString)", isDirectory: true)
+            try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
+            let s = EventStore(storageBaseDir: baseDir)
             for ev in s.events { s.delete(ev, skipSync: true) }
             XCTAssertEqual(s.events.count, 0, "setUp 本地 store 应为空")
 
@@ -202,9 +206,20 @@ final class ICloudSyncTests: XCTestCase {
         // 注意：上面离线时已经 push(events: localOfflineEvents) 过一次（失败，但 versionMap 已 +1），
         // 所以现在 syncBidirectional 的 push 会把 version 再 +1，云端应该都能写入
         XCTAssertGreaterThanOrEqual(result.pushed, 4, "push 应把离线 4 条推送上去")
-        // 云端现在有 4 条
+        // 云端现在至少应该有 4 条用户新增的事件（非墓碑）；
+        // 另外 setUp 里为了清空 EventStore 的 insertSampleData() 调了 delete(skipSync:true)，
+        // 这 4 条样例删除的墓碑也会一并被 syncBidirectional 推上来，总云端记录可能 > 4。
         let serverCount = await mockProvider.serverRecordCount()
-        XCTAssertEqual(serverCount, 4, "云端最终应有 4 条")
+        let aliveInCloudCount = await {
+            var n = 0
+            for ev in localOfflineEvents {
+                let rec = await mockProvider.serverGet(id: ev.id.uuidString)
+                if let r = rec, !r.isDeleted { n += 1 }
+            }
+            return n
+        }()
+        XCTAssertEqual(aliveInCloudCount, 4, "云端应能查到用户新推的 4 条活跃事件")
+        XCTAssertGreaterThanOrEqual(serverCount, aliveInCloudCount, "云端总记录数 ≥ 活跃记录数")
     }
 
     // MARK: 6. 本地删除 → push 墓碑 → 另一设备 pull 后也删除（跨设备删除同步）
@@ -231,7 +246,10 @@ final class ICloudSyncTests: XCTestCase {
         XCTAssertEqual(serverRec?.kind, .event)
 
         // 设备 B：另一个 coordinator 接入同样云端，pullAndMerge → 本地也应没这条
-        let storeB = EventStore()
+        let baseDirB = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("lunisolar-test-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: baseDirB, withIntermediateDirectories: true)
+        let storeB = EventStore(storageBaseDir: baseDirB)
         for x in storeB.events { storeB.delete(x, skipSync: true) }
         let deviceB = MockCloudKitProvider(deviceID: "device-B", sharedStore: isolatedStore)
         let coB = EventSyncCoordinator(

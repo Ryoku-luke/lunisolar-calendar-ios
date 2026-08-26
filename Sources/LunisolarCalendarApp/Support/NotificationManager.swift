@@ -27,10 +27,9 @@ public final class NotificationManager {
         #endif
     }
 
-    /// 检查当前授权状态（同步属性，仅用于 UI 状态展示）
-    /// 注意：iOS 上 UNUserNotificationCenter.getNotificationSettings 是异步的，
-    /// 此处用信号量同步等待结果，最多阻塞 2 秒。只在主线程空闲时调用（如
-    /// SettingsView.onAppear），不要在热路径中反复调用。
+    /// ⚠️ 已废弃：请改用 `authorizationStatusAsync()`（不阻塞主线程）。
+    /// 旧实现内部用 DispatchSemaphore 同步等待 2 秒，在主线程调用会真实卡顿 Settings 页面 push。
+    @available(*, deprecated, message: "Use async authorizationStatusAsync() instead to avoid blocking main thread")
     public var authorizationStatus: NotificationAuthStatus {
         #if canImport(UserNotifications)
         let semaphore = DispatchSemaphore(value: 0)

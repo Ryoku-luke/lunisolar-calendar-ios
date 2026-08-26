@@ -12,6 +12,8 @@ Package.resolved
 # 事件持久化数据文件 (本地沙箱)
 calendar_events.json
 *.json
+# 资源 JSON 文件（农历数据表 / 黄历离散库）必须纳入版本控制
+!Sources/LunisolarCalendarApp/Resources/*.json
 
 # 编辑器
 .idea/

@@ -8,7 +8,7 @@
 |---|---|
 | 🗓️ 日历月视图 | **7×6** 标准网格、左右切换月份、今日高亮 + **"今天"快捷按钮**、周末红字、优先级色圆点；底部面板可展开为当日时间轴 |
 | 🌕 中国农历 | 1900-2100 公历↔农历转换、闰月支持、干支纪年、十二生肖、月日中文名称；**农历↔公历双向查询**；边界 nil 保护 |
-| 📜 黄历 | 黄道吉日综合判定（黄黑道六神 + 建除十二神 + 28宿）、宜/忌事项、冲煞、五行纳音、喜神财神方位；**离散数据库（2025-2028）+ 算法兜底** |
+| 📜 黄历 | 黄道吉日综合判定（黄黑道六神 + 建除十二神 + 28宿）、宜/忌事项、冲煞、五行纳音、喜神财神方位；**离散数据库（2024-2028）+ 算法兜底** |
 | 📝 三种事件类型 | 日程 (schedule) / 提醒 (reminder) / 记事 (note) |
 | 🔁 重复规则 | 不重复 / 每天 / 每周 / 每月 / 每年 / 工作日 / **农历每年（父母生日·传统节日）** |
 | 🏷️ 优先级 | 紧急 / 高 / 普通 / 低（带颜色标识） |
@@ -109,7 +109,7 @@ Sources/LunisolarCalendarApp/
 │   ├── NotificationManager.swift      # UNUserNotificationCenter（授权/调度/取消 + 异步查询）
 │   ├── DataPortability.swift          # .ics/.csv/.json 导入导出 + 冲突策略 + 合并统计
 │   ├── FestivalManager.swift          # 公历/农历节日匹配 + 主题色
-│   ├── HuangliDBProvider.swift        # 离散黄历数据库（2025-2028 JSON）+ 算法兜底
+│   ├── HuangliDBProvider.swift        # 离散黄历数据库（2024-2028 JSON）+ 算法兜底
 │   ├── HuangliGenerator.swift         # 黄历算法生成器（离线兜底）
 │   ├── LunarDataProvider.swift        # 农历数据表 JSON 资源加载器
 │   ├── WidgetSnapshotStore.swift      # Widget 共享快照（App Group → Documents → tmp 三级回退）
@@ -127,7 +127,7 @@ Sources/LunisolarCalendarApp/
 │   └── LunisolarWidgetViews.swift     # 3 种样式视图
 ├── Resources/
 │   ├── lunar_calendar.json            # 农历数据表（201年，编译为Bundle资源）
-│   └── huangli_db.json                # 离散黄历数据库（2025-2028，宜/忌/冲煞/五行/神位）
+│   └── huangli_db.json                # 离散黄历数据库（2024-2028，宜/忌/冲煞/五行/神位）
 └── Views/
     ├── CalendarMonthView.swift        # 主界面：月视图 + 今天按钮 + 底部面板（iPad 双栏联动）
     ├── CalendarComponents.swift       # 星期表头 / DayCell 组件（自适应尺寸）
@@ -250,16 +250,19 @@ Resources/lunar_calendar.json
 
 ## 📜 离散黄历数据库
 
-放弃纯算法推导，内置 2025-2028 年固定宜/忌枚举值：
+放弃纯算法推导，内置 2024-2028 年固定宜/忌枚举值：
 
 ```
 Resources/huangli_db.json
 ├── version: 1
-├── range: ["2025-01-01", "2028-12-31"]
-└── days: { "yyyy-MM-dd": { yi: [], ji: [], chong: "", sha: "", wuXing: "", shenWei: "" } }
+├── range: ["2024-01-01", "2028-12-31"]
+├── count: 1827
+└── days: { "yyyy-MM-dd": { y: [宜], j: [忌], c: "冲(无冲前缀)", s: "煞(无煞前缀)", w: "五行", g: "神位", a: 0/1 } }
 ```
 
 查询策略：离散库命中 → 返回固定数据；未命中 → 算法生成器兜底。
+
+**生成工具**：`Tools/gen_huangli_db` 直接调用 `HuangliGenerator.algorithmGenerate()`（不经过 generate(for:) 旧库命中逻辑），保证 DB 与算法 100% 一致。宜忌干支池按天干分 10 组（六甲/六乙/…/六癸），每组 6 甲子 × 10 组 = 完整 60 甲（无重叠），遍历顺序用 Array 元组保证确定。
 
 ## 📥 导入导出
 
@@ -380,9 +383,63 @@ ICloudSyncProvider 协议
   - `CKError.Code.accountFailure` 已移除
 - **修复**: 重写 `RealCloudKitProvider`，统一使用新 API，移除 `#available(iOS 17)` 分支，修正 cursor 翻页逻辑
 
-### 附加改进
+### 附加改进（BUG #9 之前）
 - `skipSync: true` 仍标记 `dirtyEventIDs`，确保后续 `syncBidirectional()` 检出
 - `Date` 扩展清理冗余 `public` 修饰符，零警告构建
+
+### BUG #10（🔴 致命 · P0）：黄历离散数据库 vs 算法一致性 + 46 处断言失败
+- **文件**: `Models/Huangli.swift`, `Tools/gen_huangli_db/main.swift`, `Resources/huangli_db.json`
+- **根因**（三层耦合）:
+  1. `yiPool`/`jiPool` 用 `Dictionary<Set<String>, [String]>` — Swift Dictionary **枚举顺序不确定**，同干支跨运行可能匹配不同宜忌值
+  2. 多组 key set **重叠**：`己巳`/`庚子`/`甲辰`/`辛未`/`壬辰`/`癸丑`/`丙申`/`癸巳` 同时存在于 2+ 组，进一步放大不确定性
+  3. `gen_huangli_db` 调用 `generate(for:)` — 该函数**优先查旧离散库**，命中则用旧值写回新库，**循环写入旧数据**而非算法新值
+- **修复**:
+  - Pool 结构改为 `Array<(keys:Set, values:[String])>`，遍历顺序确定
+  - 按天干重构分组：六甲/六乙/六丙/…/六癸，10×6=完整 60 甲子，**无重叠**
+  - `gen_huangli_db` 直接调用 `algorithmGenerate()`（绕开 generate(for:) 查旧库）
+  - 用新算法重新生成 `huangli_db.json`（1827 天 / 418.8 KB）
+- **回归测试**: `testDBConsistentWithAlgorithmForRange`（2024-2028 区间抽样 30 天，DB ↔ 算法在 yi/ji/chong/sha/wuxing/shenwei/auspicious **逐字相等**）
+
+### BUG #11（🟡 中 · P4）：dirty/deleted 标记未持久化 → 重启后同步丢失
+- **文件**: `Stores/EventStore.swift`
+- **根因**: `dirtyEventIDs` 和 `deletedEventIDs` 仅存内存，App 杀死后重新启动则清空，导致未完成同步的变更永久丢失
+- **修复**: 新增 `dirtyIDsURL`/`deletedIDsURL`，变更后即时 `saveDirtyFlags()`，启动时 `loadDirtyFlags()` + `cleanupDanglingDirtyIDs()` 清理悬空 ID
+
+### BUG #12（🟡 中 · P5）：markNotified(skipSync: true) 误打 dirty 标记
+- **文件**: `Stores/EventStore.swift`
+- **根因**: 通知回调调用 `markNotified()` 时传 `skipSync=true`，本意"不需要同步"，但旧实现仍无条件加入 `dirtyEventIDs`，下次推送无意义同步 + 打脏
+- **修复**: 仅当 `skipSync == false` 时加入 dirtySet，同步本地通知已读状态不再触发云端推送
+
+### BUG #13（🟡 中 · P7）：ICS 导入伪 UUID 碰撞风险
+- **文件**: `Support/DataPortability.swift`
+- **根因**: 旧版用简单字符串拼接 + 短哈希生成伪 UUID，ICS 批量导入时存在碰撞概率（同 SUMMARY+DTSTART 的不同事件可能被误判为重复）
+- **修复**: 导入 `pseudoUUIDForImport()` 改用 `SHA-256(sourceID normalized)`，碰撞概率 2⁻¹²⁸；同步实现 `CC_SHA256` 与 CryptoKit 双路径（兼容 Linux）
+
+### BUG #14（🟢 低 · P9）：月视图黄历重复计算 → 滚动卡顿
+- **文件**: `Views/CalendarMonthView.swift`
+- **根因**: `calendarGrid` 每个 DayCell 单独 `HuangliGenerator.generate()`，42 格重复计算
+- **修复**: 渲染前一次性预计算 `huangliMap: [Date: HuangliDay]` 与 `lunarMap: [Date: LunarDate]`，Cell 直接下标读取；滑动月份复杂度从 O(42) 降为 O(1)
+
+### BUG #15（🟢 低 · P11）：NotificationManager.authorizationStatus 同步阻塞主线程
+- **文件**: `Support/NotificationManager.swift`
+- **根因**: 旧版在主队列同步调用 `UNUserNotificationCenter.getNotificationSettings` 的信号量等待，通知权限弹窗时可能死锁主线程 ≥ 3 秒
+- **修复**: 同步版 `authorizationStatus` 标记 `@available(*, deprecated)`；全部调用点改为 `authorizationStatus()` async 版本；设置页改用 `.task(id:)` + 状态机展示
+
+### BUG #16（🟢 低 · P12）：RealCloudKitProvider.delete 直调版本号不递增
+- **文件**: `Sync/RealCloudKitProvider.swift`
+- **根因**: `delete(ids:)` 直接 `CKRecord.ID` 删除构造，未读当前云端版本 → `version` 不变 → 合并端判断"无更新"跳过，跨设备删除偶发不生效
+- **修复**: delete 前先 `fetchVersions()` 拉取现有记录版本，`version += 1` 后写入墓碑；新增私有辅助 `fetchVersions(for:)`
+
+### BUG #17（🧪 测试 · P4）：单元测试共享 EventStore 目录 → dirty 标记互相污染
+- **文件**: `Tests/LunisolarCalendarTests/LunisolarCalendarTests.swift`, `Tests/LunisolarCalendarTests/ICloudSyncTests.swift`
+- **根因**: 所有测试共享同一个 `EventStore()` → Documents 默认存储路径；A 测试写的 dirtyID 在 B 测试 setUp 仍然存在，引发断言偏差
+- **修复**: 新增 `makeIsolatedEventStore()` 工厂，每个测试 `FileManager.temporaryDirectory` 下创建唯一 UUID 子目录；所有 EventStore 相关测试替换调用（9 处 + ICloud 2 处）
+
+### 性能 & 稳定性微调
+- `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
+- `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）
+- 同步墓碑新增 30 天 TTL 清理逻辑（避免 `deletedEventIDs` 无限膨胀）
+- `CalendarMonthView.calendarGrid` slotMap 重排：农历/黄历预计算 → cell 轻量渲染
 
 ## 📄 License
 

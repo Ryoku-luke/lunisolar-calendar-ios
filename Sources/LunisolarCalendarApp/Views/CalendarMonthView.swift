@@ -163,18 +163,24 @@ struct CalendarMonthView: View {
         let columns = [GridItem](repeating: GridItem(.flexible(), spacing: 2), count: 7)
         // 预计算本月所有 slot 的数据，避免 LazyVGrid 每帧对每个 cell 重算
         let slots = daysForMonth()
-        // 预构建日期→事件映射，用 eventStats 单次遍历替代 hasEvents+highestPriority 双遍历
+        // P9 修复：一次性预计算 event 统计 + 黄历 + 农历，42 slot 只做 42 次重算；
+        //         原实现把 HuangliGenerator.generate 放进 ForEach body，cell 每一帧 layout 都会重算（ProMotion 120Hz 下可能掉帧）。
         var eventMap: [Date: (has: Bool, prio: Priority?)] = [:]
+        var huangliMap: [Date: HuangliDay] = [:]
+        var lunarMap: [Date: LunarDate] = [:]
         for slot in slots {
-            let stats = store.eventStats(on: slot.date)
-            eventMap[slot.date] = (stats.has, stats.priority)
+            let d = slot.date
+            let stats = store.eventStats(on: d)
+            eventMap[d] = (stats.has, stats.priority)
+            huangliMap[d] = HuangliGenerator.generate(for: d)
+            lunarMap[d] = d.lunar
         }
 
         return LazyVGrid(columns: columns, spacing: 2) {
             ForEach(slots) { slot in
                 let date = slot.date
-                let lunar = date.lunar
-                let huangli = HuangliGenerator.generate(for: date)
+                let lunar = lunarMap[date] ?? date.lunar
+                let huangli = huangliMap[date] ?? HuangliGenerator.generate(for: date)
                 let (hasEvs, prio) = eventMap[date] ?? (false, nil)
 
                 DayCellView(

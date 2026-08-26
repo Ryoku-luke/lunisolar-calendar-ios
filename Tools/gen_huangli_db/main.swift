@@ -18,7 +18,13 @@ var dict: [String: [String: Any]] = [:]
 var cursor = start
 var total = 0
 while cursor < end {
-    let h = HuangliGenerator.generate(for: cursor)
+    // 生成离散库必须直接走纯算法，不能走 generate(for:)——后者会优先查旧库，造成循环写入旧数据。
+    // 2024-2028 完全落在农历数据表覆盖范围内，lunarDateSafe 不会返回 nil。
+    guard let lunar = ChineseCalendar.lunarDateSafe(from: cursor) else {
+        cursor = cal.date(byAdding: .day, value: 1, to: cursor)!
+        continue
+    }
+    let h = HuangliGenerator.algorithmGenerate(for: cursor, lunar: lunar)
     let key = df.string(from: cursor)
     dict[key] = [
         "y": h.yi,

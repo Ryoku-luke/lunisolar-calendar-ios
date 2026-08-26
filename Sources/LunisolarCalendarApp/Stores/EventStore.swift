@@ -29,29 +29,82 @@ public final class EventStore {
     private var isPushing = false
 
     private let saveURL: URL
+    /// dirtyEventIDs 持久化路径（与 saveURL 同目录，P4 修复）
+    private let dirtyIDsURL: URL
+    /// deletedEventIDs 持久化路径（与 saveURL 同目录，P4 修复）
+    private let deletedIDsURL: URL
 
     /// 可选 App Group ID：配了之后 EventStore.save() 会顺手写入 Widget 共享快照
     /// （App Group 未配置时也不会崩，仅回退 Documents 路径，Widget 那边按"过期→占位"处理）
-    public var widgetAppGroupID: String?
+    ///
+    /// ⚠️  重要：如果你的工程创建了 Widget Extension，必须在 App 启动时显式赋值：
+    /// ```
+    /// EventStore.shared.widgetAppGroupID = "group.com.yourapp.lunisolar"
+    /// ```
+    /// 主 App 和 Widget Extension 必须同时勾上同一个 App Group Capability，否则 Widget 读不到真实待办。
+    public var widgetAppGroupID: String? {
+        didSet {
+            #if DEBUG
+            if let id = widgetAppGroupID, !id.isEmpty {
+                print("[EventStore] ✅ App Group 已配置：\(id)")
+            }
+            #endif
+        }
+    }
 
     /// iCloud 同步协调器（可选）。设置后：默认 CRUD 自动 fire-and-forget 推送云端
     public weak var syncCoordinator: EventSyncCoordinator?
 
-    public init() {
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        var docs = paths.first
-        if docs == nil || !FileManager.default.fileExists(atPath: docs!.path) {
-            // Linux/沙箱环境下回退到 /tmp
-            docs = URL(fileURLWithPath: NSTemporaryDirectory())
+    public convenience init() {
+        self.init(storageBaseDir: nil)
+    }
+
+    /// 测试专用：允许自定义持久化根目录，避免多 XCTestCase 实例共享同一个 /tmp 文件。
+    /// - Parameter storageBaseDir: 传入一个临时目录（如 FileManager.temporaryDirectory 下 UUID 子目录）
+    public convenience init(storageBaseDir: URL) {
+        self.init(storageBaseDir: storageBaseDir as URL?)
+    }
+
+    /// 内部指定构造：storageBaseDir = nil → 走系统 Documents + /tmp 回退（生产环境默认）
+    private init(storageBaseDir: URL?) {
+        let baseDir: URL
+        if let custom = storageBaseDir {
+            baseDir = custom
+        } else {
+            let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+            var docs = paths.first
+            if docs == nil || !FileManager.default.fileExists(atPath: docs!.path) {
+                docs = URL(fileURLWithPath: NSTemporaryDirectory())
+            }
+            baseDir = docs!
         }
-        self.saveURL = docs!.appendingPathComponent("calendar_events.json")
-        // 确保父目录存在（iOS 上 Documents 目录首次启动可能需要创建中间路径）
+        self.saveURL = baseDir.appendingPathComponent("calendar_events.json")
+        self.dirtyIDsURL = baseDir.appendingPathComponent("dirty_event_ids.json")
+        self.deletedIDsURL = baseDir.appendingPathComponent("deleted_event_ids.json")
+        // 确保父目录存在
         try? FileManager.default.createDirectory(
-            at: self.saveURL.deletingLastPathComponent(),
+            at: saveURL.deletingLastPathComponent(),
             withIntermediateDirectories: true,
             attributes: nil
         )
         load()
+        loadDirtyFlags()
+
+        #if DEBUG
+        // DEBUG 下提醒集成者配置 App Group（避免 Widget 读不到快照浑然不知）
+        // 仅当生产路径（自定义 baseDir 的测试用例不提示）
+        if storageBaseDir == nil {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                if self.widgetAppGroupID == nil || self.widgetAppGroupID!.isEmpty {
+                    #if canImport(UIKit)
+                    print("[EventStore] ⚠️  widgetAppGroupID 未设置——若使用 Widget Extension，"
+                        + "请在 App 启动时给 EventStore.shared.widgetAppGroupID 赋值你的 App Group ID。")
+                    #endif
+                }
+            }
+        }
+        #endif
     }
 
     // MARK: - CRUD
@@ -108,13 +161,15 @@ public final class EventStore {
     }
 
     /// 标记事件通知已触发（防止重复弹窗）
+    /// 默认 skipSync=true：通知标记是"设备本地状态"，通常不应该推上云端，
+    /// 更不该因此把事件打为 dirty，否则下次别的 CRUD 会把事件"捎带"推云（P5 修复）。
     public func markNotified(_ event: CalendarEvent, skipSync: Bool = true) {
         guard let idx = events.firstIndex(where: { $0.id == event.id }) else { return }
         events[idx].isNotified = true
         events[idx].updatedAt = Date()
         save()
-        dirtyEventIDs.insert(events[idx].id.uuidString)
         if !skipSync {
+            dirtyEventIDs.insert(events[idx].id.uuidString)
             enqueuePush()
         }
     }
@@ -340,10 +395,59 @@ public final class EventStore {
         do {
             let data = try JSONEncoder().encode(events)
             try data.write(to: saveURL, options: .atomic)
+            // P4 修复：事件保存成功后，把 dirty/deleted 标记也持久化（下次重启可接着推送）
+            saveDirtyFlags()
             writeWidgetSnapshotIfNeeded()
         } catch {
             print("保存事件失败: \(error)")
         }
+    }
+
+    // MARK: - Dirty/Deleted 标记持久化（P4）
+
+    /// 启动时从 Documents 恢复 dirty/deleted id；文件不存在/损坏 = 空集合（保守策略：不丢失推送）
+    private func loadDirtyFlags() {
+        let decoder = JSONDecoder()
+        func readSet(_ url: URL) -> Set<String> {
+            guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+            do {
+                let data = try Data(contentsOf: url)
+                let arr = try decoder.decode([String].self, from: data)
+                return Set(arr)
+            } catch {
+                print("[EventStore] 警告：\(url.lastPathComponent) 读取失败（\(error)），当作空集合。")
+                return []
+            }
+        }
+        dirtyEventIDs = readSet(dirtyIDsURL)
+        deletedEventIDs = readSet(deletedIDsURL)
+        // 关键：清除"悬空"脏标记——events 数组里已经不存在的 id 就不要保留 dirty/deleted，
+        // 否则单元测试 setUp 里插入样例→手动 skipSync 删除后，会把这些已删的墓碑当"未推送变更"同步出去。
+        cleanupDanglingDirtyIDs()
+    }
+
+    /// 若 dirtyEventIDs 中某 id 在 events 里不存在，且不在 deletedEventIDs 里，则清除（悬空标记）。
+    private func cleanupDanglingDirtyIDs() {
+        let aliveIDs = Set(events.map { $0.id.uuidString })
+        // 1) dirty 但既不是 alive 也没记 deleted？→ 清理
+        dirtyEventIDs.formIntersection(aliveIDs.union(deletedEventIDs))
+        // 2) deleted 里如果 id 又神奇出现在 events 里？→ 取消 deleted（用户手动恢复了？）
+        deletedEventIDs.subtract(aliveIDs)
+    }
+
+    /// 每次 save() 成功后一并写入 dirty/deleted id（.atomic 原子写）
+    private func saveDirtyFlags() {
+        let encoder = JSONEncoder()
+        func writeSet(_ set: Set<String>, to url: URL) {
+            do {
+                let data = try encoder.encode(Array(set).sorted())  // 排序 + 数组编码体积更小
+                try data.write(to: url, options: .atomic)
+            } catch {
+                print("[EventStore] 写入 \(url.lastPathComponent) 失败：\(error)")
+            }
+        }
+        writeSet(dirtyEventIDs, to: dirtyIDsURL)
+        writeSet(deletedEventIDs, to: deletedIDsURL)
     }
 
     /// 仅在 save 成功后触发：把今日统计写成小组件快照

@@ -40,6 +40,20 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     /// 防止 ensureZoneExists 并发重入
     private let zoneLock = NSLock()
 
+    // MARK: - accountStatus 会话级缓存（10s TTL，避免双向同步内 3 次重复 IPC）
+
+    private let availabilityCacheLock = NSLock()
+    private var cachedAvailability: Bool?
+    private var cachedAvailabilityAt: TimeInterval = 0
+    private let availabilityCacheTTL: TimeInterval = 10  // 10 秒内复用结果
+    /// 账户状态切换时（设置里登出/登入 iCloud）外部可主动清缓存
+    public func invalidateAvailabilityCache() {
+        availabilityCacheLock.lock()
+        defer { availabilityCacheLock.unlock() }
+        cachedAvailability = nil
+        cachedAvailabilityAt = 0
+    }
+
     // MARK: - Init
 
     public init(
@@ -74,17 +88,36 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     public var isAvailable: Bool {
         get async {
+            let now = Date().timeIntervalSince1970
+            // 1) 快路径：读取缓存（lock 包裹，线程安全）
+            availabilityCacheLock.lock()
+            if let cached = cachedAvailability,
+               now - cachedAvailabilityAt < availabilityCacheTTL {
+                availabilityCacheLock.unlock()
+                return cached
+            }
+            availabilityCacheLock.unlock()
+
+            // 2) 慢路径：真实查 accountStatus
+            let result: Bool
             do {
                 let status = try await container.accountStatus()
                 switch status {
-                case .available: return true
+                case .available: result = true
                 case .noAccount, .restricted, .couldNotDetermine, .temporarilyUnavailable:
-                    return false
-                @unknown default: return false
+                    result = false
+                @unknown default: result = false
                 }
             } catch {
-                return false
+                result = false
             }
+
+            // 3) 写回缓存
+            availabilityCacheLock.lock()
+            cachedAvailability = result
+            cachedAvailabilityAt = now
+            availabilityCacheLock.unlock()
+            return result
         }
     }
 
@@ -153,12 +186,16 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         try await ensureZoneExists()
         guard !recordIDs.isEmpty else { return (0, [:]) }
 
+        // P12 修复：如果用户绕过 Coordinator 直调 delete，version=1 会被云端已存在的 version>1 拒绝
+        // （last-write-wins）。此处先 FETCH 云端现有 version，取 max(existing, 0) + 1，保证永远前进。
+        let existingVersions = try await fetchVersions(of: recordIDs)
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         var tombstones: [SyncRecord] = []
         for id in recordIDs {
+            let existingV = existingVersions[id] ?? 0
             let tomb = SyncRecord(
                 id: id, kind: .event,
-                version: 1,
+                version: existingV + 1,
                 originDevice: currentDeviceID,
                 updatedAtMs: now, isDeleted: true, payloadJSON: "{}"
             )
@@ -166,6 +203,25 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         }
         let (written, errs) = try await push(records: tombstones)
         return (written, errs)
+    }
+
+    /// 根据 id 列表从 CloudKit 查 {id: existingVersion}，不存在的 id 不返回（调用者当作 0 处理）
+    private func fetchVersions(of ids: [String]) async throws -> [String: Int64] {
+        guard !ids.isEmpty else { return [:] }
+        let recordNames = ids
+        let predicate = NSPredicate(format: "recordID.recordName IN %@", recordNames)
+        let query = CKQuery(recordType: recordType, predicate: predicate)
+        var result: [String: Int64] = [:]
+        var cursor: CKQueryOperation.Cursor?
+        var page = try await runQuery(query: query, cursor: nil)
+        for r in page.records { result[r.id] = r.version }
+        cursor = page.cursor
+        while let c = cursor {
+            page = try await runQuery(query: nil, cursor: c)
+            for r in page.records { result[r.id] = r.version }
+            cursor = page.cursor
+        }
+        return result
     }
 
     public func setupSubscription(enabled: Bool) async -> Bool {
@@ -193,6 +249,38 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         } catch {
             return false
         }
+    }
+
+    // MARK: - 墓碑 TTL 清理（P3）：物理删除 30 天前的 isDeleted=true 记录
+
+    public func purgeExpiredTombstones(olderThanMs: Int64) async throws -> Int {
+        try await ensureZoneExists()
+
+        // 1) 查询所有 isDeleted == 1 的 CKRecord（翻页）
+        let predicate = NSPredicate(format: "isDeleted == 1")
+        let query = CKQuery(recordType: recordType, predicate: predicate)
+        query.sortDescriptors = [NSSortDescriptor(key: "updatedAtMs", ascending: true)]
+
+        var allTombstones: [(CKRecord.ID, Int64)] = []
+        var cursor: CKQueryOperation.Cursor?
+        var page = try await runQueryRaw(query: query, cursor: nil)
+        allTombstones.append(contentsOf: page.tombstones)
+        cursor = page.cursor
+        while let c = cursor {
+            page = try await runQueryRaw(query: nil, cursor: c)
+            allTombstones.append(contentsOf: page.tombstones)
+            cursor = page.cursor
+        }
+
+        // 2) 过滤 updatedAtMs < olderThanMs 的过期墓碑
+        let expiredIDs = allTombstones
+            .filter { $0.1 < olderThanMs }
+            .map { $0.0 }
+        guard !expiredIDs.isEmpty else { return 0 }
+
+        // 3) 用 CKModifyRecordsOperation(recordsToSave:nil, recordIDsToDelete:expiredIDs) 物理删除
+        let (_, failedDeletes) = await deleteBatch(recordIDsToDelete: expiredIDs)
+        return expiredIDs.count - failedDeletes.count
     }
 
     // MARK: - Zone 管理
@@ -317,7 +405,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         }
     }
 
-    // MARK: - 查询 + cursor 翻页
+    // MARK: - 查询 + cursor 翻页（完整版：解析为 SyncRecord）
 
     private func runQuery(query: CKQuery?, cursor: CKQueryOperation.Cursor?) async throws
         -> (records: [SyncRecord], cursor: CKQueryOperation.Cursor?) {
@@ -351,12 +439,83 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             op.queryResultBlock = { result in
                 switch result {
                 case .success(let cursor):
-                    // cursor 为 nil 表示无更多数据；非 nil 表示继续翻页
                     nextCursor = cursor
                     cont.resume(returning: (records, nextCursor))
                 case .failure(let error):
                     cont.resume(throwing: error)
                 }
+            }
+            database.add(op)
+        }
+    }
+
+    // MARK: - 查询 + cursor 翻页（轻量版：只取 recordID + updatedAtMs，用于墓碑 TTL 扫描）
+
+    private func runQueryRaw(query: CKQuery?, cursor: CKQueryOperation.Cursor?) async throws
+        -> (tombstones: [(CKRecord.ID, Int64)], cursor: CKQueryOperation.Cursor?) {
+
+        let op: CKQueryOperation
+        if let cursor = cursor {
+            op = CKQueryOperation(cursor: cursor)
+        } else if let query = query {
+            op = CKQueryOperation(query: query)
+        } else {
+            return ([], nil)
+        }
+        op.zoneID = zone.zoneID
+        op.qualityOfService = .utility
+        op.resultsLimit = 200  // 墓碑轻量查询每页可多一些
+
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(tombstones: [(CKRecord.ID, Int64)], cursor: CKQueryOperation.Cursor?), Error>) in
+            var tombstones: [(CKRecord.ID, Int64)] = []
+            var nextCursor: CKQueryOperation.Cursor?
+
+            op.recordMatchedBlock = { recordID, result in
+                switch result {
+                case .success(let ck):
+                    if let ms = self.int64Value("updatedAtMs", from: ck) {
+                        tombstones.append((recordID, ms))
+                    }
+                case .failure:
+                    break
+                }
+            }
+            op.queryResultBlock = { result in
+                switch result {
+                case .success(let cursor):
+                    nextCursor = cursor
+                    cont.resume(returning: (tombstones, nextCursor))
+                case .failure(let error):
+                    cont.resume(throwing: error)
+                }
+            }
+            database.add(op)
+        }
+    }
+
+    // MARK: - 批量物理删除（配合墓碑 TTL 使用）
+
+    private func deleteBatch(recordIDsToDelete: [CKRecord.ID]) async
+        -> (deletedIDs: [CKRecord.ID], failed: [(CKRecord.ID, Error)]) {
+        guard !recordIDsToDelete.isEmpty else { return ([], []) }
+        let op = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: recordIDsToDelete)
+        op.savePolicy = .ifServerRecordUnchanged
+        op.qualityOfService = .utility
+
+        return await withCheckedContinuation { (cont: CheckedContinuation<(deletedIDs: [CKRecord.ID], failed: [(CKRecord.ID, Error)]), Never>) in
+            var deletedIDs: [CKRecord.ID] = []
+            var failed: [(CKRecord.ID, Error)] = []
+
+            op.perRecordDeleteBlock = { recordID, error in
+                if let error = error {
+                    failed.append((recordID, error))
+                } else {
+                    deletedIDs.append(recordID)
+                }
+            }
+
+            op.modifyRecordsResultBlock = { _ in
+                cont.resume(returning: (deletedIDs, failed))
             }
             database.add(op)
         }
