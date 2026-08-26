@@ -522,6 +522,14 @@ ICloudSyncProvider 协议
   1. 将 `anniversaryToEvent` 参数类型从 `DateComponents` 改为 `NSDateComponents`，与 `CNLabeledValue.value` 返回类型一致（两者属性名相同：`year` / `month` / `day` 等）
   2. 在 switch 中增加 `case .restricted, .denied: return false` 分支，明确处理系统限制/用户拒绝授权场景
 
+### BUG #29（🔴 Xcode 16 · Swift Concurrency）：`Task.detached` 在 `@Sendable` 闭包中捕获非 `Sendable` 实例
+- **文件**: `Sources/LunisolarCalendarApp/Support/ContactsImportProvider.swift`
+- **根因**: `fetchEvents()` 中使用 `Task.detached { ... }` 包裹 `CNContactStore.enumerateContacts` 同步调用。Swift Concurrency 要求 `Task.detached` 闭包为 `@Sendable`，而 `self`（`ContactsImportProvider`）持有 `CNContactStore` 类实例，不属于 `Sendable` 类型。编译器推断闭包返回类型时产生级联错误：`Cannot convert value of type '()' to expected argument type 'Bool'`
+- **修复**: 移除 `Task.detached` 包装，直接同步调用 `self.store.enumerateContacts(with:)`。`enumerateContacts` 本身就是同步 API，无需异步隔离；`fetchEvents` 已标记为 `async throws`，调用方在 Actor 上下文中不会阻塞主线程
+- **附带修复**: `NSDateComponents` 和 `DateComponents` 的 `year`/`month`/`day` 属性均为非可选 `Int`（不是 `Int?`），原先的 `!= nil` 比较恒为 `true`，`??` 运算符右侧永远不会触发。改为 `> 0` 判断有效日期分量，避免误导性代码和编译器警告
+  - `dateComponents.month != nil` → `dateComponents.month > 0`
+  - `dateComponents.year ?? 1900` → `dateComponents.year > 0 ? dateComponents.year : 1900`
+
 ### 性能 & 稳定性微调
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
 - `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）

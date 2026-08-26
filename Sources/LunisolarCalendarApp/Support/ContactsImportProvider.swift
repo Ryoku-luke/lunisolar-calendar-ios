@@ -68,36 +68,33 @@ public struct ContactsImportProvider: SystemImportProviding {
         let request = CNContactFetchRequest(keysToFetch: keys)
         var results: [SystemImportEvent] = []
 
-        // CNContactStore.enumerate 是同步 API；用 Task 把它放到后台线程跑
-        try await Task.detached(priority: .userInitiated) {
-            let didEnumerate = self.store.enumerateContacts(with: request) { contact, _ in
-                let name = [contact.givenName, contact.familyName]
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " ")
-                let displayName = name.isEmpty ? "联系人" : name
+        let didEnumerate = self.store.enumerateContacts(with: request) { contact, _ in
+            let name = [contact.givenName, contact.familyName]
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            let displayName = name.isEmpty ? "联系人" : name
 
-                if self.fetchBirthday, let bd = contact.birthday {
-                    if let ev = self.birthdayToEvent(contactID: contact.identifier,
-                                                     name: displayName,
-                                                     dateComponents: bd) {
+            if self.fetchBirthday, let bd = contact.birthday {
+                if let ev = self.birthdayToEvent(contactID: contact.identifier,
+                                                 name: displayName,
+                                                 dateComponents: bd) {
+                    results.append(ev)
+                }
+            }
+            if self.fetchAnniversaries {
+                for d in contact.dates {
+                    if let ev = self.anniversaryToEvent(contactID: contact.identifier,
+                                                        label: d.label,
+                                                        name: displayName,
+                                                        dateComponents: d.value) {
                         results.append(ev)
                     }
                 }
-                if self.fetchAnniversaries {
-                    for d in contact.dates {
-                        if let ev = self.anniversaryToEvent(contactID: contact.identifier,
-                                                            label: d.label,
-                                                            name: displayName,
-                                                            dateComponents: d.value) {
-                            results.append(ev)
-                        }
-                    }
-                }
             }
-            if !didEnumerate {
-                // enumerate 返回 false 通常意味着权限/通讯录受限；上层按 failures 处理
-            }
-        }.value
+        }
+        if !didEnumerate {
+            // enumerate 返回 false 通常意味着权限/通讯录受限
+        }
 
         return results
     }
@@ -109,10 +106,9 @@ public struct ContactsImportProvider: SystemImportProviding {
         name: String,
         dateComponents: DateComponents
     ) -> SystemImportEvent? {
-        // NSDateComponents 有 month/day 即可（year 可能为 nil 表示每年）
-        guard dateComponents.month != nil, dateComponents.day != nil else { return nil }
+        guard dateComponents.month > 0, dateComponents.day > 0 else { return nil }
         let cal = Calendar(identifier: .gregorian)
-        let year = dateComponents.year ?? 1900
+        let year = dateComponents.year > 0 ? dateComponents.year : 1900
         guard let s = cal.date(from: DateComponents(year: year,
                                                     month: dateComponents.month,
                                                     day: dateComponents.day,
@@ -135,9 +131,9 @@ public struct ContactsImportProvider: SystemImportProviding {
         name: String,
         dateComponents: NSDateComponents
     ) -> SystemImportEvent? {
-        guard dateComponents.month != nil, dateComponents.day != nil else { return nil }
+        guard dateComponents.month > 0, dateComponents.day > 0 else { return nil }
         let cal = Calendar(identifier: .gregorian)
-        let year = dateComponents.year ?? 1900
+        let year = dateComponents.year > 0 ? dateComponents.year : 1900
         guard let s = cal.date(from: DateComponents(year: year,
                                                     month: dateComponents.month,
                                                     day: dateComponents.day,
