@@ -500,6 +500,19 @@ ICloudSyncProvider 协议
 - **根因**: 项目同时以 SPM Package（`Package.swift`）和 Xcode iOS App Target 两种方式构建。SPM 上下文下 `Bundle.module` 指向包内资源 bundle；但 Xcode 直接构建 iOS App 时，`Bundle.module` 符号不存在 → 编译器报 "Type 'Bundle' has no member 'module'"
 - **修复**: 新建 `Bundle+Resources.swift`，通过 `#if SWIFT_PACKAGE` 条件编译区分上下文：SPM 下返回 `.module`，Xcode App 下返回 `.main`。两处资源加载点（黄历 DB + 农历数据表）统一改用 `Bundle.resources`，跨平台编译通过
 
+### BUG #27（🔴 Xcode 16 · Contacts 框架）：`CNContactStore.requestAuthorization` API 不存在 + `CNLabeledValue` 属性名错误
+- **文件**: `Sources/LunisolarCalendarApp/Support/ContactsImportProvider.swift`
+- **根因**: 
+  1. `requestAuthorization()` 方法中使用了 `store.requestAuthorization(for: .contacts)` —— 该 API 在 iOS 18 SDK 中不存在，编译器报 "Value of type 'CNContactStore' has no member 'requestAuthorization'"
+  2. `for: .contacts` 参数类型推断失败，编译器报 "Cannot infer contextual base in reference to member 'contacts'"
+  3. 循环 `contact.dates` 中使用 `d.dateComponents` 访问值 —— `CNLabeledValue<NSDateComponents>` 的值属性为 `value` 而非 `dateComponents`，编译器报 "has no member 'dateComponents'"
+  4. 以上问题连带触发 2 个警告：`No calls to throwing functions occur within 'try' expression` 和 `No 'async' operations occur within 'await' expression`
+- **修复**:
+  1. 移除不存在的 `requestAuthorization(for:)` API，改用 `withCheckedThrowingContinuation` 桥接 `CNContactStore.requestAccess(for:completionHandler:)`（iOS 9+ 稳定 API）
+  2. 显式声明 `let entityType = CNEntityType.contacts` 消除类型推断歧义
+  3. `d.dateComponents` → `d.value`，使用 `CNLabeledValue.value` 属性获取 `NSDateComponents`
+  4. 分支覆盖 `.authorized` / `.limited` 已授权态、`.notDetermined` 请求授权态、`@unknown default` 兜底
+
 ### 性能 & 稳定性微调
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
 - `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）
