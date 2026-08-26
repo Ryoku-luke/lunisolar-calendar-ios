@@ -449,6 +449,19 @@ ICloudSyncProvider 协议
 - **根因**: 所有测试共享同一个 `EventStore()` → Documents 默认存储路径；A 测试写的 dirtyID 在 B 测试 setUp 仍然存在，引发断言偏差
 - **修复**: 新增 `makeIsolatedEventStore()` 工厂，每个测试 `FileManager.temporaryDirectory` 下创建唯一 UUID 子目录；所有 EventStore 相关测试替换调用（9 处 + ICloud 2 处）
 
+### BUG #18（🔴 Xcode 16 · Swift 6）：`CKModifyRecordsOperation` 使用不存在的 `perRecordDeleteBlock` 属性
+- **文件**: `Sources/LunisolarCalendarApp/Sync/RealCloudKitProvider.swift:509`
+- **根因**: `deleteBatch` 方法使用了 `op.perRecordDeleteBlock` 回调，但 `CKModifyRecordsOperation` 实际只提供 `perRecordCompletionBlock`（统一处理 save/delete），该属性根本不存在。在 Swift 6 严格类型检查下直接导致 "Failed to produce diagnostic for expression" 编译错误
+- **修复**: 改用 `op.perRecordCompletionBlock = { record, error in }`，签名 `(CKRecord?, Error?)`，删除场景下 `record` 为 nil，通过 `record?.recordID ?? CKRecord.ID(recordName: UUID().uuidString)` 兜底获取 recordID
+
+### BUG #19（🔴 Xcode 16 · Swift 6）：`CKError.Code` 枚举中引用不存在的 case
+- **文件**: `Sources/LunisolarCalendarApp/Sync/RealCloudKitProvider.swift:523-536`
+- **根因**: `mapCKError` 错误映射 switch 中使用了 3 个 `CKError.Code` 中不存在的枚举 case：
+  - `.temporarilyUnavailable` — 已废弃，语义由 `.serviceUnavailable` / `.requestRateLimited` 覆盖
+  - `.restrictedAccount` — 正确拼写为 `.accountRestricted`
+  - `.serverRecordNotFound` — `CKError.Code` 中不存在，记录不存在统一由 `.unknownItem` 表示
+- **修复**: 删除不存在的 case，修正拼写，保留唯一有效表达；`fetchRecords` 同时改用 `op.perRecordResultBlock` 消除 Swift 6 重载歧义（旧 `perRecordCompletionBlock` 三参数签名已被 Result 风格 API 取代）
+
 ### 性能 & 稳定性微调
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
 - `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）

@@ -358,17 +358,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         return await withCheckedContinuation { (cont: CheckedContinuation<[CKRecord.ID: Result<CKRecord, Error>], Never>) in
             var results: [CKRecord.ID: Result<CKRecord, Error>] = [:]
 
-            op.perRecordCompletionBlock = { record, recordID, error in
-                if let error = error {
-                    results[recordID] = .failure(error)
-                } else if let record = record {
-                    results[recordID] = .success(record)
-                } else {
-                    results[recordID] = .failure(
-                        NSError(domain: "RealCloudKitProvider", code: -1,
-                                userInfo: [NSLocalizedDescriptionKey: "fetch 返回空记录"])
-                    )
-                }
+            op.perRecordResultBlock = { recordID, result in
+                results[recordID] = result
             }
 
             op.fetchRecordsResultBlock = { _ in
@@ -506,7 +497,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             var deletedIDs: [CKRecord.ID] = []
             var failed: [(CKRecord.ID, Error)] = []
 
-            op.perRecordDeleteBlock = { recordID, error in
+            op.perRecordCompletionBlock = { record, error in
+                let recordID = record?.recordID ?? CKRecord.ID(recordName: UUID().uuidString)
                 if let error = error {
                     failed.append((recordID, error))
                 } else {
@@ -528,20 +520,20 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             return .unknown(String(describing: error))
         }
         switch ckError.code {
-        case .serviceUnavailable, .requestRateLimited, .temporarilyUnavailable:
+        case .serviceUnavailable, .requestRateLimited:
             return .rateLimited
         case .quotaExceeded:
             return .quotaExceeded
         case .networkUnavailable, .networkFailure:
             return .networkUnavailable
-        case .notAuthenticated, .managedAccountRestricted, .restrictedAccount:
+        case .notAuthenticated, .managedAccountRestricted, .accountRestricted:
             return .permissionDenied
         case .zoneNotFound:
             return .notAvailable
         case .serverRecordChanged:
             let rid = ckError.serverRecord?.recordID.recordName ?? ""
             return .conflict(rid)
-        case .unknownItem, .serverRecordNotFound:
+        case .unknownItem:
             return .recordNotFound("")
         case .constraintViolation:
             return .invalidPayload(ckError.localizedDescription)
