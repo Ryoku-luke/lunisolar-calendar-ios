@@ -46,6 +46,8 @@ public struct ContactsImportProvider: SystemImportProviding {
                     }
                 }
             }
+        case .restricted, .denied:
+            return false
         @unknown default:
             return false
         }
@@ -131,7 +133,7 @@ public struct ContactsImportProvider: SystemImportProviding {
         contactID: String,
         label: String?,
         name: String,
-        dateComponents: DateComponents
+        dateComponents: NSDateComponents
     ) -> SystemImportEvent? {
         guard dateComponents.month != nil, dateComponents.day != nil else { return nil }
         let cal = Calendar(identifier: .gregorian)

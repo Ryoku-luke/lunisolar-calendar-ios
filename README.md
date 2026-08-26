@@ -513,6 +513,15 @@ ICloudSyncProvider 协议
   3. `d.dateComponents` → `d.value`，使用 `CNLabeledValue.value` 属性获取 `NSDateComponents`
   4. 分支覆盖 `.authorized` / `.limited` 已授权态、`.notDetermined` 请求授权态、`@unknown default` 兜底
 
+### BUG #28（🔴 Xcode 16 · Contacts 框架）：`NSDateComponents` 与 `DateComponents` 类型不兼容 + switch 非穷举
+- **文件**: `Sources/LunisolarCalendarApp/Support/ContactsImportProvider.swift`
+- **根因**: 
+  1. `CNLabeledValue<NSDateComponents>.value` 返回 Foundation 的 `NSDateComponents`，而 `anniversaryToEvent` 函数参数声明为 Swift 标准库的 `DateComponents`，编译器报 "'NSDateComponents' is not implicitly convertible to 'DateComponents'"
+  2. `requestAuthorization()` 中 `switch status` 只覆盖了 `.authorized` / `.limited` / `.notDetermined` 和 `@unknown default`，缺少 `.restricted` 和 `.denied` 两个枚举值，编译器报 "Switch must be exhaustive"
+- **修复**:
+  1. 将 `anniversaryToEvent` 参数类型从 `DateComponents` 改为 `NSDateComponents`，与 `CNLabeledValue.value` 返回类型一致（两者属性名相同：`year` / `month` / `day` 等）
+  2. 在 switch 中增加 `case .restricted, .denied: return false` 分支，明确处理系统限制/用户拒绝授权场景
+
 ### 性能 & 稳定性微调
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
 - `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）
