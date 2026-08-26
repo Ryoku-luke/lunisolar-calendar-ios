@@ -146,7 +146,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         }
 
         // 3. 批量保存
-        let (saved, failed) = await saveBatch(ckRecords)
+        let (saved, failed) = try await saveBatch(ckRecords)
         var errors: [String: SyncError] = [:]
         for (recordID, err) in failed {
             errors[recordID.recordName] = mapCKError(err)
@@ -377,14 +377,14 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         op.savePolicy = .ifServerRecordUnchanged
         op.qualityOfService = .utility
 
-        return await withCheckedContinuation { (cont: CheckedContinuation<(saved: [CKRecord], failed: [(CKRecord.ID, Error)]), Never>) in
+        return try await withThrowingCheckedContinuation { (cont: CheckedContinuation<(saved: [CKRecord], failed: [(CKRecord.ID, Error)]), Error>) in
             var saved: [CKRecord] = []
             var failed: [(CKRecord.ID, Error)] = []
 
             op.perRecordCompletionBlock = { record, error in
                 if let error = error {
-                    failed.append((record?.recordID ?? CKRecord.ID(recordName: UUID().uuidString), error))
-                } else if let record = record {
+                    failed.append((record.recordID, error))
+                } else {
                     saved.append(record)
                 }
             }
@@ -493,12 +493,12 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         op.savePolicy = .ifServerRecordUnchanged
         op.qualityOfService = .utility
 
-        return await withCheckedContinuation { (cont: CheckedContinuation<(deletedIDs: [CKRecord.ID], failed: [(CKRecord.ID, Error)]), Never>) in
+        return try await withThrowingCheckedContinuation { (cont: CheckedContinuation<(deletedIDs: [CKRecord.ID], failed: [(CKRecord.ID, Error)]), Error>) in
             var deletedIDs: [CKRecord.ID] = []
             var failed: [(CKRecord.ID, Error)] = []
 
             op.perRecordCompletionBlock = { record, error in
-                let recordID = record?.recordID ?? CKRecord.ID(recordName: UUID().uuidString)
+                let recordID = record.recordID
                 if let error = error {
                     failed.append((recordID, error))
                 } else {
@@ -526,7 +526,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             return .quotaExceeded
         case .networkUnavailable, .networkFailure:
             return .networkUnavailable
-        case .notAuthenticated, .managedAccountRestricted, .accountRestricted:
+        case .notAuthenticated, .managedAccountRestricted:
             return .permissionDenied
         case .zoneNotFound:
             return .notAvailable
