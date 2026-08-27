@@ -36,41 +36,22 @@ struct SettingsView: View {
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                // 用异步版本避免阻塞主线程
                 notifStatus = await NotificationManager.shared.authorizationStatusAsync()
             }
-            #if canImport(UniformTypeIdentifiers)
-            .fileImporter(
+            .modifier(ImportFileModifier(
                 isPresented: $showImportPicker,
-                allowedContentTypes: {
-                    switch importingFileType {
-                    case .ics:  return [UTType(filenameExtension: "ics") ?? .data]
-                    case .json: return [UTType(filenameExtension: "json") ?? .data]
-                    }
-                }()
-            ) { result in
-                handleImportResult(result, fileType: importingFileType)
-            }
-            #endif
+                fileType: importingFileType,
+                onResult: { handleImportResult($0, fileType: importingFileType) }
+            ))
             .alert("导入结果", isPresented: $showImportResult) {
                 Button("好") {}
             } message: {
-                if let r = importedResult {
-                    Text(importSummaryText(r))
-                } else {
-                    Text("导入完成")
-                }
+                importResultAlertMessage
             }
             .alert("导入前：冲突处理策略", isPresented: $showConflictPolicy) {
-                ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
-                    Button(p.title + (p == conflictPolicy ? "（当前）" : "")) {
-                        conflictPolicy = p
-                        showImportPicker = true
-                    }
-                }
-                Button("取消", role: .cancel) {}
+                conflictPolicyAlertButtons
             } message: {
-                Text("当前策略：\(conflictPolicy.title) · \(conflictPolicy.subtitle)\n选完策略后会打开 Files 选择文件。")
+                conflictPolicyAlertMessage
             }
             .alert("确认清空全部事件？", isPresented: $showClearConfirm) {
                 Button("清空全部 \(store.events.count) 条", role: .destructive) {
@@ -81,27 +62,59 @@ struct SettingsView: View {
             } message: {
                 Text("此操作不可恢复，强烈建议先点击「全量备份为 .json」导出备份。")
             }
-            .overlay(alignment: .top) {
-                if let t = toast {
-                    ToastBannerView(message: t)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .padding(.top, 12)
-                        .onAppear {
-                            Task { @MainActor in
-                                try? await Task.sleep(nanoseconds: 2_200_000_000)
-                                if toast?.id == t.id { toast = nil }
-                            }
-                        }
-                }
-            }
+            .overlay(alignment: .top) { toastOverlayContent }
             #if canImport(UIKit)
             .sheet(isPresented: $showShareSheet) {
-                if let url = shareURL {
-                    ShareSheet(items: [url])
-                }
+                if let url = shareURL { ShareSheet(items: [url]) }
             }
             #endif
             .animation(.easeInOut(duration: 0.2), value: toast)
+    }
+
+    // MARK: - Alert / Overlay 闭包内容（独立 computed property，单独类型检查）
+
+    @ViewBuilder
+    private var importResultAlertMessage: some View {
+        if let r = importedResult {
+            Text(importSummaryText(r))
+        } else {
+            Text("导入完成")
+        }
+    }
+
+    @ViewBuilder
+    private var conflictPolicyAlertButtons: some View {
+        ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
+            Button(conflictPolicyButtonTitle(p)) {
+                conflictPolicy = p
+                showImportPicker = true
+            }
+        }
+        Button("取消", role: .cancel) {}
+    }
+
+    private func conflictPolicyButtonTitle(_ p: ImportConflictPolicy) -> String {
+        p == conflictPolicy ? p.title + "（当前）" : p.title
+    }
+
+    @ViewBuilder
+    private var conflictPolicyAlertMessage: some View {
+        Text("当前策略：\(conflictPolicy.title) · \(conflictPolicy.subtitle)\n选完策略后会打开 Files 选择文件。")
+    }
+
+    @ViewBuilder
+    private var toastOverlayContent: some View {
+        if let t = toast {
+            ToastBannerView(message: t)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(.top, 12)
+                .onAppear {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 2_200_000_000)
+                        if toast?.id == t.id { toast = nil }
+                    }
+                }
+        }
     }
 
     /// 把主 Form 内容抽到独立 computed property，降低 body 的 modifier 链长度，
@@ -845,6 +858,37 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+#endif
+
+// MARK: - ImportFileModifier（.fileImporter 包装成独立 ViewModifier，降低 body 内联闭包复杂度）
+
+#if canImport(UniformTypeIdentifiers)
+private struct ImportFileModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let fileType: ImportedFileType
+    let onResult: (Result<URL, Error>) -> Void
+
+    func body(content: Content) -> some View {
+        content.fileImporter(
+            isPresented: $isPresented,
+            allowedContentTypes: {
+                switch fileType {
+                case .ics:  return [UTType(filenameExtension: "ics") ?? .data]
+                case .json: return [UTType(filenameExtension: "json") ?? .data]
+                }
+            }()
+        ) { result in
+            onResult(result)
+        }
+    }
+}
+#else
+private struct ImportFileModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let fileType: ImportedFileType
+    let onResult: (Result<URL, Error>) -> Void
+    func body(content: Content) -> some View { content }
 }
 #endif
 
