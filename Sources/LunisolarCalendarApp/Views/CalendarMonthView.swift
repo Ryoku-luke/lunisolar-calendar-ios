@@ -24,7 +24,7 @@ struct CalendarMonthView: View {
         if let binding = selectedDate {
             self._selectedDate = binding
         } else {
-            var local = State(initialValue: Date())
+            let local = State(initialValue: Date())
             self._selectedDate = local.projectedValue
         }
     }
