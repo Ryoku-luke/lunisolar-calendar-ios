@@ -10,7 +10,7 @@ fileprivate struct DaySlot: Identifiable, Hashable {
 }
 
 struct CalendarMonthView: View {
-    @State private var currentMonth: Date = Date().firstDayOfMonth
+    @State private var currentMonth: Date = Date().gregorianFirstDayOfMonth
     /// iPad 模式下从外部 Binding 注入；iPhone 模式下用本地 @State
     @Binding private var selectedDate: Date
     /// 底部面板展开状态（点击就地显示完整时间轴）
@@ -88,7 +88,7 @@ struct CalendarMonthView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
                         withAnimation(.easeInOut(duration: 0.3)) {
-                            currentMonth = Date().firstDayOfMonth
+                            currentMonth = Date().gregorianFirstDayOfMonth
                             selectedDate = Date()
                         }
                     } label: {
@@ -101,7 +101,7 @@ struct CalendarMonthView: View {
                     Menu {
                         Button {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                currentMonth = Date().firstDayOfMonth
+                                currentMonth = Date().gregorianFirstDayOfMonth
                                 selectedDate = Date()
                             }
                         } label: {
@@ -130,14 +130,14 @@ struct CalendarMonthView: View {
 
     private var monthHeader: some View {
         HStack {
-            Text("\(currentMonth.year) 年 \(currentMonth.month) 月")
+            Text("\(currentMonth.gregorianYear) 年 \(currentMonth.gregorianMonth) 月")
                 .font(.title2.weight(.bold))
                 .foregroundStyle(Color.label)
             Spacer()
             HStack(spacing: 6) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        currentMonth = currentMonth.addingMonths(-1)
+                        currentMonth = currentMonth.gregorianAddingMonths(-1)
                     }
                 } label: {
                     Image(systemName: "chevron.left.circle.fill")
@@ -146,7 +146,7 @@ struct CalendarMonthView: View {
                 }
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        currentMonth = currentMonth.addingMonths(1)
+                        currentMonth = currentMonth.gregorianAddingMonths(1)
                     }
                 } label: {
                     Image(systemName: "chevron.right.circle.fill")
@@ -208,22 +208,23 @@ struct CalendarMonthView: View {
     }
 
     private func daysForMonth() -> [DaySlot] {
-        let first = currentMonth.firstDayOfMonth
-        // weekday: 1=周日 ... 7=周六 -> 将周日列在首位，前置数量 = (weekday-1)
-        let leading = first.weekday - 1
-        let totalDays = currentMonth.daysInMonth
+        // BUG #33 修复：月历网格结构统一按公历计算，不受用户系统日历（伊斯兰历/佛历/和历）影响。
+        let first = currentMonth.gregorianFirstDayOfMonth
+        // gregorianWeekday: 1=周日 ... 7=周六 -> 将周日列在首位，前置数量 = (weekday-1)
+        let leading = first.gregorianWeekday - 1
+        let totalDays = currentMonth.gregorianDaysInMonth
         var result: [DaySlot] = []
 
         for i in 0..<leading {
-            let d = first.addingDays(-(leading - i))
+            let d = first.gregorianAddingDays(-(leading - i))
             result.append(DaySlot(date: d, inCurrentMonth: false))
         }
         for i in 0..<totalDays {
-            result.append(DaySlot(date: first.addingDays(i), inCurrentMonth: true))
+            result.append(DaySlot(date: first.gregorianAddingDays(i), inCurrentMonth: true))
         }
         var i = 0
         while result.count < 42 {
-            result.append(DaySlot(date: first.addingDays(totalDays + i), inCurrentMonth: false))
+            result.append(DaySlot(date: first.gregorianAddingDays(totalDays + i), inCurrentMonth: false))
             i += 1
         }
         return result
