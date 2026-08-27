@@ -2,20 +2,12 @@
 import Contacts
 import Foundation
 
-// MARK: - 联系人导入（CNContact 生日/纪念日 → CalendarEvent）
-
-/// 从系统联系人里抽取"生日 / 纪念日"转成 App 事件：
-/// - 申请 `.contacts` 权限
-/// - 默认按 `.birthday` + `.dates` 取所有联系人的生日和纪念日
-/// - 公历生日 → yearly，农历生日 → lunarAnnually（CNContact 不区分阴阳历，
-///   默认按公历 yearly；用户在 UI 上可一次性转成农历）
 public struct ContactsImportProvider: SystemImportProviding {
     public let source: SystemImportSource = .contacts
 
     private let store: CNContactStore
     private let fetchBirthday: Bool
     private let fetchAnniversaries: Bool
-    /// 默认 false：CNContact 生日是公历，按 .yearly 重复；true 时改 .lunarAnnually
     private let asLunarAnnually: Bool
 
     public init(
@@ -98,8 +90,6 @@ public struct ContactsImportProvider: SystemImportProviding {
 
         return results
     }
-
-    // MARK: - 生日 / 纪念日 → SystemImportEvent
 
     private func birthdayToEvent(
         contactID: String,
