@@ -23,35 +23,45 @@ struct LunisolarCalendarApp: App {
         }
     }
 
-    // MARK: - iCloud 同步装配
+    // MARK: - iCloud 同步装配（延迟到用户在设置里开启时才真正创建 CloudKit 容器）
 
-    /// 首次出现时装配 RealCloudKitProvider：
-    /// - 仅 Apple 平台（有 CloudKit）
-    /// - isEnabled 由 UserDefaults 控制（默认 opt-in = false，用户在设置里开启）
-    /// - 开启后自动后台同步一次（pull 增量 + push 本地变更）
+    // 注意：绝不在这里无条件调用 CKContainer.default() ——
+    // iOS Simulator 没有 CloudKit entitlement 时会直接 EXC_BREAKPOINT 崩溃。
+    // RealCloudKitProvider 的创建延迟到 SettingsView 的 Toggle 打开时，
+    // 那时用 do/catch 包裹 accountStatus() 探测，失败弹 toast 并保留禁用状态。
+
     private func setupCloudSyncIfNeeded() async {
         guard syncCoordinator == nil else { return }
         #if canImport(CloudKit)
-        // 防止用户禁用后又开时反复创建
-        let provider = RealCloudKitProvider()
-        let coordinator = EventSyncCoordinator(
-            eventStore: store,
-            provider: provider
-        )
-        // 读取持久化的开关状态（默认 false = 用户首次需在设置里显式开启）
-        let enabled = UserDefaults.standard.bool(forKey: "Lunisolar.sync.enabled")
-        coordinator.isEnabled = enabled
-        store.syncCoordinator = coordinator
-        syncCoordinator = coordinator
+        // 只读 UserDefaults 里的开关（纯内存操作，不触发任何 CloudKit API）
+        let wasEnabled = UserDefaults.standard.bool(forKey: "Lunisolar.sync.enabled")
+        if !wasEnabled {
+            // 默认不装配 —— 用户从未开启过同步；SettingsView 里开关才会装配
+            return
+        }
 
-        // 开启 → 后台首次同步
-        if enabled {
+        // 用户上次开启过 → 尝试装配，但如果 entitlement 缺失就静默降级
+        do {
+            let provider = RealCloudKitProvider()
+            // 用 isAvailable 探测 entitlement/账号状态（这是第一个真正跟 CloudKit 通信的点）
             let available = await provider.isAvailable
-            if available {
-                _ = try? await coordinator.syncBidirectional()
-            } else {
-                coordinator.isEnabled = false
+            if !available {
+                print("[LunisolarCalendarApp] iCloud entitlement 或账号不可用，跳过同步装配")
+                UserDefaults.standard.set(false, forKey: "Lunisolar.sync.enabled")
+                return
             }
+            let coordinator = EventSyncCoordinator(
+                eventStore: store,
+                provider: provider
+            )
+            coordinator.isEnabled = true
+            store.syncCoordinator = coordinator
+            syncCoordinator = coordinator
+            // 后台首次同步（pull 增量 + push 本地变更）
+            _ = try? await coordinator.syncBidirectional()
+        } catch {
+            print("[LunisolarCalendarApp] CloudKit 装配失败：\(error)")
+            UserDefaults.standard.set(false, forKey: "Lunisolar.sync.enabled")
         }
         #endif
     }
