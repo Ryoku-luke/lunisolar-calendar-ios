@@ -30,6 +30,83 @@ struct SettingsView: View {
     @State private var importLunarToggle = false  // 联系人生日：true=按农历每年
 
     var body: some View {
+        baseForm
+            .formStyle(.grouped)
+            .frame(maxWidth: hSizeClass == .regular ? 720 : .infinity)
+            .navigationTitle("设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .task {
+                // 用异步版本避免阻塞主线程
+                notifStatus = await NotificationManager.shared.authorizationStatusAsync()
+            }
+            #if canImport(UniformTypeIdentifiers)
+            .fileImporter(
+                isPresented: $showImportPicker,
+                allowedContentTypes: {
+                    switch importingFileType {
+                    case .ics:  return [UTType(filenameExtension: "ics") ?? .data]
+                    case .json: return [UTType(filenameExtension: "json") ?? .data]
+                    }
+                }()
+            ) { result in
+                handleImportResult(result, fileType: importingFileType)
+            }
+            #endif
+            .alert("导入结果", isPresented: $showImportResult) {
+                Button("好") {}
+            } message: {
+                if let r = importedResult {
+                    Text(importSummaryText(r))
+                } else {
+                    Text("导入完成")
+                }
+            }
+            .alert("导入前：冲突处理策略", isPresented: $showConflictPolicy) {
+                ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
+                    Button(p.title + (p == conflictPolicy ? "（当前）" : "")) {
+                        conflictPolicy = p
+                        showImportPicker = true
+                    }
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("当前策略：\(conflictPolicy.title) · \(conflictPolicy.subtitle)\n选完策略后会打开 Files 选择文件。")
+            }
+            .alert("确认清空全部事件？", isPresented: $showClearConfirm) {
+                Button("清空全部 \(store.events.count) 条", role: .destructive) {
+                    let n = store.clearAll()
+                    toast = .init(kind: .success, text: "已清空 \(n) 条事件")
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("此操作不可恢复，强烈建议先点击「全量备份为 .json」导出备份。")
+            }
+            .overlay(alignment: .top) {
+                if let t = toast {
+                    ToastBannerView(message: t)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.top, 12)
+                        .onAppear {
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 2_200_000_000)
+                                if toast?.id == t.id { toast = nil }
+                            }
+                        }
+                }
+            }
+            #if canImport(UIKit)
+            .sheet(isPresented: $showShareSheet) {
+                if let url = shareURL {
+                    ShareSheet(items: [url])
+                }
+            }
+            #endif
+            .animation(.easeInOut(duration: 0.2), value: toast)
+    }
+
+    /// 把主 Form 内容抽到独立 computed property，降低 body 的 modifier 链长度，
+    /// 避免 SwiftUI 编译器"无法在合理时间内类型检查"超时。
+    private var baseForm: some View {
         Form {
             // MARK: - 通知设置
             Section {
