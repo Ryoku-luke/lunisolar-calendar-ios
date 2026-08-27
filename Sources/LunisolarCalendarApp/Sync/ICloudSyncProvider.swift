@@ -77,7 +77,7 @@ public struct SyncRecord: Equatable, Hashable, Identifiable, Sendable {
     /// 负载：JSONEncoded CalendarEvent（或任意 Codable 模型）
     public let payloadJSON: String
 
-    public init(id: String, kind: Kind, version: Int64, originDevice: String,
+    nonisolated public init(id: String, kind: Kind, version: Int64, originDevice: String,
                 updatedAtMs: Int64, isDeleted: Bool, payloadJSON: String) {
         self.id = id
         self.kind = kind
@@ -89,7 +89,7 @@ public struct SyncRecord: Equatable, Hashable, Identifiable, Sendable {
     }
 
     /// helper: 从 CalendarEvent 构造 SyncRecord（JSON 编码 payload）
-    public static func eventRecord(
+    nonisolated public static func eventRecord(
         for event: CalendarEvent,
         version: Int64,
         originDevice: String,
@@ -113,7 +113,7 @@ public struct SyncRecord: Equatable, Hashable, Identifiable, Sendable {
     }
 
     /// helper: 反解出 CalendarEvent
-    public func decodedEvent(decoder: JSONDecoder = SyncCoders.decoder) throws -> CalendarEvent {
+    nonisolated public func decodedEvent(decoder: JSONDecoder = SyncCoders.decoder) throws -> CalendarEvent {
         guard let data = payloadJSON.data(using: .utf8) else {
             throw SyncError.invalidPayload("SyncRecord.payloadJSON 非 UTF8")
         }

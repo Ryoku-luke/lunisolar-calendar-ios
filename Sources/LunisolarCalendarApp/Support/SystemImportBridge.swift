@@ -113,7 +113,7 @@ public enum SystemImportMapper {
 
     /// 用 sourceID 生成确定性 UUID：NSUUID(uuidBytes:) 接收 16 字节
     /// 在 Linux 上没有 NSUUID，用 Foundation.UUID(uuid:) 同样接收 16 字节
-    public static func deterministicUUID(from sourceID: String) -> UUID {
+    nonisolated public static func deterministicUUID(from sourceID: String) -> UUID {
         let bytes = sha1First16Bytes(of: sourceID)
         return UUID(uuid: bytes)
     }
@@ -121,7 +121,7 @@ public enum SystemImportMapper {
     // MARK: - SHA-1（截断到 16 字节）
     // 极简实现：只为生成稳定 UUID，不需要密码学强度；Linux/Foundation 都能跑
 
-    private static func sha1First16Bytes(of input: String) -> (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8) {
+    nonisolated private static func sha1First16Bytes(of input: String) -> (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8) {
         let data = Array(input.utf8)
         let h0: UInt32 = 0x67452301, h1: UInt32 = 0xEFCDAB89
         let h2: UInt32 = 0x98BADCFE, h3: UInt32 = 0x10325476, h4: UInt32 = 0xC3D2E1F0
@@ -165,7 +165,7 @@ public enum SystemImportMapper {
                 bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15])
     }
 
-    private static func leftRotate(_ x: UInt32, by n: UInt32) -> UInt32 {
+    nonisolated private static func leftRotate(_ x: UInt32, by n: UInt32) -> UInt32 {
         (x << n) | (x >> (32 - n))
     }
 }

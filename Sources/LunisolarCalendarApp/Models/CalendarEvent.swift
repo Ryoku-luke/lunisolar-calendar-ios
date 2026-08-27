@@ -85,7 +85,7 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
     public var createdAt: Date
     public var updatedAt: Date
 
-    public init(
+    nonisolated public init(
         id: UUID = UUID(),
         title: String,
         type: EventType = .schedule,

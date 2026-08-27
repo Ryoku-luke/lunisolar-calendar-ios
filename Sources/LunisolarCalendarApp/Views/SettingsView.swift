@@ -166,7 +166,6 @@ struct SettingsView: View {
                     row(icon: "tablecells", text: "导出为 .csv 表格文件")
                 }
 
-                // JSON 全量备份（字段无损：农历生日 / 通知状态 / 创建时间等都保留）
                 Button {
                     exportAsJSONBackup()
                 } label: {
@@ -208,7 +207,6 @@ struct SettingsView: View {
                     }
                     .tint(Color.systemBlue)
 
-                    // 同步状态
                     HStack {
                         Text("同步状态")
                         Spacer()
@@ -217,16 +215,12 @@ struct SettingsView: View {
                             .foregroundStyle(syncStatusColor(co.status))
                     }
 
-                    // 最近一次同步结果
                     if let result = co.lastResult {
                         infoRow(label: "最近同步", value: syncResultSummary(result))
                         infoRow(label: "推送 / 拉取", value: "↑\(result.pushed)  ↓\(result.pulled)")
                     }
 
-                    // 手动同步按钮
                     Button {
-                        // BUG #35 修复：不再用 try? 静默吞错误；错误进入 coordinator.status（行内显示）
-                        // 同时弹一条 toast 给用户即时反馈。
                         Task { @MainActor in
                             do {
                                 _ = try await co.syncBidirectional()
@@ -252,7 +246,6 @@ struct SettingsView: View {
                     }
                     .disabled(!co.isEnabled || isSyncing(co.status))
                 } else {
-                    // CloudKit 不可用（Linux / 未配置容器）
                     HStack {
                         Image(systemName: "icloud.slash")
                             .foregroundStyle(Color.tertiaryLabel)
@@ -288,7 +281,6 @@ struct SettingsView: View {
                 }
                 .disabled(isImportingSystem)
 
-                // 仅当选择联系人时才显示农历 Toggle（日历事件不需要农历规则）
                 if importingSystemSource == .contacts {
                     Toggle(isOn: $importLunarToggle) {
                         Label("联系人生日按农历每年", systemImage: "moon.stars.fill")
@@ -389,81 +381,6 @@ struct SettingsView: View {
                 Text("关于")
             }
         }
-        .formStyle(.grouped)
-        // iPad 宽屏下限制表单宽度
-        .frame(maxWidth: hSizeClass == .regular ? 720 : .infinity)
-        .navigationTitle("设置")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            // 用异步版本避免阻塞主线程
-            notifStatus = await NotificationManager.shared.authorizationStatusAsync()
-        }
-        #if canImport(UniformTypeIdentifiers)
-        .fileImporter(
-            isPresented: $showImportPicker,
-            allowedContentTypes: {
-                switch importingFileType {
-                case .ics:  return [UTType(filenameExtension: "ics") ?? .data]
-                case .json: return [UTType(filenameExtension: "json") ?? .data]
-                }
-            }()
-        ) { result in
-            handleImportResult(result, fileType: importingFileType)
-        }
-        #endif
-        .alert("导入结果", isPresented: $showImportResult) {
-            Button("好") {}
-        } message: {
-            if let r = importedResult {
-                Text(importSummaryText(r))
-            } else {
-                Text("导入完成")
-            }
-        }
-        // 冲突策略确认弹框（用户点导入 → 先确认策略 → 再选文件）
-        .alert("导入前：冲突处理策略", isPresented: $showConflictPolicy) {
-            ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
-                Button(p.title + (p == conflictPolicy ? "（当前）" : "")) {
-                    conflictPolicy = p
-                    showImportPicker = true
-                }
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("当前策略：\(conflictPolicy.title) · \(conflictPolicy.subtitle)\n选完策略后会打开 Files 选择文件。")
-        }
-        // 清空二次确认
-        .alert("确认清空全部事件？", isPresented: $showClearConfirm) {
-            Button("清空全部 \(store.events.count) 条", role: .destructive) {
-                let n = store.clearAll()
-                toast = .init(kind: .success, text: "已清空 \(n) 条事件")
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("此操作不可恢复，强烈建议先点击「全量备份为 .json」导出备份。")
-        }
-        // Toast：导入/备份完成后短暂出现
-        .overlay(alignment: .top) {
-            if let t = toast {
-                ToastBannerView(message: t)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .padding(.top, 12)
-                    .onAppear {
-                        Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 2_200_000_000)
-                            if toast?.id == t.id { toast = nil }
-                        }
-                    }
-            }
-        }
-        #if canImport(UIKit)
-        .sheet(isPresented: $showShareSheet) {
-            if let url = shareURL {
-                ShareSheet(items: [url])
-            }
-        }
-        #endif
-        .animation(.easeInOut(duration: 0.2), value: toast)
     }
 
     // MARK: - 辅助视图
