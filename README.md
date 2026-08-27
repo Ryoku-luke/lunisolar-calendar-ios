@@ -594,6 +594,36 @@ ICloudSyncProvider 协议
 - 同步墓碑新增 30 天 TTL 清理逻辑（避免 `deletedEventIDs` 无限膨胀）
 - `CalendarMonthView.calendarGrid` slotMap 重排：农历/黄历预计算 → cell 轻量渲染
 
+### BUG #36（🔴 编译阻断 · 高）：SettingsView baseForm 与 body 重复 modifier 链导致 SwiftUI 编译器 type-check timeout
+- **文件**: `Sources/LunisolarCalendarApp/Views/SettingsView.swift`
+- **现象**: Xcode 16 构建时报 `The compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions`，定位在 `.alert("导入前：冲突处理策略")` 的 ForEach + 三元表达式行。SettingsView 编译耗时 ~38 秒。
+- **根因**: 前一轮修复只把 `body` 的 ForEach 闭包抽成了 `@ViewBuilder computed property`（`conflictPolicyAlertButtons` / `toastOverlayContent` 等），但 **`baseForm` 里仍然保留了全部相同的 modifier**（`.formStyle` / `.frame` / `.navigationTitle` / `.fileImporter` / 3 个 `.alert` / `.overlay` / `.sheet` / `.animation`）。SwiftUI 编译器 O(n²) 类型推断变成了"先算 baseForm 的 11 层 modifier 链，再算 body 叠加的另一组"——等于做了两遍。
+- **修复**: `baseForm` 只返回**纯** `Form { ... }`，**零 modifier**。全部 11 个 modifier 仅在 `body` 里加一次：`body → baseForm.formStyle.frame.navigationTitle...modifier(ImportFileModifier)...alert.alert.alert.overlay.sheet.animation`。去掉 `baseForm` 里的所有重复 modifier 后，编译器只需一层 O(n²)。
+
+### BUG #37（🟡 Swift 6 并发隔离 · 中）：纯值类型 init/static 方法被 Swift 6 严格模式误判为 MainActor 隔离
+- **文件**: `CalendarEvent.swift` / `ICloudSyncProvider.swift` / `SystemImportBridge.swift`
+- **根因**: Swift 6 Complete concurrency checking 下，只要模块内有任何 SwiftUI 引用（哪怕 `#if canImport(SwiftUI)` 条件编译块），编译器会把纯值类型（Sendable struct）的 init 和纯计算 static 方法错误地推断为 MainActor 隔离。表现为：
+  - `CalendarEvent.init` 在 `nonisolated func SystemImportMapper.toCalendarEvent` 内调用时 → *"Call to main actor-isolated initializer 'CalendarEvent.init' in a synchronous nonisolated context"*
+  - `SyncRecord.init` 在 `@globalActor MockCloudKitStore.markDeleted` 内调用时 → *"Call to main actor-isolated initializer 'SyncRecord.init' in a synchronous actor-isolated context"*
+  - `SystemImportMapper.deterministicUUID(from:)` / `sha1First16Bytes` / `leftRotate` 三个纯计算 static 方法同样被标记。
+- **修复**: 显式给这些 init 和纯计算方法加 `nonisolated` 关键字。`nonisolated` 是 Swift 5.9+ 引入的，允许把 Sendable 类型的 API 从隐式隔离中"解绑"出来。改动清单：
+  - `CalendarEvent.init` → `nonisolated public init`
+  - `SyncRecord.init` → `nonisolated public init`
+  - `SyncRecord.eventRecord(for:...)` → `nonisolated public static func`
+  - `SyncRecord.decodedEvent()` → `nonisolated public func`
+  - `SystemImportMapper.deterministicUUID(from:)` / `sha1First16Bytes` / `leftRotate` → `nonisolated`
+
+### BUG #38（🟡 CloudKit API 废弃警告 · 中）：CKModifyRecordsOperation.perRecordCompletionBlock 在 iOS 15+ 已废弃
+- **文件**: `Sources/LunisolarCalendarApp/Sync/RealCloudKitProvider.swift`
+- **根因**: `saveBatch` 和 `deleteBatch` 两处使用了 `op.perRecordCompletionBlock = { record, error in ... }`（iOS 14 引入，iOS 15 废弃）。新的 `perRecordResultBlock` 提供 `(CKRecord.ID, Result<CKRecord, Error>)`，语义更清晰：Result 直接携带错误，闭包回调里不再需要 `if let error = error` 来判断成功/失败。
+- **修复**: 两处统一改为 `op.perRecordResultBlock = { recordID, result in switch result { case .success(let record): ... case .failure(let error): ... } }`，保持 per-record 错误统计逻辑不变。
+
+### 性能 & 稳定性微调（之前）
+- `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
+- `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）
+- 同步墓碑新增 30 天 TTL 清理逻辑（避免 `deletedEventIDs` 无限膨胀）
+- `CalendarMonthView.calendarGrid` slotMap 重排：农历/黄历预计算 → cell 轻量渲染
+
 ## 📄 License
 
 MIT
