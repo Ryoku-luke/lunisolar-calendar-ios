@@ -634,6 +634,17 @@ ICloudSyncProvider 协议
   2. 更致命：`JSONEncoder.encode(event)` 调用 `CalendarEvent` 的 `Encodable` 协议方法（`encode(to:)`），而 Swift 6 把整个 `Codable` conformance 也级联隔离到了 MainActor
 - **修复**: 把 `static let` 改成 **`nonisolated static func encoder() -> JSONEncoder`** / **`nonisolated static func decoder() -> JSONDecoder`**。`JSONEncoder`/`JSONDecoder` 是线程安全的值类型，每次新构造一个完全 OK（同步调用，微秒级开销）。调用点从 `SyncCoders.encoder` 改成 `SyncCoders.encoder()`，从 `SyncCoders.decoder` 改成 `SyncCoders.decoder()`。关键：**函数的返回值不继承函数自身的隔离性**，所以 `encode(event)` 里 `CalendarEvent` 的 Encodable conformance 也能正常被 nonisolated 上下文使用。
 
+### BUG #41（🔴 运行时崩溃 · 高）：App 启动无条件调用 CKContainer.default() — entitlement 缺失时 EXC_BREAKPOINT
+- **文件**: `Sources/LunisolarCalendarApp/App/LunisolarCalendarApp.swift` — `setupCloudSyncIfNeeded()`
+- **现象**: Xcode Simulator 上直接运行 App → `EXC_BREAKPOINT (code=1)` 崩溃，定位在 `RealCloudKitProvider.init` 的 `self.container = .default()` 行。Xcode console 提示：*"com.apple.developer.icloud-services entitlement must include CloudKit"*。
+- **根因**: `setupCloudSyncIfNeeded()` 里**无条件**执行 `let provider = RealCloudKitProvider()` → 触发 `CKContainer.default()`。CloudKit entitlement 缺失时（这是 iOS Simulator 的常态 —— 需要手动在 Xcode Signing & Capabilities 里配置 CloudKit + iCloud），`CKContainer.default()` 的内部检查会触发 **`fatalError` 级别的 EXC_BREAKPOINT**。Swift 的 `try/catch` 无法捕获 fatalError（它不是普通 throwable error），所以整个 App 进程直接终止。
+- **修复**: **延迟装配（Lazy Setup）**：
+  1. `setupCloudSyncIfNeeded()` 启动时**只读 UserDefaults**（内存操作，不触碰任何 CloudKit API）。如果 UserDefaults 里 `sync.enabled == false`（默认值），**直接 return**，不创建任何 CloudKit 相关对象。
+  2. 只有 UserDefaults 里记录过"上次是 enabled"时才尝试装配，且用 `do/catch` 包裹（此时失败是可恢复的，只是静默降级）。
+  3. SettingsView 里新增 `enableSyncForFirstTime()` —— 用户**主动点 Toggle** 时才创建 `RealCloudKitProvider` + `EventSyncCoordinator`。此时如果 entitlement 缺失，`isAvailable` 返回 false → toast 提示 "iCloud 不可用：请登录 iCloud 并检查 entitlement 配置"，而不是启动就崩。
+  4. SettingsView 的 Toggle 分两种状态：`store.syncCoordinator != nil` 时显示完整同步控制（开关/状态/立即同步）；`nil` 时显示"未启用"状态但 Toggle 仍然可点，触发 `enableSyncForFirstTime()`。这样 SettingsView 本身也**不依赖** App 入口预先装配好 coordinator。
+- **教训**: CloudKit 是 Apple 平台上最容易引发"启动即崩"的 API —— 任何涉及 `CKContainer`/`CKDatabase` 的代码**绝不能放在 App 启动路径上**。正确姿势是：延迟到用户明确触发的操作里创建，并在创建后第一时间用 `accountStatus()` / `isAvailable` 探测。
+
 ### 性能 & 稳定性微调（之前）
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
 - `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）

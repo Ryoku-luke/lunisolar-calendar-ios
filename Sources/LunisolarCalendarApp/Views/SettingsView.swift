@@ -198,6 +198,7 @@ struct SettingsView: View {
 
             // MARK: - iCloud 同步
             Section {
+                #if canImport(CloudKit)
                 if let co = store.syncCoordinator {
                     Toggle(isOn: Binding(
                         get: { co.isEnabled },
@@ -245,13 +246,38 @@ struct SettingsView: View {
                     }
                     .disabled(!co.isEnabled || isSyncing(co.status))
                 } else {
+                    // 首次开启：App 启动路径不触碰 CloudKit API（防 entitlement 缺失崩溃）
+                    // 等用户主动点 Toggle 时才创建 RealCloudKitProvider
+                    Toggle(isOn: Binding(
+                        get: { false },
+                        set: { newVal in
+                            if newVal {
+                                Task { @MainActor in
+                                    await enableSyncForFirstTime()
+                                }
+                            }
+                        }
+                    )) {
+                        Label("启用 iCloud 同步", systemImage: "icloud.slash")
+                    }
+                    .tint(Color.systemBlue)
+
                     HStack {
-                        Image(systemName: "icloud.slash")
-                            .foregroundStyle(Color.tertiaryLabel)
-                        Text("iCloud 同步不可用")
+                        Text("同步状态")
+                        Spacer()
+                        Text("未启用")
+                            .font(.subheadline)
                             .foregroundStyle(Color.secondaryLabel)
                     }
                 }
+                #else
+                HStack {
+                    Image(systemName: "icloud.slash")
+                        .foregroundStyle(Color.tertiaryLabel)
+                    Text("iCloud 同步不可用（当前平台未编译 CloudKit）")
+                        .foregroundStyle(Color.secondaryLabel)
+                }
+                #endif
             } header: {
                 Text("iCloud 同步")
             } footer: {
@@ -568,13 +594,37 @@ struct SettingsView: View {
 
     // MARK: - iCloud 同步辅助
 
+    /// 首次开启 iCloud 同步 —— 延迟创建 RealCloudKitProvider，避免 App 启动时
+    /// 在没有 CloudKit entitlement 的模拟器/设备上触发 fatalError（EXC_BREAKPOINT）。
+    @MainActor
+    private func enableSyncForFirstTime() async {
+        #if canImport(CloudKit)
+        do {
+            let provider = RealCloudKitProvider()
+            let available = await provider.isAvailable
+            guard available else {
+                toast = .init(kind: .error, text: "iCloud 不可用：请登录 iCloud 并检查 entitlement 配置")
+                return
+            }
+            let coordinator = EventSyncCoordinator(eventStore: store, provider: provider)
+            coordinator.isEnabled = true
+            store.syncCoordinator = coordinator  // EventStore 是 @Observable，赋值自动触发 UI 刷新
+            UserDefaults.standard.set(true, forKey: "Lunisolar.sync.enabled")
+            // 首次同步
+            _ = try await coordinator.syncBidirectional()
+            toast = .init(kind: .success, text: "iCloud 同步已开启")
+        } catch {
+            print("[SettingsView] 首次开启 iCloud 同步失败：\(error)")
+            toast = .init(kind: .error, text: "iCloud 同步开启失败")
+        }
+        #endif
+    }
+
     @MainActor
     private func handleSyncToggle(_ co: EventSyncCoordinator, enabled: Bool) {
         co.isEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: "Lunisolar.sync.enabled")
         if enabled {
-            // 开启 → 立即触发一次双向同步
-            // BUG #35 修复：不再 try? 静默吞；失败在控制台打印，便于排查（coordinator.status 行内也会变红）
             Task { @MainActor in
                 do {
                     _ = try await co.syncBidirectional()
