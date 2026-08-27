@@ -102,7 +102,6 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
         self.title = title
         self.type = type
         self.startDate = startDate
-        // 确保 endDate > startDate：用户直接传 endDate 早于 startDate 时自动兜底
         let requestedEnd = endDate ?? startDate.addingTimeInterval(3600)
         if requestedEnd <= startDate {
             let fallback: TimeInterval = isAllDay ? 86399 : 3600
@@ -122,10 +121,9 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
     }
 
     public func occurs(on date: Date) -> Bool {
-        let cal = Calendar.current
+        let cal = Calendar(identifier: .gregorian)
         let target = cal.startOfDay(for: date)
         let start = cal.startOfDay(for: startDate)
-
         switch repeatRule {
         case .never:
             return target == start
@@ -147,12 +145,6 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
             let sm = cal.dateComponents([.month, .day], from: start)
             return target >= start && tm.month == sm.month && tm.day == sm.day
         case .lunarAnnually:
-            // 农历每年重复：匹配农历月日（父母生日、传统节日等）
-            // 民俗处理：
-            // - 起始是平月：要求 target 也是平月 + 同月同日（避免闰月罕见触发"多一次"）
-            // - 起始是闰月（闰五月初五）：只要求同月同日（五月初五 或 闰五月初五 都命中，保证每年至少一次）
-            // 日期门槛比较统一使用 startOfDay 归一化（和 never/daily/weekly/monthly/yearly 保持一致），
-            // 避免"起锚20:00的事件当天上午查不到"的一致性 BUG（BUG #1）。
             let targetLunar = ChineseCalendar.lunarDateSafe(from: date)
             let startLunar = ChineseCalendar.lunarDateSafe(from: startDate)
             guard let tl = targetLunar, let sl = startLunar else { return false }
@@ -173,24 +165,22 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
         return "\(fmt.string(from: startDate)) - \(fmt.string(from: endDate))"
     }
 
-    // MARK: - 重复规则文本（列表/详情页显示 + 编辑页锚点提示）
-
-    /// 事件行右侧小标签：「每天」「农历正月十五·每年」等
     public var repeatRuleLabel: String {
+        let cal = Calendar(identifier: .gregorian)
         switch repeatRule {
         case .never:      return ""
         case .daily:      return "每天"
         case .workday:    return "每个工作日"
         case .weekly:
-            let weekday = Calendar.current.component(.weekday, from: startDate)
+            let weekday = cal.component(.weekday, from: startDate)
             let names = ["周日","周一","周二","周三","周四","周五","周六"]
             let idx = max(0, min(6, weekday - 1))
             return "每周\(names[idx])"
         case .monthly:
-            let day = Calendar.current.component(.day, from: startDate)
+            let day = cal.component(.day, from: startDate)
             return "每月\(day)日"
         case .yearly:
-            let c = Calendar.current.dateComponents([.month, .day], from: startDate)
+            let c = cal.dateComponents([.month, .day], from: startDate)
             let m = max(1, c.month ?? 1)
             let d = max(1, c.day ?? 1)
             return "公历 \(m)月\(d)日 · 每年"
@@ -202,9 +192,8 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
         }
     }
 
-    /// 编辑页底部详细提示（解释当前重复规则的锚点日期）
     public static func repeatAnchorDescription(rule: RepeatRule, anchor: Date) -> String {
-        let cal = Calendar.current
+        let cal = Calendar(identifier: .gregorian)
         switch rule {
         case .never:
             return "仅在所选日期出现一次"
@@ -236,6 +225,8 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
 
     private static func dateShort(_ d: Date) -> String {
         let fmt = DateFormatter()
+        fmt.calendar = Calendar(identifier: .gregorian)
+        fmt.locale = Locale(identifier: "zh_CN_POSIX")
         fmt.dateFormat = "yyyy/M/d"
         return fmt.string(from: d)
     }
@@ -243,7 +234,6 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
 
 #if canImport(SwiftUI)
 import SwiftUI
-
 extension EventType {
     var tintColor: Color {
         switch self {
@@ -253,7 +243,6 @@ extension EventType {
         }
     }
 }
-
 extension Priority {
     var tintColor: Color {
         switch self {
