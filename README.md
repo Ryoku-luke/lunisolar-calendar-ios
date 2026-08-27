@@ -613,10 +613,10 @@ ICloudSyncProvider 协议
   - `SyncRecord.decodedEvent()` → `nonisolated public func`
   - `SystemImportMapper.deterministicUUID(from:)` / `sha1First16Bytes` / `leftRotate` → `nonisolated`
 
-### BUG #38（🟡 CloudKit API 废弃警告 · 中）：CKModifyRecordsOperation.perRecordCompletionBlock 在 iOS 15+ 已废弃
-- **文件**: `Sources/LunisolarCalendarApp/Sync/RealCloudKitProvider.swift`
-- **根因**: `saveBatch` 和 `deleteBatch` 两处使用了 `op.perRecordCompletionBlock = { record, error in ... }`（iOS 14 引入，iOS 15 废弃）。新的 `perRecordResultBlock` 提供 `(CKRecord.ID, Result<CKRecord, Error>)`，语义更清晰：Result 直接携带错误，闭包回调里不再需要 `if let error = error` 来判断成功/失败。
-- **修复**: 两处统一改为 `op.perRecordResultBlock = { recordID, result in switch result { case .success(let record): ... case .failure(let error): ... } }`，保持 per-record 错误统计逻辑不变。
+### BUG #38（🟡 CloudKit API 废弃警告 · 中）：CKModifyRecordsOperation.perRecordCompletionBlock 在 iOS 15+ 已废弃（但无替代）
+- **文件**: `Sources/LunisolarCalendarApp/Sync/RealCloudKitProvider.swift` — `saveBatch` / `deleteBatch`
+- **根因**: `CKModifyRecordsOperation.perRecordCompletionBlock`（iOS 14）在 iOS 15 被标记废弃。但这是 **CloudKit API 设计的已知局限**：**`CKModifyRecordsOperation` 是所有 CloudKit operation 中唯一没有 Result-based per-record block 的类型**。`perRecordResultBlock` 只存在于 `CKFetchRecordsOperation` 和 `CKQueryOperation`，`CKModifyRecordsOperation` 上根本没有这个属性。
+- **修复**: 必须继续使用 `perRecordCompletionBlock`（`(CKRecord?, Error?)` 签名），在两处调用点上方加注释说明 CloudKit 的 API 局限。运行时行为完全正确，只是 Xcode 16 会弹 deprecated 警告，可接受（Apple 未来可能补齐这个 API）。
 
 ### 性能 & 稳定性微调（之前）
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
