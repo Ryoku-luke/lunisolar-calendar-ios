@@ -51,15 +51,16 @@ extension Color {
 }
 
 // MARK: - 屏幕尺寸辅助 (跨平台)
+// Swift 6 / iOS 26：UIScreen.main 被废弃（多 Scene 场景下不可靠）
+// 这里只做 fallback，真实 app 中应该从 View 的 windowScene 获取。
 
 enum ScreenHelper {
-    static var width: CGFloat {
-        #if canImport(UIKit)
-        return UIScreen.main.bounds.width
-        #else
-        return 390 // iPhone 15 尺寸默认
-        #endif
-    }
+    #if canImport(UIKit)
+    @available(iOS, deprecated: 26.0, message: "Use view.window?.windowScene?.screen instead")
+    static var width: CGFloat { UIScreen.main.bounds.width }
+    #else
+    static var width: CGFloat { 390 }
+    #endif
 }
 
 #endif

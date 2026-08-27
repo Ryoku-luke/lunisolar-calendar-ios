@@ -192,31 +192,31 @@ public final class MockCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     // MARK: - 测试辅助（非协议方法，Mock 专属 API）
 
     /// 云端当前记录数
-    @MainActor
+    nonisolated
     public func serverRecordCount() async -> Int {
         await store.count
     }
 
     /// 云端是否有某 record
-    @MainActor
+    nonisolated
     public func serverContains(id: String) async -> Bool {
         await store.contains(id)
     }
 
     /// 取某条 server 记录
-    @MainActor
+    nonisolated
     public func serverGet(id: String) async -> SyncRecord? {
         await store.get(id)
     }
 
     /// 直接在"云端"注入一条记录（模拟其它设备写了云端）
-    @MainActor
+    nonisolated
     public func injectServerRecord(_ rec: SyncRecord) async {
         _ = await store.upsert(rec)
     }
 
     /// 重置 Mock 全局云端（单测 tearDown 用）
-    @MainActor
+    nonisolated
     public static func resetGlobalStore() async {
         await MockCloudKitStore.shared.reset()
     }
