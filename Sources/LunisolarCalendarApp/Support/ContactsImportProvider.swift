@@ -68,7 +68,9 @@ public struct ContactsImportProvider: SystemImportProviding {
         let request = CNContactFetchRequest(keysToFetch: keys)
         var results: [SystemImportEvent] = []
 
-        let didEnumerate = self.store.enumerateContacts(with: request) { contact, _ in
+        // Swift 6 / iOS 18：enumerateContacts 返回 Void（不再是 Bool），
+        // 且内部失败会通过 throws 传递。用 try? 静默忽略（权限已在上方 requestAuthorization 处理）。
+        try? self.store.enumerateContacts(with: request) { contact, _ in
             let name = [contact.givenName, contact.familyName]
                 .filter { !$0.isEmpty }
                 .joined(separator: " ")
@@ -92,9 +94,6 @@ public struct ContactsImportProvider: SystemImportProviding {
                 }
             }
         }
-        if !didEnumerate {
-            // enumerate 返回 false 通常意味着权限/通讯录受限
-        }
 
         return results
     }
@@ -106,12 +105,14 @@ public struct ContactsImportProvider: SystemImportProviding {
         name: String,
         dateComponents: DateComponents
     ) -> SystemImportEvent? {
-        guard dateComponents.month > 0, dateComponents.day > 0 else { return nil }
+        // CNContact.birthday 返回 DateComponents，month/day/year 都是可选 Int?
+        guard let month = dateComponents.month, month > 0,
+              let day = dateComponents.day, day > 0 else { return nil }
         let cal = Calendar(identifier: .gregorian)
-        let year = dateComponents.year > 0 ? dateComponents.year : 1900
+        let year = (dateComponents.year ?? 0) > 0 ? dateComponents.year! : 1900
         guard let s = cal.date(from: DateComponents(year: year,
-                                                    month: dateComponents.month,
-                                                    day: dateComponents.day,
+                                                    month: month,
+                                                    day: day,
                                                     hour: 9)) else { return nil }
         return SystemImportEvent(
             sourceID: "contact-birthday:\(contactID)",
