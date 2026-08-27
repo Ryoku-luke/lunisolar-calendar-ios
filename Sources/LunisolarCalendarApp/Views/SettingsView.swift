@@ -135,7 +135,20 @@ struct SettingsView: View {
 
                     // 手动同步按钮
                     Button {
-                        Task { _ = try? await co.syncBidirectional() }
+                        // BUG #35 修复：不再用 try? 静默吞错误；错误进入 coordinator.status（行内显示）
+                        // 同时弹一条 toast 给用户即时反馈。
+                        Task { @MainActor in
+                            do {
+                                _ = try await co.syncBidirectional()
+                            } catch {
+                                print("[SettingsView] 立即同步失败：\(error)")
+                                toast = .init(
+                                    style: .error,
+                                    text: "同步失败：\(syncErrorBrief(error))",
+                                    duration: 3.0
+                                )
+                            }
+                        }
                     } label: {
                         HStack {
                             Image(systemName: "arrow.triangle.2.circlepath")
@@ -555,7 +568,14 @@ struct SettingsView: View {
         UserDefaults.standard.set(enabled, forKey: "Lunisolar.sync.enabled")
         if enabled {
             // 开启 → 立即触发一次双向同步
-            Task { _ = try? await co.syncBidirectional() }
+            // BUG #35 修复：不再 try? 静默吞；失败在控制台打印，便于排查（coordinator.status 行内也会变红）
+            Task { @MainActor in
+                do {
+                    _ = try await co.syncBidirectional()
+                } catch {
+                    print("[SettingsView] 开启同步后首次同步失败：\(error)")
+                }
+            }
         }
     }
 
@@ -589,6 +609,12 @@ struct SettingsView: View {
         case .rateLimited: return "请求过频"
         case .unknown: return "未知错误"
         }
+    }
+
+    /// 通用 Error 过载：优先转 SyncError 给精确文案；否则回退 localizedDescription
+    private func syncErrorBrief(_ e: Error) -> String {
+        if let se = e as? SyncError { return syncErrorBrief(se) }
+        return e.localizedDescription
     }
 
     private func syncResultSummary(_ r: SyncResult) -> String {

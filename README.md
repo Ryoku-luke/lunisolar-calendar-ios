@@ -530,6 +530,64 @@ ICloudSyncProvider 协议
   - `dateComponents.month != nil` → `dateComponents.month > 0`
   - `dateComponents.year ?? 1900` → `dateComponents.year > 0 ? dateComponents.year : 1900`
 
+### BUG #30（🔴 逻辑漏洞 · 高）：重复规则使用 `Calendar.current` 导致非公历系统环境下匹配错误
+- **文件**: `Sources/LunisolarCalendarApp/Models/CalendarEvent.swift`
+- **根因**: `CalendarEvent.occurs(on:)`、`repeatRuleLabel`、`repeatAnchorDescription(rule:anchor:)`、`dateShort(_:)` 四处均使用 `Calendar.current`（跟随用户的系统日历设置）解释"每月 X 号/每周三/每年 X 月 X 日"。当用户系统日历为伊斯兰历（回历）、佛历、和历（日本元号）、藏历时，`.month`/`.day`/`.weekday` 分量和公历 **数值不一致**——用户在公历锚点日创建的"每月5号重复"事件，在伊斯兰历下会被理解成"伊斯兰历每月5号"，重复日完全错配。
+- **影响**: 非东亚以外的海外华人（尤其使用回历/佛历/希伯来历系统设置的用户）以及多语言切换场景下，重复事件漏提醒或错提醒。
+- **修复**: 把以上 4 处的 `Calendar.current` 统一改为 `Calendar(identifier: .gregorian)`。语义约定：本 App 的"每天/每周/每月/每年"一律按 **公历** 解释（农历每年重复走单独分支 `lunarAnnually`，已经使用独立的农历转换逻辑）。同时 `dateShort` 固定 `Locale(identifier: "zh_CN_POSIX")` 输出，避免和历/佛历的纪元年份乱码。
+
+### BUG #31（🔴 类型截断 · 中）：`lastSyncMs` / `versionMap` 在 UserDefaults 中用 `Int` 持久化，32 位平台会溢出
+- **文件**: `Sources/LunisolarCalendarApp/Sync/EventSyncCoordinator.swift`
+- **根因**: 
+  1. `lastSyncMs: Int64` setter 里 `defaults.set(Int(newValue), forKey: lastSyncKey)`。当前 `Date().timeIntervalSince1970 * 1000 ≈ 1.76e12 ms`，远超 32-bit `Int.max = 2.1e9`。在 32-bit Apple 芯片（iPhone 5/5c 等 32-bit iOS 设备）或 32-bit Linux 上，`Int(newValue)` 会在编译时/运行时溢出，导致 `lastSyncMs` 读出为负数或极小值，进而 `pull(sinceMs:)` 把所有云端记录当成"增量"永久重拉。
+  2. `persistVersionMap` 用 `Int(clamping: $0)` 把 `Int64` 版本号压缩成 `Int`，再 `defaults.set(dict, forKey: versionTrackingKey)`。如果某事件被 push 超过 21 亿次（理论值），版本号被 clamp 到 `Int.max`，此后本地与云端版本都会被夹到相同值，last-write-wins 失效。
+- **修复**:
+  1. `lastSyncMs` 持久化改为位拆分：`Int64` 高低各 32-bit 半字分别写入两个 UserDefaults key（`lo` / `hi`），读回时用 `UInt64(hi) << 32 | UInt64(lo)` 拼回；用 `UInt(truncatingIfNeeded:)` 适配平台字长的 `Int(bitPattern:)`，32/64-bit 都不丢位。
+  2. `persistVersionMap` 改为 `JSONEncoder().encode(versionMap)` → `Data` 写入 UserDefaults，完全无损。新增 `loadVersionMap()` 方法优先 JSON 解码，解码失败则回退旧的 `[String: Int]` 字典格式（向后兼容已经持久化的旧数据）。`resetSyncMetadata()` 同步删除 lo/hi 两个 key，避免残留。
+
+### BUG #32（🔴 逻辑漏洞 · 高）：一次性提醒 `UNCalendarNotificationTrigger` + `Calendar.current` → 非公历环境下错期提醒
+- **文件**: `Sources/LunisolarCalendarApp/Support/NotificationManager.swift`
+- **根因**: `scheduleNotification(for:)` 用 `Calendar.current.dateComponents([.year,.month,.day,.hour,.minute], from: event.startDate)` 取得分量后直接喂给 `UNCalendarNotificationTrigger(dateMatching:comps:repeats:false)`。当用户系统日历是伊斯兰历、佛历、和历时，同一时刻 `event.startDate`（绝对时间点）对应的 `.year/.month/.day` 分量和公历 **完全不同**（伊斯兰历现在的"年"比公历早约 600 年；佛历则晚约 543 年）。`UNCalendarNotificationTrigger` 会按这些"错误的"年/月/日去匹配未来下一个满足的日期 → 国庆 9 点提醒变成"佛历 2568 年某个月的 1 号 9 点"才响，完全错配。
+- **影响**: 所有非东亚系统日历环境的海外华人（尤其使用回历/佛历/希伯来历系统设置的用户）或临时切换过日历的用户，一次性提醒完全不响或在离谱的日期响。
+- **修复**: 一次性提醒不再使用 `UNCalendarNotificationTrigger`（日历语义触发器），改回 `UNTimeIntervalNotificationTrigger(timeInterval:sinceNow)`（绝对时间差触发器），直接用 `event.startDate.timeIntervalSinceNow` 作为间隔，完全不依赖本地 Calendar 设置；并在 `interval <= 0` 时提前 return，避免 iOS 强制要求 >0 的断言崩溃。
+
+### BUG #33（🔴 逻辑漏洞 · 高）：月视图网格 + 头标题 + 翻月依赖 `Calendar.current` → 非公历环境下月视图结构全面错乱
+- **文件**: `Sources/LunisolarCalendarApp/Models/LunarDate.swift`（Date 扩展）、`Sources/LunisolarCalendarApp/Views/CalendarMonthView.swift`
+- **根因**:
+  1. `CalendarMonthView` 初始化 `currentMonth = Date().firstDayOfMonth`、翻月 `addingMonths(±1)`、网格 `firstDayOfMonth / weekday / daysInMonth / addingDays`、标题 `year / month` 全部用的是跟随系统日历的 Date 扩展。
+  2. 如果用户系统日历是伊斯兰历（354 天/年，每月 29/30 天，闰月规则完全不同）：
+     - 月标题显示的"年/月"不是公历，用户不知所云；
+     - `daysInMonth` 返回 29 或 30 而不是公历的 28/30/31；
+     - `firstDayOfMonth` 的 `.weekday` 偏移不是公历月首日的周几 → 6×7 月历网格整体错位；
+     - 更严重的是：`ChineseCalendar.lunarDate(from:)` / `HuangliGenerator.generate(for:)` 的查表/算法内部锚定了公历 1900-01-31，但月视图传入的 slot date 已经被"伊斯兰历加减天/月"扭曲到了另一个公历日期 → 农历日和宜忌与卡片上的日期完全对不上号。
+- **修复**:
+  1. 在 `LunarDate` 的 `Date` 扩展中新增一套 `gregorianXxx` 语义工具方法：`gregorianFirstDayOfMonth`、`gregorianDaysInMonth`、`gregorianAddingDays/Months`、`gregorianYear/Month/Day/Weekday`，内部固定 `Calendar(identifier: .gregorian)`，并附注释说明"凡涉及月视图结构 / 农历查表 / 黄历计算"统一使用这套 API。
+  2. `CalendarMonthView` 内所有月视图结构/标题计算（初始化、今天跳转、头标题年月、左右翻月、`daysForMonth()` 网格生成）全面替换为 `gregorianXxx` 系列；保留 `isToday` / `weekdaySymbol` / `isSameDay(as:)` 跟随系统日历（这些是 UI 层"今日"概念的展示语义，应和系统一致）。
+
+### BUG #34（🟠 代码规范 · 中）：EventStore 中 4 处 `!` 强制解包依赖 `||` 短路，可读性差、易被后续维护改坏
+- **文件**: `Sources/LunisolarCalendarApp/Stores/EventStore.swift`
+- **根因**: 4 处强制解包全部走"前置判 nil + `||` 短路求值"模式：
+  - `docs == nil || !FileManager.default.fileExists(atPath: docs!.path)` → 判 `docs` 为路径非空
+  - `baseDir = docs!` → 紧接上条后强解
+  - `widgetAppGroupID == nil || widgetAppGroupID!.isEmpty` → DEBUG 告警
+  - `best == nil || ev.priority > best!` → 求最高优先级
+  这些代码**当前确实**不会触发崩溃（因为 Swift 的 `||` 严格从左到右短路），但对新加入的维护者非常不友好：如果有人把 `||` 左右互换、或抽取成中间变量、甚至替换成 `&&` 重构，`!` 就会立刻解包到 nil 产生 hard crash，属于"定时炸弹"。
+- **修复**:
+  1. `docs` 路径判空改用 `if let unwrapped = docs, !FileManager... { docs = nil }` 再配合 `?? NSTemporaryDirectory()` 兜底，全程零强制解包；
+  2. `widgetAppGroupID` 空判断改成 `widgetAppGroupID?.isEmpty ?? true` 的标准可选链；
+  3. `best` 最高优先级比较改成 `switch (best, ev.priority)` 的模式匹配写法，语义更清晰且零 `!`。
+
+### BUG #35（🔵 用户体验 · 低）：SettingsView 同步按钮和开关启用后的同步调用用 `try? await` 静默吞错
+- **文件**: `Sources/LunisolarCalendarApp/Views/SettingsView.swift`
+- **根因**: 两处调用 `Task { _ = try? await co.syncBidirectional() }`：
+  1. 点击"立即同步"按钮；
+  2. 打开 iCloud 同步开关后自动触发首次同步。
+  `try?` 直接丢弃 `Error`，用户看不到任何 UI 反馈（虽然 `co.status` 内部会记录 `.failed` 并在行内文字上变色，但按钮本身是无状态的，用户可能重复点很多次都不知道已经失败了）。
+- **修复**:
+  1. "立即同步"按钮：`do/catch` 显式捕获错误 → 控制台打印排查 + 通过已有的 `toast` 状态（`.error` 样式 + 3s duration）弹出用户可见的"同步失败：xxx"提示；
+  2. 开关首次同步：`do/catch` 至少在控制台打印错误（避免打断用户开启开关的操作流，但要有日志排障线索）；
+  3. 为 `syncErrorBrief` 新增通用 `Error` 过载：优先 `as? SyncError` 走精确文案，否则回退 `localizedDescription`，保持 toast 文案准确。
+
 ### 性能 & 稳定性微调
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
 - `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）

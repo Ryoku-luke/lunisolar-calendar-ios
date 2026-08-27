@@ -73,10 +73,15 @@ public final class EventStore {
         } else {
             let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
             var docs = paths.first
-            if docs == nil || !FileManager.default.fileExists(atPath: docs!.path) {
+            // BUG #34 修复：用可选绑定替代短路 + docs! 强制解包，避免后续条件重构误改短路顺序导致崩溃
+            if let unwrapped = docs,
+               !FileManager.default.fileExists(atPath: unwrapped.path) {
+                docs = nil
+            }
+            if docs == nil {
                 docs = URL(fileURLWithPath: NSTemporaryDirectory())
             }
-            baseDir = docs!
+            baseDir = docs ?? URL(fileURLWithPath: NSTemporaryDirectory())
         }
         self.saveURL = baseDir.appendingPathComponent("calendar_events.json")
         self.dirtyIDsURL = baseDir.appendingPathComponent("dirty_event_ids.json")
@@ -96,7 +101,8 @@ public final class EventStore {
         if storageBaseDir == nil {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                if self.widgetAppGroupID == nil || self.widgetAppGroupID!.isEmpty {
+                // BUG #34 修复：用 isEmpty(orNil:) 思路的可选链替代短路 + ! 强制解包
+                if (self.widgetAppGroupID?.isEmpty ?? true) {
                     #if canImport(UIKit)
                     print("[EventStore] ⚠️  widgetAppGroupID 未设置——若使用 Widget Extension，"
                         + "请在 App 启动时给 EventStore.shared.widgetAppGroupID 赋值你的 App Group ID。")
@@ -257,8 +263,11 @@ public final class EventStore {
         for ev in events {
             if ev.occurs(on: date) {
                 has = true
-                if best == nil || ev.priority > best! {
-                    best = ev.priority
+                // BUG #34 修复：用标准可选比较模式替代短路 + best! 强制解包
+                switch (best, ev.priority) {
+                case (nil, let p):          best = p
+                case (.some(let cur), let p) where p > cur: best = p
+                default: break
                 }
             }
         }
