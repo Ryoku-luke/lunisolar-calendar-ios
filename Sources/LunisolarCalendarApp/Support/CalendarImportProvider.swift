@@ -62,20 +62,21 @@ public struct CalendarImportProvider: SystemImportProviding {
     // MARK: - EKEvent → SystemImportEvent
 
     private func map(_ ek: EKEvent) -> SystemImportEvent {
+        // EKEvent.recurrenceRules 是复数数组 [EKRecurrenceRule]?；取第一条匹配
         let rule: RepeatRule
-        if let r = ek.recurrenceRule {
-            switch r.frequency {
+        if let firstRR = ek.recurrenceRules?.first {
+            switch firstRR.frequency {
             case .daily:   rule = .daily
             case .weekly:   rule = .weekly
             case .monthly:  rule = .monthly
             case .yearly:   rule = .yearly
-            default:        rule = .never
+            @unknown default: rule = .never
             }
         } else {
             rule = .never
         }
         return SystemImportEvent(
-            sourceID: "ek:\(ek.eventIdentifier)",
+            sourceID: "ek:\(ek.eventIdentifier ?? ek.calendarItemIdentifier)",
             title: ek.title ?? "（无标题）",
             startDate: ek.startDate,
             endDate: ek.endDate,
