@@ -87,7 +87,7 @@ public enum SystemImportMapper {
 
     /// 把 sourceID 映射成确定性 UUID（基于 sourceID 的 SHA-1 前 16 字节 → UUID）
     /// 这样同一条系统事件多次导入都走 merge 的"同 id 更新"分支，不会重复
-    public static func toCalendarEvent(_ dto: SystemImportEvent) -> CalendarEvent {
+    public nonisolated static func toCalendarEvent(_ dto: SystemImportEvent) -> CalendarEvent {
         let uuid = deterministicUUID(from: dto.sourceID)
         var ev = CalendarEvent(
             id: uuid,
@@ -107,7 +107,7 @@ public enum SystemImportMapper {
     }
 
     /// 批量映射并过滤无效项（标题空 / endDate<=startDate 由 EventStore.merge 再兜底）
-    public static func toCalendarEvents(_ dtos: [SystemImportEvent]) -> [CalendarEvent] {
+    public nonisolated static func toCalendarEvents(_ dtos: [SystemImportEvent]) -> [CalendarEvent] {
         dtos.map(toCalendarEvent)
     }
 

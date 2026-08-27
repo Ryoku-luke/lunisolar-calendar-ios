@@ -38,20 +38,20 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     /// Zone 是否已确认存在（避免每次同步都 fetch zone）
     private var zoneEnsured = false
     /// 防止 ensureZoneExists 并发重入
-    private let zoneLock = NSLock()
+    private let zoneQueue = DispatchQueue(label: "lunisolar.zoneLock")
 
     // MARK: - accountStatus 会话级缓存（10s TTL，避免双向同步内 3 次重复 IPC）
 
-    private let availabilityCacheLock = NSLock()
+    private let availabilityCacheQueue = DispatchQueue(label: "lunisolar.availabilityCacheLock")
     private var cachedAvailability: Bool?
     private var cachedAvailabilityAt: TimeInterval = 0
     private let availabilityCacheTTL: TimeInterval = 10  // 10 秒内复用结果
     /// 账户状态切换时（设置里登出/登入 iCloud）外部可主动清缓存
     public func invalidateAvailabilityCache() {
-        availabilityCacheLock.lock()
-        defer { availabilityCacheLock.unlock() }
-        cachedAvailability = nil
-        cachedAvailabilityAt = 0
+        availabilityCacheQueue.sync {
+            cachedAvailability = nil
+            cachedAvailabilityAt = 0
+        }
     }
 
     // MARK: - Init
@@ -89,14 +89,14 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     public var isAvailable: Bool {
         get async {
             let now = Date().timeIntervalSince1970
-            // 1) 快路径：读取缓存（lock 包裹，线程安全）
-            availabilityCacheLock.lock()
-            if let cached = cachedAvailability,
-               now - cachedAvailabilityAt < availabilityCacheTTL {
-                availabilityCacheLock.unlock()
+            // 1) 快路径：读取缓存（queue.sync 包裹，线程安全）
+            if let cached = availabilityCacheQueue.sync(execute: { () -> Bool? in
+                guard let v = cachedAvailability,
+                      now - cachedAvailabilityAt < availabilityCacheTTL else { return nil }
+                return v
+            }) {
                 return cached
             }
-            availabilityCacheLock.unlock()
 
             // 2) 慢路径：真实查 accountStatus
             let result: Bool
@@ -113,10 +113,10 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             }
 
             // 3) 写回缓存
-            availabilityCacheLock.lock()
-            cachedAvailability = result
-            cachedAvailabilityAt = now
-            availabilityCacheLock.unlock()
+            availabilityCacheQueue.sync {
+                cachedAvailability = result
+                cachedAvailabilityAt = now
+            }
             return result
         }
     }
@@ -286,9 +286,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     // MARK: - Zone 管理
 
     private func ensureZoneExists() async throws {
-        zoneLock.lock()
-        let alreadyEnsured = zoneEnsured
-        zoneLock.unlock()
+        let alreadyEnsured = zoneQueue.sync { zoneEnsured }
         if alreadyEnsured { return }
 
         do {
@@ -303,9 +301,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             throw mapCKError(error)
         }
 
-        zoneLock.lock()
-        zoneEnsured = true
-        zoneLock.unlock()
+        zoneQueue.sync { zoneEnsured = true }
     }
 
     // MARK: - CKRecord ↔ SyncRecord 映射

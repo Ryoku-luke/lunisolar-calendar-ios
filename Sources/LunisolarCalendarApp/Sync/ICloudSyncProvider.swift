@@ -176,3 +176,15 @@ public protocol ICloudSyncProvider: AnyObject, Sendable {
     /// 返回被真正物理删除的条数。默认 TTL 30 天（= 30 * 86400 * 1000 ms）。
     func purgeExpiredTombstones(olderThanMs: Int64) async throws -> Int
 }
+
+extension SyncRecord {
+    nonisolated public static func == (lhs: SyncRecord, rhs: SyncRecord) -> Bool {
+        lhs.id == rhs.id && lhs.version == rhs.version && lhs.updatedAtMs == rhs.updatedAtMs &&
+        lhs.isDeleted == rhs.isDeleted && lhs.payloadJSON == rhs.payloadJSON &&
+        lhs.originDevice == rhs.originDevice && lhs.kind == rhs.kind
+    }
+    nonisolated public func hash(into hasher: inout Hasher) {
+        hasher.combine(id); hasher.combine(version); hasher.combine(updatedAtMs)
+        hasher.combine(isDeleted); hasher.combine(payloadJSON)
+    }
+}
