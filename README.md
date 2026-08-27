@@ -618,6 +618,22 @@ ICloudSyncProvider 协议
 - **根因**: `CKModifyRecordsOperation.perRecordCompletionBlock`（iOS 14）在 iOS 15 被标记废弃。但这是 **CloudKit API 设计的已知局限**：**`CKModifyRecordsOperation` 是所有 CloudKit operation 中唯一没有 Result-based per-record block 的类型**。`perRecordResultBlock` 只存在于 `CKFetchRecordsOperation` 和 `CKQueryOperation`，`CKModifyRecordsOperation` 上根本没有这个属性。
 - **修复**: 必须继续使用 `perRecordCompletionBlock`（`(CKRecord?, Error?)` 签名），在两处调用点上方加注释说明 CloudKit 的 API 局限。运行时行为完全正确，只是 Xcode 16 会弹 deprecated 警告，可接受（Apple 未来可能补齐这个 API）。
 
+### BUG #39（🔴 编译阻断 · 高）：ToastMessage init 参数名错误 —— `style:` / `duration:` 不存在
+- **文件**: `Sources/LunisolarCalendarApp/Views/SettingsView.swift` 第 229-233 行
+- **现象**: Xcode 16 报 3 个编译错误：`Extra arguments at positions #1, #3 in call`、`Missing argument for parameter 'kind' in call`、`Cannot infer contextual base in reference to member 'error'`。定位在「立即同步」按钮的 catch 闭包里。
+- **根因**: `ToastMessage` 的真实定义只有 `init(kind:, text:)` 两个参数（`enum Kind { case success, warning, error }`，结构体没有 `duration`）。但 catch 闭包里写的是 `toast = .init(style: .error, text: "...", duration: 3.0)` —— 用了不存在的 `style:` 参数名和 `duration:` 参数。编译器报的 3 个错误都是连锁反应：`style:` 不是有效参数，编译器把它当成 position #1，于是 `.error` 无法推断枚举上下文（`error` 是 Swift 标准库的一个函数），最后还缺了必填的 `kind:`。
+- **修复**: 改成 `toast = .init(kind: .error, text: "同步失败：...")` —— 删掉 `style:`（用 `kind:` 代替）和不存在的 `duration:`。
+
+### BUG #40（🟡 Swift 6 并发隔离 · 中）：SyncCoders.static let encoder/decoder 触发级联 MainActor 隔离
+- **文件**: `Sources/LunisolarCalendarApp/Sync/ICloudSyncProvider.swift` — `SyncCoders` enum
+- **现象**: Xcode 16 Swift 6 严格模式报两个警告：
+  - `Main actor-isolated static property 'encoder' can not be referenced from a nonisolated context` — 在 `SyncRecord.eventRecord` 里 `encoder.encode(event)` 调用处
+  - `Main actor-isolated conformance of 'CalendarEvent' to 'Encodable'/'Decodable' can not be used in nonisolated context` — 同样在 `encoder.encode(event)` 和 `decoder.decode(CalendarEvent.self, from: data)` 调用处
+- **根因**: Swift 6 Complete concurrency checking 下，**`static let` 存储属性如果有闭包初始化器，会被推断为 MainActor 隔离**（因为闭包捕获上下文的隔离属性）。导致：
+  1. `SyncCoders.encoder` 本身被隔离在 MainActor，`nonisolated` 的 `eventRecord` / `decodedEvent` 方法无法调用它
+  2. 更致命：`JSONEncoder.encode(event)` 调用 `CalendarEvent` 的 `Encodable` 协议方法（`encode(to:)`），而 Swift 6 把整个 `Codable` conformance 也级联隔离到了 MainActor
+- **修复**: 把 `static let` 改成 **`nonisolated static func encoder() -> JSONEncoder`** / **`nonisolated static func decoder() -> JSONDecoder`**。`JSONEncoder`/`JSONDecoder` 是线程安全的值类型，每次新构造一个完全 OK（同步调用，微秒级开销）。调用点从 `SyncCoders.encoder` 改成 `SyncCoders.encoder()`，从 `SyncCoders.decoder` 改成 `SyncCoders.decoder()`。关键：**函数的返回值不继承函数自身的隔离性**，所以 `encode(event)` 里 `CalendarEvent` 的 Encodable conformance 也能正常被 nonisolated 上下文使用。
+
 ### 性能 & 稳定性微调（之前）
 - `widgetAppGroupID` 未配置时打印告警日志（引导开发者设置 App Group）
 - `RealCloudKitProvider.isAvailable` 增加会话级缓存（避免每次同步重复查询 iCloud 账户）
