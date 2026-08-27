@@ -377,12 +377,15 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             var saved: [CKRecord] = []
             var failed: [(CKRecord.ID, Error)] = []
 
-            op.perRecordResultBlock = { recordID, result in
-                switch result {
-                case .success(let record):
+            // CloudKit limitation: CKModifyRecordsOperation is the only operation type
+            // that has NO Result-based per-record block (perRecordResultBlock is only on
+            // CKFetchRecordsOperation and CKQueryOperation). We must use the deprecated
+            // perRecordCompletionBlock —— it still works correctly, just trips a warning.
+            op.perRecordCompletionBlock = { record, error in
+                if let error = error {
+                    failed.append((record.recordID, error))
+                } else {
                     saved.append(record)
-                case .failure(let error):
-                    failed.append((recordID, error))
                 }
             }
 
@@ -503,12 +506,13 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             var deletedIDs: [CKRecord.ID] = []
             var failed: [(CKRecord.ID, Error)] = []
 
-            op.perRecordResultBlock = { recordID, result in
-                switch result {
-                case .success:
-                    deletedIDs.append(recordID)
-                case .failure(let error):
+            // Same CloudKit limitation: CKModifyRecordsOperation has no perRecordResultBlock.
+            op.perRecordCompletionBlock = { record, error in
+                let recordID = record.recordID
+                if let error = error {
                     failed.append((recordID, error))
+                } else {
+                    deletedIDs.append(recordID)
                 }
             }
 
