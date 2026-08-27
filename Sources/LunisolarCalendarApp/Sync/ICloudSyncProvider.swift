@@ -94,7 +94,7 @@ public struct SyncRecord: Equatable, Hashable, Identifiable, Sendable {
         version: Int64,
         originDevice: String,
         isDeleted: Bool = false,
-        encoder: JSONEncoder = SyncCoders.encoder
+        encoder: JSONEncoder = SyncCoders.encoder()
     ) throws -> SyncRecord {
         let data = try encoder.encode(event)
         guard let json = String(data: data, encoding: .utf8) else {
@@ -113,7 +113,7 @@ public struct SyncRecord: Equatable, Hashable, Identifiable, Sendable {
     }
 
     /// helper: 反解出 CalendarEvent
-    nonisolated public func decodedEvent(decoder: JSONDecoder = SyncCoders.decoder) throws -> CalendarEvent {
+    nonisolated public func decodedEvent(decoder: JSONDecoder = SyncCoders.decoder()) throws -> CalendarEvent {
         guard let data = payloadJSON.data(using: .utf8) else {
             throw SyncError.invalidPayload("SyncRecord.payloadJSON 非 UTF8")
         }
@@ -124,17 +124,17 @@ public struct SyncRecord: Equatable, Hashable, Identifiable, Sendable {
 // MARK: - Coders（统一 Date 策略，避免时区问题）
 
 public enum SyncCoders {
-    public static let encoder: JSONEncoder = {
+    nonisolated public static func encoder() -> JSONEncoder {
         let e = JSONEncoder()
         e.dateEncodingStrategy = .iso8601
         e.outputFormatting = [.sortedKeys]
         return e
-    }()
-    public static let decoder: JSONDecoder = {
+    }
+    nonisolated public static func decoder() -> JSONDecoder {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .iso8601
         return d
-    }()
+    }
 }
 
 // MARK: - iCloud 同步抽象协议

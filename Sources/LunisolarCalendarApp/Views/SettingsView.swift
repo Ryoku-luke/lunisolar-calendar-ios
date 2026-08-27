@@ -227,9 +227,8 @@ struct SettingsView: View {
                             } catch {
                                 print("[SettingsView] 立即同步失败：\(error)")
                                 toast = .init(
-                                    style: .error,
-                                    text: "同步失败：\(syncErrorBrief(error))",
-                                    duration: 3.0
+                                    kind: .error,
+                                    text: "同步失败：\(syncErrorBrief(error))"
                                 )
                             }
                         }
