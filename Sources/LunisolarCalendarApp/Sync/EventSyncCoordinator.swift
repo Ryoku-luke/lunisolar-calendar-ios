@@ -343,7 +343,7 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             let data = try JSONEncoder().encode(versionMap)
             defaults.set(data, forKey: versionTrackingKey)
         } catch {
-            print("[EventSyncCoordinator] persistVersionMap 编码失败: \(error)")
+            AppLogger.sync.error("persistVersionMap 编码失败: \(error)")
         }
     }
 
@@ -356,7 +356,7 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             if let raw = defaults.dictionary(forKey: versionTrackingKey) as? [String: Int] {
                 versionMap = raw.mapValues { Int64($0) }
             }
-            print("[EventSyncCoordinator] loadVersionMap 失败: \(error)，\(versionMap.isEmpty ? "已清空" : "已回退旧格式")")
+            AppLogger.sync.warning("loadVersionMap 失败: \(error)，\(versionMap.isEmpty ? "已清空" : "已回退旧格式")")
         }
     }
 

@@ -40,17 +40,24 @@ struct DayDetailView: View {
         .background(Color.systemGroupedBackground.ignoresSafeArea())
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
+        // iOS 26：详情页使用常规材质导航栏（与月视图保持一致）
+        .toolbarBackground(.navBar, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {
                     EventEditView(editing: nil, defaultDate: date)
                         .environment(store)
                 } label: {
-                    Image(systemName: "plus.circle")
-                        .font(.title3)
+                    // iOS 26：SF Symbols 5 palette 渲染
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.appTint, Color.quaternarySystemFill)
                 }
             }
         }
+        .tint(Color.appTint)
     }
 
     private var navTitle: String {
@@ -63,45 +70,49 @@ struct DayDetailView: View {
         HStack(alignment: .top, spacing: 18) {
             VStack(spacing: 4) {
                 Text("\(date.day)")
-                    .font(.system(size: 44, weight: .bold))
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
                     .foregroundStyle(date.isToday ? Color.systemRed : Color.label)
                 Text(date.weekdaySymbol)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Color.secondaryLabel)
                 Text(date.isToday ? "今天" : "")
-                    .font(.caption2)
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color.systemRed)
             }
-            .frame(width: 72)
-            .padding(.vertical, 12)
+            .frame(width: 78)
+            .padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.secondarySystemBackground)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.secondarySystemGroupedBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.separator.opacity(0.35), lineWidth: 0.5)
             )
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("\(date.year)年\(date.month)月\(date.day)日")
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color.secondaryLabel)
 
                 Text(huangli.lunar.displayString)
-                    .font(.headline)
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.label)
 
                 HStack(spacing: 8) {
                     Text("\(huangli.lunar.yearGanZhi)年")
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(
-                            Capsule().fill(Color.systemIndigo.opacity(0.15))
+                            Capsule().fill(Color.systemIndigo.opacity(0.14))
                         )
                         .foregroundStyle(Color.systemIndigo)
 
                     Label(huangli.lunar.yearAnimal, systemImage: "pawprint.circle.fill")
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(
-                            Capsule().fill(Color.systemOrange.opacity(0.15))
+                            Capsule().fill(Color.systemOrange.opacity(0.14))
                         )
                         .foregroundStyle(Color.systemOrange)
                 }
@@ -109,24 +120,33 @@ struct DayDetailView: View {
                 if huangli.isAuspicious {
                     Label("黄道吉日 · 诸事顺遂", systemImage: "sparkles")
                         .font(.caption.weight(.bold))
-                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
                         .background(
-                            Capsule().fill(Color.auspicious.opacity(0.12))
+                            Capsule().fill(Color.auspicious.opacity(0.14))
                         )
                         .foregroundStyle(Color.auspicious)
                 }
             }
             Spacer(minLength: 0)
         }
+        .padding(18)
+        // iOS 26 液态玻璃：头部卡片
+        .liquidGlassCard(
+            cornerRadius: 24,
+            borderColor: Color.separator.opacity(0.4),
+            borderWidth: 0.5,
+            shadowOpacity: 0.06
+        )
     }
 
     // MARK: - 黄历宜忌卡片
 
     private func huangliCard(huangli: HuangliDay) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: "book.circle.fill")
                     .font(.title3)
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.systemOrange)
                 Text("黄历宜忌")
                     .font(.headline)
@@ -141,7 +161,7 @@ struct DayDetailView: View {
                         Text("宜")
                             .font(.caption2.weight(.bold))
                             .frame(width: 22, height: 22)
-                            .background(Circle().fill(Color.systemGreen.opacity(0.85)))
+                            .background(Circle().fill(Color.systemGreen.opacity(0.88)))
                             .foregroundStyle(.white)
                         Spacer()
                     }
@@ -155,7 +175,7 @@ struct DayDetailView: View {
                         Text("忌")
                             .font(.caption2.weight(.bold))
                             .frame(width: 22, height: 22)
-                            .background(Circle().fill(Color.systemRed.opacity(0.85)))
+                            .background(Circle().fill(Color.systemRed.opacity(0.88)))
                             .foregroundStyle(.white)
                         Spacer()
                     }
@@ -164,10 +184,13 @@ struct DayDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.secondarySystemBackground)
+        .padding(16)
+        // iOS 26 液态玻璃：黄历宜忌卡片
+        .liquidGlassCard(
+            cornerRadius: 20,
+            borderColor: Color.separator.opacity(0.4),
+            borderWidth: 0.5,
+            shadowOpacity: 0.05
         )
     }
 
@@ -192,10 +215,11 @@ struct DayDetailView: View {
     // MARK: - 其他黄历信息
 
     private func extraHuangliCard(huangli: HuangliDay) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: "info.circle.fill")
                     .font(.title3)
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.systemTeal)
                 Text("其他信息")
                     .font(.headline)
@@ -203,26 +227,30 @@ struct DayDetailView: View {
             }
 
             LazyVGrid(
-                columns: [GridItem(.flexible()), GridItem(.flexible())],
+                columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
                 alignment: .leading,
-                spacing: 8
+                spacing: 10
             ) {
                 infoRow(title: "冲煞", value: huangli.displayChongSha, icon: "xmark.shield")
                 infoRow(title: "五行纳音", value: huangli.wuXing, icon: "flame.circle")
                 infoRow(title: "神位", value: huangli.shenWei, icon: "sparkles", span: 2)
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.secondarySystemBackground)
+        .padding(16)
+        // iOS 26 液态玻璃：其他信息卡片
+        .liquidGlassCard(
+            cornerRadius: 20,
+            borderColor: Color.separator.opacity(0.4),
+            borderWidth: 0.5,
+            shadowOpacity: 0.05
         )
     }
 
     private func infoRow(title: String, value: String, icon: String, span: Int = 1) -> some View {
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
                 .font(.caption)
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(Color.systemTeal)
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 2) {
@@ -230,16 +258,20 @@ struct DayDetailView: View {
                     .font(.caption2)
                     .foregroundStyle(Color.secondaryLabel)
                 Text(value)
-                    .font(.caption.weight(.medium))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.label)
                     .lineLimit(2)
             }
             Spacer(minLength: 0)
         }
-        .padding(10)
+        .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.tertiarySystemBackground)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.secondarySystemGroupedBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.separator.opacity(0.3), lineWidth: 0.5)
         )
         .gridCellColumns(span)
     }
@@ -247,10 +279,11 @@ struct DayDetailView: View {
     // MARK: - 当日日程卡片
 
     private func eventsCard(events: [CalendarEvent]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: "list.bullet.circle.fill")
                     .font(.title3)
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.systemBlue)
                 Text("当日日程 (\(events.count))")
                     .font(.headline)
@@ -259,19 +292,20 @@ struct DayDetailView: View {
                     EventEditView(editing: nil, defaultDate: date)
                         .environment(store)
                 } label: {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         Image(systemName: "plus.circle.fill")
+                            .symbolRenderingMode(.palette)
                         Text("添加")
                             .font(.subheadline.weight(.semibold))
                     }
-                    .foregroundStyle(Color.systemBlue)
+                    .foregroundStyle(Color.appTint)
                 }
             }
 
             if events.isEmpty {
                 emptyEventsState
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     ForEach(events) { event in
                         NavigationLink {
                             EventEditView(editing: event, defaultDate: date)
@@ -285,10 +319,13 @@ struct DayDetailView: View {
                 }
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.secondarySystemBackground)
+        .padding(16)
+        // iOS 26 液态玻璃：当日日程卡片
+        .liquidGlassCard(
+            cornerRadius: 20,
+            borderColor: Color.separator.opacity(0.4),
+            borderWidth: 0.5,
+            shadowOpacity: 0.05
         )
     }
 

@@ -71,6 +71,14 @@ public enum FestivalManager: Sendable {
 
     /// 返回给定公历日期上重合的所有节日（同日可能多个）
     public static func festivals(on date: Date) -> [Festival] {
+        let cal = Calendar(identifier: .gregorian)
+        let norm = cal.startOfDay(for: date)
+        let lunar = ChineseCalendar.lunarDateSafe(from: norm)
+        return festivals(on: norm, lunar: lunar)
+    }
+
+    /// 接受预计算的 LunarDate，避免调用方重复进行农历转换（性能优化）
+    public static func festivals(on date: Date, lunar: LunarDate?) -> [Festival] {
         var result: [Festival] = []
 
         let cal = Calendar(identifier: .gregorian)
@@ -84,7 +92,7 @@ public enum FestivalManager: Sendable {
         }
 
         // 2. 农历节日（通过农历月日匹配，注意除夕特殊：若除夕当天非30，则取对应年最后一天）
-        if let lunar = ChineseCalendar.lunarDateSafe(from: norm) {
+        if let lunar = lunar {
             for f in lunarFestivals {
                 if f.name == "除夕" {
                     if isLunarLastDayOfYear(lunar: lunar, in: norm) {

@@ -94,7 +94,7 @@ public final class NotificationManager {
             try await center.add(request)
             EventStore.shared.markNotified(event)
         } catch {
-            print("调度通知失败: \(error)")
+            AppLogger.app.error("调度通知失败: \(error)")
         }
         #endif
     }

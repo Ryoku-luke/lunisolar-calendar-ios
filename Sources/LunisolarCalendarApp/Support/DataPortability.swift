@@ -304,7 +304,7 @@ public enum DataPortability {
             try content.write(to: tmpURL, atomically: true, encoding: .utf8)
             return tmpURL
         } catch {
-            print("导出文件写入失败: \(error)")
+            AppLogger.app.error("导出文件写入失败: \(error)")
             return nil
         }
     }
