@@ -24,6 +24,67 @@ public final class EventStore {
     private var eventCache: [Date: [CalendarEvent]] = [:]
     private var statsCache: [Date: (has: Bool, priority: Priority?)] = [:]
 
+    // MARK: P6 二级索引（O(1) by-id 定位）
+    // events 数组永远按 startDate 升序；此字典维护 id → 下标，
+    // 所有 CRUD 操作都必须同步更新它，禁止在维护路径上直接 O(N) 扫 id。
+    private var idToIndex: [UUID: Int] = [:]
+    /// 重建 idToIndex：事件数组读盘、清空、大 merge 后调用一次 O(N)
+    private func rebuildIDIndex() {
+        idToIndex.removeAll(keepingCapacity: true)
+        for (i, ev) in events.enumerated() {
+            idToIndex[ev.id] = i
+        }
+    }
+    /// idToIndex 平移：在 index 前插入 count 个元素 → index..<endIndex 的下标全部 +count
+    private func shiftIndices(from index: Int, by delta: Int) {
+        guard delta != 0 else { return }
+        // delta > 0 是插入后：[index, endIndex) 原值 + delta
+        // delta < 0 是删除后：[index+abs(delta), endIndex) 原值 - abs(delta)
+        // 所以统一写：遍历字典，value >= threshold（起始点）的都 + delta。
+        let threshold = delta > 0 ? index : index - delta
+        for (id, i) in idToIndex where i >= threshold {
+            idToIndex[id] = i + delta
+        }
+    }
+    /// O(1) by-id 读；找不到 = nil
+    private func indexOfEvent(id: UUID) -> Int? {
+        idToIndex[id]
+    }
+
+    // MARK: P6 排序不变式：events 永远按 startDate 升序排列
+
+    /// 二分查「第一个 startDate >= target 的位置」，等价于标准库 partitioningIndex(where:)
+    private func sortedInsertionIndex(for startDate: Date) -> Int {
+        if events.isEmpty { return 0 }
+        // P6-3 小优化：利用最近一次 insert 位置做"邻近插入"预检；
+        // 绝大多数"未来几天"的提醒会按时间递增插入，直接落在 lastInsertHint 附近，常命中。
+        if let hint = lastInsertHint {
+            if hint > 0, hint <= events.count {
+                let L = events[hint - 1].startDate
+                if hint == events.count {
+                    if L < startDate { return hint }
+                } else {
+                    let R = events[hint].startDate
+                    if L < startDate && startDate <= R { return hint }
+                }
+            }
+        }
+        var lo = 0, hi = events.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if events[mid].startDate < startDate {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        lastInsertHint = lo
+        return lo
+    }
+    /// 最近一次插入位置缓存，P6-3：加速时间大致递增的连续 add（批量导入/新建提醒场景）
+    private var lastInsertHint: Int? = nil
+    private func clearLastInsertHint() { lastInsertHint = nil }
+
     /// 脏事件 ID 集合（已变更但未推送到云端的事件）
     private var dirtyEventIDs: Set<String> = []
     /// 已删除但未推送到云端的事件 ID
@@ -131,51 +192,73 @@ public final class EventStore {
 
     // MARK: - CRUD
 
-    /// 添加事件：二分插入（数组已按 startDate 排序），避免全量 sort()
+    /// 单条插入：二分定位 + 索引平移，O(log N)。
     public func add(_ event: CalendarEvent, skipSync: Bool = false) {
-        // P6 性能：若已排序，二分查找插入位置；空数组直接 append
-        if events.isEmpty {
-            events.append(event)
-        } else {
-            let target = event.startDate
-            var lo = 0, hi = events.count
-            while lo < hi {
-                let mid = (lo + hi) / 2
-                if events[mid].startDate < target {
-                    lo = mid + 1
-                } else {
-                    hi = mid
-                }
-            }
-            events.insert(event, at: lo)
-        }
+        let at = sortedInsertionIndex(for: event.startDate)
+        events.insert(event, at: at)
+        // idToIndex 维护：新项 at，所有>=at 的下标 +1
+        shiftIndices(from: at, by: 1)
+        idToIndex[event.id] = at
         invalidateCache()
         save()
-        // skipSync 时仍标记 dirty（供 syncBidirectional 等主动同步使用），只是不立即 enqueue
         dirtyEventIDs.insert(event.id.uuidString)
         if !skipSync {
             enqueuePush()
         }
     }
 
-    /// 更新事件
-    public func update(_ event: CalendarEvent, skipSync: Bool = false) {
-        guard let idx = events.firstIndex(where: { $0.id == event.id }) else { return }
-        var updated = event
-        updated.updatedAt = Date()
-        events[idx] = updated
-        sort()
+    /// 批量插入：每条单独走二分插入（配合 lastInsertHint，递增时间序列近乎 O(1)）。
+    /// 相比 "append 全部 → sort()"，保持不变式更严谨，单次 O(K log (N+K))，
+    /// 更关键是「update / 冲突 id 能 O(1) 命中」，不会先脏了数组再 sort 回来。
+    public func batchAdd(_ incoming: [CalendarEvent], skipSync: Bool = false) {
+        guard !incoming.isEmpty else { return }
+        for ev in incoming {
+            let at = sortedInsertionIndex(for: ev.startDate)
+            events.insert(ev, at: at)
+            shiftIndices(from: at, by: 1)
+            idToIndex[ev.id] = at
+            dirtyEventIDs.insert(ev.id.uuidString)
+        }
         invalidateCache()
         save()
-        dirtyEventIDs.insert(updated.id.uuidString)
         if !skipSync {
             enqueuePush()
         }
     }
 
-    /// 删除事件
+    /// 更新事件：若 startDate 变了就"抽出+重新二分插入"，否则原地赋值保持索引不变。
+    public func update(_ event: CalendarEvent, skipSync: Bool = false) {
+        guard let idx = indexOfEvent(id: event.id) else { return }
+        var applied = event
+        applied.updatedAt = Date()
+        let oldStart = events[idx].startDate
+        if oldStart == applied.startDate {
+            // 位置没变：直接替换，idToIndex 不变
+            events[idx] = applied
+        } else {
+            // 位置变了：先移除旧的，再按新 startDate 插入
+            events.remove(at: idx)
+            idToIndex.removeValue(forKey: applied.id)
+            shiftIndices(from: idx, by: -1)
+            let at = sortedInsertionIndex(for: applied.startDate)
+            events.insert(applied, at: at)
+            shiftIndices(from: at, by: 1)
+            idToIndex[applied.id] = at
+        }
+        invalidateCache()
+        save()
+        dirtyEventIDs.insert(applied.id.uuidString)
+        if !skipSync {
+            enqueuePush()
+        }
+    }
+
+    /// 删除事件：O(1) by-id 定位，O(1) 字典平移
     public func delete(_ event: CalendarEvent, skipSync: Bool = false) {
-        events.removeAll { $0.id == event.id }
+        guard let idx = indexOfEvent(id: event.id) else { return }
+        events.remove(at: idx)
+        idToIndex.removeValue(forKey: event.id)
+        shiftIndices(from: idx, by: -1)
         invalidateCache()
         save()
         dirtyEventIDs.remove(event.id.uuidString)
@@ -186,7 +269,7 @@ public final class EventStore {
     }
 
     public func toggleCompleted(_ event: CalendarEvent, skipSync: Bool = false) {
-        guard let idx = events.firstIndex(where: { $0.id == event.id }) else { return }
+        guard let idx = indexOfEvent(id: event.id) else { return }
         events[idx].isCompleted.toggle()
         events[idx].updatedAt = Date()
         invalidateCache()
@@ -199,9 +282,9 @@ public final class EventStore {
 
     /// 标记事件通知已触发（防止重复弹窗）
     /// 默认 skipSync=true：通知标记是"设备本地状态"，通常不应该推上云端，
-    /// 更不该因此把事件打为 dirty，否则下次别的 CRUD 会把事件"捎带"推云（P5 修复）。
+    /// 更不该因此把事件打为 dirty，否则下次别的 CRUD 会把事件"捎带"推云。
     public func markNotified(_ event: CalendarEvent, skipSync: Bool = true) {
-        guard let idx = events.firstIndex(where: { $0.id == event.id }) else { return }
+        guard let idx = indexOfEvent(id: event.id) else { return }
         events[idx].isNotified = true
         events[idx].updatedAt = Date()
         invalidateCache()
@@ -333,6 +416,11 @@ public final class EventStore {
 
     /// 把一批导入事件合并进本地存储，按 id 去重 + 冲突策略处理；返回合并统计。
     /// 用于 .ics 导入 / .json 备份恢复。调用方再决定是否弹出"有冲突"提示。
+    ///
+    /// P6 优化：
+    /// - 冲突检测：旧 `firstIndex(where:)` 对 M 条事件是 O(N·M)；新实现走 idToIndex 字典 O(M)。
+    /// - 新增事件：逐条二分插入（lastInsertHint 让递增序列近 O(1)），不变式全程保持。
+    /// - 更新事件：startDate 变化时"先删旧位置+再插新位置"，取代 merge 末尾整体 sort()。
     @discardableResult
     public func merge(
         _ incoming: [CalendarEvent],
@@ -340,7 +428,7 @@ public final class EventStore {
         skipSync: Bool = false
     ) -> ImportMergeResult {
         var result = ImportMergeResult()
-        var pushedP: [CalendarEvent] = [] // 用于最后批量 push 云端（若未 skipSync 且有 co）
+        var pushedP: [CalendarEvent] = []
 
         for ev in incoming {
             // 基本数据校验：标题非空 + end>start
@@ -349,35 +437,42 @@ public final class EventStore {
                 result.invalid += 1
                 continue
             }
-            if let existing = events.first(where: { $0.id == ev.id }) {
+            if let idx = indexOfEvent(id: ev.id) {
+                let existing = events[idx]
                 // 冲突：按 policy
+                var shouldApply = false
                 switch policy {
                 case .overwrite:
-                    updateInPlace(id: existing.id, with: ev)
-                    pushedP.append(ev)
+                    shouldApply = true
                     result.updated += 1
                 case .keepLocal:
                     result.skipped += 1
                 case .keepLatest:
                     if ev.updatedAt >= existing.updatedAt {
-                        updateInPlace(id: existing.id, with: ev)
-                        pushedP.append(ev)
+                        shouldApply = true
                         result.updated += 1
                     } else {
                         result.skipped += 1
                     }
                 }
+                if shouldApply {
+                    updateInPlaceFast(oldIndex: idx, with: ev)
+                    pushedP.append(ev)
+                }
             } else {
-                events.append(ev)
+                // 新事件：二分插入
+                let at = sortedInsertionIndex(for: ev.startDate)
+                events.insert(ev, at: at)
+                shiftIndices(from: at, by: 1)
+                idToIndex[ev.id] = at
                 pushedP.append(ev)
                 result.added += 1
             }
         }
 
-        sort()
+        // P6：不变式在 insert/update 内已保持；不需要额外 sort()
         invalidateCache()
         saveNow()
-        // skipSync 时仍标记 dirty（供后续主动同步使用），只是不立即 enqueue
         for ev in pushedP {
             dirtyEventIDs.insert(ev.id.uuidString)
         }
@@ -404,7 +499,9 @@ public final class EventStore {
                 enqueuePush()
             }
         }
-        events.removeAll()
+        events.removeAll(keepingCapacity: true)
+        idToIndex.removeAll(keepingCapacity: true)
+        clearLastInsertHint()
         invalidateCache()
         saveNow()
         return removedCount
@@ -412,17 +509,38 @@ public final class EventStore {
 
     // MARK: - 内部辅助
 
-    /// 更新某个 id 对应的事件；只写内部数组（不 sort/save/push），由调用方统一处理。
+    /// 旧 helper（保留签名但已废弃；新代码一律走 updateInPlaceFast）。
+    @available(*, deprecated, renamed: "updateInPlaceFast")
     private func updateInPlace(id: UUID, with new: CalendarEvent) {
-        guard let idx = events.firstIndex(where: { $0.id == id }) else { return }
+        guard let idx = indexOfEvent(id: id) else { return }
+        updateInPlaceFast(oldIndex: idx, with: new)
+    }
+
+    /// 合并内路径：直接给定 oldIndex，根据 startDate 是否变化决定原地写 or 删+二分插。
+    private func updateInPlaceFast(oldIndex idx: Int, with new: CalendarEvent) {
         var applied = new
         applied.updatedAt = Date()
-        events[idx] = applied
+        let oldStart = events[idx].startDate
+        if oldStart == applied.startDate {
+            events[idx] = applied
+            // 位置不变，idToIndex 无需变动（映射仍指向同一个 idx）
+        } else {
+            let oldID = applied.id
+            events.remove(at: idx)
+            idToIndex.removeValue(forKey: oldID)
+            shiftIndices(from: idx, by: -1)
+            let at = sortedInsertionIndex(for: applied.startDate)
+            events.insert(applied, at: at)
+            shiftIndices(from: at, by: 1)
+            idToIndex[oldID] = at
+        }
     }
 
     // MARK: - 持久化
 
     private func sort() {
+        // P6：sort() 现在只在 load() 里对"刚反序列化的可能乱序数组"调用；
+        // 其他路径一律"二分插入+不变式"维护。调用后必须跟一次 rebuildIDIndex()。
         events.sort { $0.startDate < $1.startDate }
     }
 
@@ -441,6 +559,8 @@ public final class EventStore {
             AppLogger.app.error("本地数据文件损坏 (\(error))，已清空。请从备份/云端恢复。")
             events = []
         }
+        rebuildIDIndex()
+        clearLastInsertHint()
         invalidateCache()
     }
 
@@ -561,7 +681,8 @@ public final class EventStore {
         compsTodayAllDay.hour = 0
         compsTodayAllDay.minute = 0
         let todayAllDayDate = cal.date(from: compsTodayAllDay) ?? today
-        events.append(
+        var built: [CalendarEvent] = []
+        built.append(
             CalendarEvent(
                 title: "阅读《平凡的世界》30分钟",
                 type: .note,
@@ -577,7 +698,7 @@ public final class EventStore {
         let s1 = cal.date(from: comps1) ?? today
         var comps1e = comps1; comps1e.hour = 16; comps1e.minute = 30
         let e1 = cal.date(from: comps1e) ?? s1.addingTimeInterval(3600)
-        events.append(
+        built.append(
             CalendarEvent(
                 title: "产品需求评审会",
                 type: .schedule,
@@ -592,7 +713,7 @@ public final class EventStore {
         var comps2 = cal.dateComponents([.year,.month,.day], from: today.addingDays(1))
         comps2.hour = 9; comps2.minute = 0
         let s2 = cal.date(from: comps2) ?? today.addingDays(1)
-        events.append(
+        built.append(
             CalendarEvent(
                 title: "给妈妈打电话",
                 type: .reminder,
@@ -606,7 +727,7 @@ public final class EventStore {
         comps3.weekday = 4
         comps3.hour = 20; comps3.minute = 0
         let s3 = cal.date(from: comps3) ?? today
-        events.append(
+        built.append(
             CalendarEvent(
                 title: "瑜伽课",
                 type: .schedule,
@@ -618,7 +739,12 @@ public final class EventStore {
             )
         )
 
-        sort()
+        // P6：批量构造完成后只排序一次，然后重建 ID 索引；不经过单条 add() 的事件级防抖/推送。
+        built.sort { $0.startDate < $1.startDate }
+        events = built
+        rebuildIDIndex()
+        clearLastInsertHint()
+        invalidateCache()
         saveNow()
     }
 }

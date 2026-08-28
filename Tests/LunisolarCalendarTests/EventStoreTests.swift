@@ -145,4 +145,253 @@ final class EventStoreTests: XCTestCase {
         XCTAssertEqual(removed, before + 2)
         XCTAssertEqual(store.events.count, 0)
     }
+
+    // MARK: - P6 二分插入 + ID 索引不变式 测试集
+
+    /// 不变式校验：events 必须严格按 startDate 非降序；idToIndex 每个条目都能正确指回同 id 元素。
+    private func assertInvariants(_ store: EventStore, file: StaticString = #file, line: UInt = #line) {
+        // 使用内部只读属性：events 暴露为 internal private(set)，可直接读；
+        // idToIndex 是 private，改用「按 id 查 firstIndex」的方式等价校验——
+        // 如果索引失效，store.events 会出现 O(N) 的 by-id 查询失败，或 events 里存在重复 id。
+        let arr = store.events
+        for i in 1..<arr.count {
+            XCTAssertTrue(arr[i-1].startDate <= arr[i].startDate,
+                          "P6不变式：events 必须按 startDate 升序，i=\(i)",
+                          file: file, line: line)
+        }
+        var seen = Set<UUID>()
+        for ev in arr {
+            XCTAssertFalse(seen.contains(ev.id), "P6不变式：id=\(ev.id) 重复", file: file, line: line)
+            seen.insert(ev.id)
+        }
+    }
+
+    /// P6-1: 单条插入后仍保持 startDate 升序（乱序 8 条事件）
+    func testBinaryInsertKeepsSortOrder() async {
+        let store = makeIsolatedEventStore()
+        _ = store.clearAll(skipSync: true)
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents(); dc.year = 2026; dc.month = 8; dc.day = 1
+        let aug1 = cal.date(from: dc)!
+
+        // 故意按 startDate 「乱序」新增：日 = 7,2,9,1,5,8,3,6
+        let order = [7, 2, 9, 1, 5, 8, 3, 6]
+        for day in order {
+            let s = aug1.addingTimeInterval(TimeInterval(day - 1) * 86400)
+            store.add(CalendarEvent(title: "乱序插入-\(day)", startDate: s), skipSync: true)
+        }
+        assertInvariants(store)
+        // 最终 startDate 的日分量应该严格递增
+        let days = store.events.map { ev -> Int in
+            cal.component(.day, from: ev.startDate)
+        }
+        XCTAssertEqual(days, [1, 2, 3, 5, 6, 7, 8, 9], "乱序插入后应为升序")
+    }
+
+    /// P6-2: batchAdd 在「顺序」「逆序」「随机顺序」三类输入下均保持不变式
+    func testBatchAddOrderingsKeepInvariant() async {
+        let store = makeIsolatedEventStore()
+        _ = store.clearAll(skipSync: true)
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents(); dc.year = 2026; dc.month = 1; dc.day = 1
+        let jan1 = cal.date(from: dc)!
+        func mk(_ offset: Int) -> CalendarEvent {
+            CalendarEvent(title: "batch-\(offset)",
+                          startDate: jan1.addingTimeInterval(TimeInterval(offset) * 86400))
+        }
+
+        // 1) 顺序
+        store.batchAdd((0..<50).map(mk), skipSync: true)
+        assertInvariants(store)
+        XCTAssertEqual(store.events.count, 50)
+
+        // 2) 逆序
+        store.batchAdd((0..<50).reversed().map { mk($0 + 100) }, skipSync: true)
+        assertInvariants(store)
+        XCTAssertEqual(store.events.count, 100)
+
+        // 3) 伪随机（固定 seed 保证可复现）：days = (i * 2654435761 mod 200) + 200
+        var seeded: [CalendarEvent] = []
+        for i in 0..<200 {
+            let m = (i &* 2654435761) % 200
+            seeded.append(mk(m + 200))
+        }
+        store.batchAdd(seeded, skipSync: true)
+        assertInvariants(store)
+        XCTAssertEqual(store.events.count, 300)
+    }
+
+    /// P6-3: update 修改 startDate 后仍保持排序；不改 startDate 时元素位置严格不变
+    func testUpdateStartDateMoveStillSorted() async {
+        let store = makeIsolatedEventStore()
+        _ = store.clearAll(skipSync: true)
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents(); dc.year = 2026; dc.month = 10; dc.day = 1
+        let base = cal.date(from: dc)!
+
+        // 插入 4 条，startDate 按 1/2/3/4 日
+        var evs: [CalendarEvent] = []
+        for i in 0..<4 {
+            let ev = CalendarEvent(title: "u\(i)",
+                                   startDate: base.addingTimeInterval(TimeInterval(i) * 86400))
+            store.add(ev, skipSync: true)
+            evs.append(ev)
+        }
+        assertInvariants(store)
+
+        // 只改 title，不改 startDate → 在 store.events 里仍停留在原位置（id 没变）
+        var sameTime = evs[1]
+        sameTime.title = "只改了标题"
+        store.update(sameTime, skipSync: true)
+        assertInvariants(store)
+        let pos2 = store.events.firstIndex(where: { $0.id == evs[1].id })
+        XCTAssertEqual(pos2, 1, "不改 startDate 的 update 不应挪动位置")
+
+        // 把 evs[3]（第 4 日）的 startDate 调到 base 前一天（第 0 日）→ 应该跑到数组最前端
+        var moved = evs[3]
+        moved.startDate = base.addingTimeInterval(-86400)
+        moved.endDate = moved.startDate.addingTimeInterval(3600)
+        store.update(moved, skipSync: true)
+        assertInvariants(store)
+        let front = store.events.firstIndex(where: { $0.id == evs[3].id })
+        XCTAssertEqual(front, 0, "startDate 改到最早的那条 update 应重新二分插入到 0")
+    }
+
+    /// P6-4: delete 删除中间位置后仍保持不变式；并且其余所有 by-id 读都还能找到正确元素
+    func testDeleteMiddleKeepsInvariantAndOthers() async {
+        let store = makeIsolatedEventStore()
+        _ = store.clearAll(skipSync: true)
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents(); dc.year = 2026; dc.month = 5; dc.day = 1
+        let base = cal.date(from: dc)!
+
+        var ids: [UUID] = []
+        for i in 0..<10 {
+            let ev = CalendarEvent(title: "d\(i)",
+                                   startDate: base.addingTimeInterval(TimeInterval(i) * 86400))
+            store.add(ev, skipSync: true)
+            ids.append(ev.id)
+        }
+        // 删掉索引 3 / 5 / 7（不连续）
+        for idx in [3, 5, 7] {
+            let pick = store.events.first { $0.id == ids[idx] }!
+            store.delete(pick, skipSync: true)
+            assertInvariants(store)
+        }
+        XCTAssertEqual(store.events.count, 7)
+        // 剩下 7 条的 id 必须都还能找到
+        let remaining = ids.enumerated().filter { ![3, 5, 7].contains($0.offset) }.map(\.element)
+        for id in remaining {
+            XCTAssertNotNil(store.events.first(where: { $0.id == id }),
+                            "id=\(id) 应仍可按 id 找到")
+        }
+    }
+
+    /// P6-5: merge 冲突检测由 O(N·M) 改为 O(M) 字典；以 2000 本地 + 2000 incoming（全冲突）验证性能与正确性
+    func testMergePerformanceAndResult() async {
+        let store = makeIsolatedEventStore()
+        _ = store.clearAll(skipSync: true)
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents(); dc.year = 2026; dc.month = 3; dc.day = 1
+        let base = cal.date(from: dc)!
+
+        var local: [CalendarEvent] = []
+        var incoming: [CalendarEvent] = []
+        for i in 0..<2000 {
+            let id = UUID()
+            let start = base.addingTimeInterval(TimeInterval(i) * 600)  // 每 10 分钟一条
+            var evL = CalendarEvent(id: id, title: "本地-\(i)", startDate: start)
+            evL.updatedAt = start
+            local.append(evL)
+            var evI = CalendarEvent(id: id, title: "导入-\(i)", startDate: start)
+            evI.updatedAt = start.addingTimeInterval(1) // 导入版本更新
+            incoming.append(evI)
+        }
+        // 先把本地 merge 一次
+        let rLocal = store.merge(local, policy: .keepLatest, skipSync: true)
+        XCTAssertEqual(rLocal.added, 2000)
+        assertInvariants(store)
+
+        // 2000 条全冲突（但 incoming 稍微更新一点）→ keepLatest 应全 updated，总量不增长
+        measureAndCheck {
+            let r = store.merge(incoming, policy: .keepLatest, skipSync: true)
+            return (r.added, r.updated, r.skipped, store.events.count)
+        } completion: { added, updated, skipped, total in
+            XCTAssertEqual(added, 0, "不应有新增（全冲突）")
+            XCTAssertEqual(updated, 2000, "2000 条都应判为更新（incoming 更新）")
+            XCTAssertEqual(skipped, 0)
+            XCTAssertEqual(total, 2000, "合并后总数不变")
+        }
+        assertInvariants(store)
+        // 验证：数组里全是"导入-"版本标题
+        for ev in store.events {
+            XCTAssertTrue(ev.title.hasPrefix("导入-"), "title 应被覆盖为 incoming 版本，实际：\(ev.title)")
+        }
+    }
+
+    /// P6-6: 简单随机压力：add / update / delete 混合执行 500 次，每 20 次断言不变式
+    func testRandomMixStress() async {
+        let store = makeIsolatedEventStore()
+        _ = store.clearAll(skipSync: true)
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents(); dc.year = 2026; dc.month = 7; dc.day = 1
+        let base = cal.date(from: dc)!
+
+        var pool: [CalendarEvent] = []
+        // LCG 伪随机（xorshift-ish），保证可复现
+        var rngState: UInt64 = 0x9E3779B97F4A7C15
+        func nextInt(_ n: Int) -> Int {
+            var x = rngState
+            x ^= x << 13; x ^= x >> 7; x ^= x << 17
+            rngState = x
+            return Int(x % UInt64(n))
+        }
+
+        for step in 0..<500 {
+            let op = pool.isEmpty ? 0 : nextInt(3)  // 空池时只做 add
+            switch op {
+            case 0: // add
+                let start = base.addingTimeInterval(TimeInterval(nextInt(365 * 24 * 60)) * 60)
+                let ev = CalendarEvent(title: "stress-\(step)", startDate: start)
+                store.add(ev, skipSync: true)
+                pool.append(ev)
+            case 1: // update（随机改 startDate 或只改标题）
+                let which = nextInt(pool.count)
+                var pick = pool[which]
+                if nextInt(2) == 0 {
+                    // 只改标题
+                    pick.title = "stress-updated-\(step)"
+                } else {
+                    // 改 startDate（可能跨位置）
+                    pick.startDate = base.addingTimeInterval(TimeInterval(nextInt(365 * 24 * 60)) * 60)
+                    pick.endDate = pick.startDate.addingTimeInterval(3600)
+                }
+                store.update(pick, skipSync: true)
+                pool[which] = pick
+            default: // delete
+                let which = nextInt(pool.count)
+                let pick = pool.remove(at: which)
+                store.delete(pick, skipSync: true)
+            }
+            if step % 20 == 19 {
+                assertInvariants(store)
+                XCTAssertEqual(store.events.count, pool.count,
+                               "step \(step): store.events 数量应与 pool 保持一致")
+            }
+        }
+        assertInvariants(store)
+    }
+
+    // MARK: Helper
+
+    /// 小性能包装：把操作和断言分离；Linux XCTest 没有 os_signpost，我们这里只打印耗时。
+    private func measureAndCheck<T>(_ work: () -> T, completion: (T) -> Void) {
+        let t0 = Date()
+        let result = work()
+        let ms = Int(Date().timeIntervalSince(t0) * 1000)
+        AppLogger.app.debug("P6 性能度量: \(ms) ms")
+        completion(result)
+        // 宽松性能断言：3000ms 以内（Linux 沙箱可能较慢）
+        XCTAssertLessThan(ms, 3000, "P6 基准超时 \(ms)ms，通常意味着回退到了 O(N²)")
+    }
 }

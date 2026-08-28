@@ -32,7 +32,7 @@ public enum AppLogger {
 /// Linux 回退：把日志按严重等级写到 stderr（调试工具可读），不依赖 os.log。
 public enum AppLogger {
     /// 用串行队列隔离 stderr / FileHandle 访问，避开 Swift 6 对 C stdio 全局变量的并发限制。
-    private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.lunisolar.logger")
+    private static let queue = DispatchQueue(label: "com.lunisolar.logger")
 
     public struct LoggerShim: Sendable {
         public let category: String
