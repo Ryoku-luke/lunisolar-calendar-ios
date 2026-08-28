@@ -315,27 +315,40 @@ public extension Date {
         ChineseCalendar.lunarDateSafe(from: self)
     }
 
+    /// UI 语义：按用户当前系统日历取当天 00:00（佛历/伊斯兰历下含义不同）。
+    /// ⚠️ 涉及"月视图结构 / 农历查表 / 事件去重键"等必须确定为公历的场景，请改用 gregorian 前缀的方法。
     var startOfDay: Date {
         Calendar.current.startOfDay(for: self)
     }
 
+    /// UI 语义：按用户当前系统日历判断是否今天（用于"今天"红点/文案）。
     var isToday: Bool {
         Calendar.current.isDateInToday(self)
     }
 
+    /// UI 语义：按用户当前系统日历加减若干天（组件跳转用）。
+    /// ⚠️ 数据逻辑/持久化比较请改用 gregorianAddingDays。
     func addingDays(_ days: Int) -> Date {
         Calendar.current.date(byAdding: .day, value: days, to: self) ?? self
     }
 
+    /// UI 语义：按用户当前系统日历加减若干月。
     func addingMonths(_ months: Int) -> Date {
         Calendar.current.date(byAdding: .month, value: months, to: self) ?? self
     }
 
+    /// UI 语义：用户当前系统日历下的"年"。
+    /// ⚠️ 数据逻辑请使用 gregorianYear。
     var year: Int { Calendar.current.component(.year, from: self) }
+    /// UI 语义：用户当前系统日历下的"月"。
     var month: Int { Calendar.current.component(.month, from: self) }
+    /// UI 语义：用户当前系统日历下的"日"。
     var day: Int { Calendar.current.component(.day, from: self) }
+    /// UI 语义：用户当前系统日历下的"星期"。
     var weekday: Int { Calendar.current.component(.weekday, from: self) }
 
+    /// UI 语义：用户当前系统日历当月 1 号。
+    /// ⚠️ 月视图网格绘制请使用 gregorianFirstDayOfMonth。
     var firstDayOfMonth: Date {
         let cal = Calendar.current
         var comps = cal.dateComponents([.year, .month], from: self)
@@ -343,18 +356,22 @@ public extension Date {
         return cal.date(from: comps) ?? self
     }
 
+    /// UI 语义：用户当前系统日历当月的天数。
     var daysInMonth: Int {
         Calendar.current.range(of: .day, in: .month, for: self)?.count ?? 30
     }
 
+    /// UI 语义：按用户当前系统日历判断同月。
     func isSameMonth(as other: Date) -> Bool {
         Calendar.current.isDate(self, equalTo: other, toGranularity: .month)
     }
 
+    /// UI 语义：按用户当前系统日历判断同日。
     func isSameDay(as other: Date) -> Bool {
         Calendar.current.isDate(self, inSameDayAs: other)
     }
 
+    /// UI 语义：用户当前系统日历本地化的星期名称（跟随系统语言，例如"周一/Mon"）。
     var weekdaySymbol: String {
         let symbols = Calendar.current.shortWeekdaySymbols
         // weekday 返回 1-7 (Sun-Sat)，数组下标 0-6

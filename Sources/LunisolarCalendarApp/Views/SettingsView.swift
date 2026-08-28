@@ -28,6 +28,8 @@ struct SettingsView: View {
     @State private var isImportingSystem = false
     @State private var importingSystemSource: SystemImportSource = .systemCalendar
     @State private var importLunarToggle = false  // 联系人生日：true=按农历每年
+    // 外观偏好：跟随系统 / 浅色 / 深色（与 App 入口 @AppStorage 同步）
+    @AppStorage("Lunisolar.appearance") private var appearanceSelection: AppAppearance = .system
 
     var body: some View {
         baseForm
@@ -35,6 +37,10 @@ struct SettingsView: View {
             .frame(maxWidth: hSizeClass == .regular ? 720 : .infinity)
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
+            // iOS 26：导航栏材质 + 全局 tint
+            .toolbarBackground(.navBar, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .tint(Color.appTint)
             .task {
                 notifStatus = await NotificationManager.shared.authorizationStatusAsync()
             }
@@ -121,6 +127,24 @@ struct SettingsView: View {
     /// 避免 SwiftUI 编译器"无法在合理时间内类型检查"超时。
     private var baseForm: some View {
         Form {
+            // MARK: - 外观设置
+            Section {
+                Picker(selection: $appearanceSelection) {
+                    ForEach(AppAppearance.allCases) { mode in
+                        Label(mode.title, systemImage: mode.iconName)
+                            .tag(mode)
+                    }
+                } label: {
+                    Label("外观", systemImage: "circle.lefthalf.filled")
+                        .foregroundStyle(Color.systemIndigo)
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("外观")
+            } footer: {
+                Text("选择浅色、深色或跟随系统自动切换。")
+            }
+
             // MARK: - 通知设置
             Section {
                 HStack {
@@ -226,7 +250,7 @@ struct SettingsView: View {
                             do {
                                 _ = try await co.syncBidirectional()
                             } catch {
-                                print("[SettingsView] 立即同步失败：\(error)")
+                                AppLogger.sync.error("立即同步失败：\(error)")
                                 toast = .init(
                                     kind: .error,
                                     text: "同步失败：\(syncErrorBrief(error))"
@@ -519,7 +543,7 @@ struct SettingsView: View {
                 toast = .init(kind: .warning, text: "未导入任何新事件（已有或数据无效）")
             }
         case .failure(let error):
-            print("导入失败: \(error)")
+            AppLogger.app.error("导入失败: \(error)")
             importedResult = .init(invalid: 1)
             showImportResult = true
             toast = .init(kind: .error, text: "导入失败：\(error.localizedDescription)")
@@ -614,7 +638,7 @@ struct SettingsView: View {
             _ = try await coordinator.syncBidirectional()
             toast = .init(kind: .success, text: "iCloud 同步已开启")
         } catch {
-            print("[SettingsView] 首次开启 iCloud 同步失败：\(error)")
+            AppLogger.sync.error("首次开启 iCloud 同步失败：\(error)")
             toast = .init(kind: .error, text: "iCloud 同步开启失败")
         }
         #endif
@@ -629,7 +653,7 @@ struct SettingsView: View {
                 do {
                     _ = try await co.syncBidirectional()
                 } catch {
-                    print("[SettingsView] 开启同步后首次同步失败：\(error)")
+                    AppLogger.sync.warning("开启同步后首次同步失败：\(error)")
                 }
             }
         }
@@ -686,176 +710,5 @@ struct SettingsView: View {
         return false
     }
 }
-
-// MARK: - 辅助：导入文件类型 / 冲突策略文案 / Toast
-
-enum ImportedFileType {
-    case ics
-    case json
-}
-
-extension ImportConflictPolicy {
-    public var title: String {
-        switch self {
-        case .keepLatest: return "保留最新（推荐）"
-        case .keepLocal:  return "保留本地"
-        case .overwrite:  return "覆盖本地"
-        }
-    }
-
-    public var subtitle: String {
-        switch self {
-        case .keepLatest: return "按 updatedAt 谁更新就用谁"
-        case .keepLocal:  return "同 id 的外部数据一律跳过"
-        case .overwrite:  return "同 id 一律用导入版本覆盖"
-        }
-    }
-}
-
-struct ToastMessage: Identifiable, Equatable {
-    enum Kind: Equatable { case success, warning, error }
-    var id = UUID()
-    var kind: Kind
-    var text: String
-}
-
-#if canImport(SwiftUI)
-struct ToastBannerView: View {
-    let message: ToastMessage
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: iconName)
-                .foregroundStyle(.white)
-            Text(message.text)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.white)
-                .lineLimit(3)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(bgColor.shadow(.drop(color: .black.opacity(0.14), radius: 8, x: 0, y: 2)))
-        )
-        .padding(.horizontal, 20)
-    }
-
-    private var iconName: String {
-        switch message.kind {
-        case .success: return "checkmark.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
-        case .error:   return "xmark.octagon.fill"
-        }
-    }
-
-    private var bgColor: Color {
-        switch message.kind {
-        case .success: return Color(red: 0.21, green: 0.64, blue: 0.37)
-        case .warning: return Color(red: 0.90, green: 0.61, blue: 0.15)
-        case .error:   return Color(red: 0.87, green: 0.28, blue: 0.28)
-        }
-    }
-}
-
-struct ConflictPolicyPicker: View {
-    @Environment(EventStore.self) private var store
-    @Binding var policy: ImportConflictPolicy
-
-    var body: some View {
-        Form {
-            Section {
-                ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
-                    Button {
-                        policy = p
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(p.title).foregroundStyle(Color.primary)
-                                Text(p.subtitle)
-                                    .font(.footnote)
-                                    .foregroundStyle(Color.secondaryLabel)
-                            }
-                            Spacer()
-                            if policy == p {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Color(hex: "#C41A1A"))
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                Text("冲突处理策略")
-            } footer: {
-                Text("当导入的事件与本地事件 id 相同时如何处理。若选「保留最新」，会按 updatedAt 时间戳比较。")
-            }
-
-            Section {
-                info(label: "本地事件总数", value: "\(store.events.count)")
-            } header: {
-                Text("预览")
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("导入冲突策略")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func info(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(value).foregroundStyle(Color.secondaryLabel)
-        }
-    }
-}
-#endif
-
-// MARK: - ShareSheet (UIActivityViewController 包装)
-
-#if canImport(UIKit)
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-#endif
-
-// MARK: - ImportFileModifier（.fileImporter 包装成独立 ViewModifier，降低 body 内联闭包复杂度）
-
-#if canImport(UniformTypeIdentifiers)
-private struct ImportFileModifier: ViewModifier {
-    @Binding var isPresented: Bool
-    let fileType: ImportedFileType
-    let onResult: (Result<URL, Error>) -> Void
-
-    func body(content: Content) -> some View {
-        content.fileImporter(
-            isPresented: $isPresented,
-            allowedContentTypes: {
-                switch fileType {
-                case .ics:  return [UTType(filenameExtension: "ics") ?? .data]
-                case .json: return [UTType(filenameExtension: "json") ?? .data]
-                }
-            }()
-        ) { result in
-            onResult(result)
-        }
-    }
-}
-#else
-private struct ImportFileModifier: ViewModifier {
-    @Binding var isPresented: Bool
-    let fileType: ImportedFileType
-    let onResult: (Result<URL, Error>) -> Void
-    func body(content: Content) -> some View { content }
-}
-#endif
 
 #endif

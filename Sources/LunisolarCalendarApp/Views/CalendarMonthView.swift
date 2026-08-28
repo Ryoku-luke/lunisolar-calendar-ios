@@ -34,33 +34,37 @@ struct CalendarMonthView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                monthHeader
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 6)
+            ZStack {
+                // iOS 26：背景用 grouped（有层次感），避免纯平
+                Color.systemGroupedBackground.ignoresSafeArea()
 
-                Divider().padding(.horizontal, 16)
+                VStack(spacing: 0) {
+                    monthHeader
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                        .padding(.bottom, 10)
 
-                WeekHeaderView()
-                    .padding(.top, 4)
-
-                calendarGrid
-                    .padding(.horizontal, 8)
-                    .padding(.top, 2)
-
-                // iPad 双栏模式隐藏底部面板（详情在右栏显示）
-                if !isIPadSplit {
-                    dayPreviewPanel
-                        .padding(.horizontal, 16)
+                    WeekHeaderView()
                         .padding(.top, 4)
-                        .padding(.bottom, 12)
+
+                    calendarGrid
+                        .padding(.horizontal, 12)
+                        .padding(.top, 2)
+
+                    // iPad 双栏模式隐藏底部面板（详情在右栏显示）
+                    if !isIPadSplit {
+                        dayPreviewPanel
+                            .padding(.horizontal, 16)
+                            .padding(.top, 10)
+                            .padding(.bottom, 16)
+                    }
                 }
+                .safeAreaInset(edge: .top, spacing: 0) { Color.clear.frame(height: 0) }
             }
-            .background(Color.systemGroupedBackground.ignoresSafeArea())
             .overlay(alignment: .bottomTrailing) {
-                // iPad 双栏模式不显示 FAB（右栏已有添加按钮）
+                // iPad 双栏模式不显示 FAB
                 if !isIPadSplit {
+                    // iOS 26 液态玻璃：FAB 使用 glassEffect 替代 Material，获得实时折射
                     NavigationLink {
                         EventEditView(
                             editing: nil,
@@ -68,23 +72,26 @@ struct CalendarMonthView: View {
                         )
                         .environment(store)
                     } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 50, weight: .light))
-                            .foregroundStyle(Color.systemBlue)
-                            .background(
-                                Circle()
-                                    .fill(Color.systemBackground)
-                                    .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
-                            )
+                        ZStack {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 50, weight: .regular))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(Color.appTint, Color.systemBackground)
+                        }
+                        .frame(width: 64, height: 64)
+                        .liquidGlassCapsule(interactive: true)
+                        .shadow(color: .black.opacity(0.10), radius: 8, x: 0, y: 4)
+                        .shadow(color: Color.appTint.opacity(0.2), radius: 20, x: 0, y: 8)
                     }
                     .padding(.trailing, 20)
                     .padding(.bottom, 24)
                 }
             }
+            .navigationTitle("农历日历")
+            .navigationBarTitleDisplayMode(.large)  // iOS 26：大标题更有品牌感
+            .toolbarBackground(.navBar, for: .navigationBar)  // iOS 16+ 毛玻璃材质导航栏
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    headerTitle
-                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
                         withAnimation(.easeInOut(duration: 0.3)) {
@@ -92,10 +99,11 @@ struct CalendarMonthView: View {
                             selectedDate = Date()
                         }
                     } label: {
-                        Text("今天")
+                        Label("今天", systemImage: "calendar.badge.clock")
+                            .symbolRenderingMode(.multicolor)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.systemBlue)
                     }
+                    .tint(Color.appTint)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -105,53 +113,60 @@ struct CalendarMonthView: View {
                                 selectedDate = Date()
                             }
                         } label: {
-                            Label("回到今天", systemImage: "calendar.circle")
+                            Label("回到今天", systemImage: "house.circle")
                         }
                         Divider()
                         NavigationLink {
                             SettingsView()
                                 .environment(store)
                         } label: {
-                            Label("设置", systemImage: "gearshape")
+                            Label("设置", systemImage: "gearshape.circle.fill")
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Image(systemName: "ellipsis.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(Color.label)
                     }
                 }
             }
+            .tint(Color.appTint)  // iOS 26 全局 tint
         }
-    }
-
-    private var headerTitle: some View {
-        Text("农历日历")
-            .font(.headline)
-            .foregroundStyle(Color.label)
     }
 
     private var monthHeader: some View {
         HStack {
-            Text("\(currentMonth.gregorianYear) 年 \(currentMonth.gregorianMonth) 月")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(Color.label)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(currentMonth.gregorianYear)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.secondaryLabel)
+                Text("\(currentMonth.gregorianMonth) 月")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.label)
+            }
             Spacer()
-            HStack(spacing: 6) {
+            HStack(spacing: 10) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         currentMonth = currentMonth.gregorianAddingMonths(-1)
                     }
                 } label: {
-                    Image(systemName: "chevron.left.circle.fill")
-                        .font(.title2)
+                    Image(systemName: "chevron.left")
+                        .font(.title2.weight(.semibold))
                         .foregroundStyle(Color.secondaryLabel)
+                        .frame(width: 38, height: 38)
+                        .liquidGlassCapsule(interactive: true)
                 }
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         currentMonth = currentMonth.gregorianAddingMonths(1)
                     }
                 } label: {
-                    Image(systemName: "chevron.right.circle.fill")
-                        .font(.title2)
+                    Image(systemName: "chevron.right")
+                        .font(.title2.weight(.semibold))
                         .foregroundStyle(Color.secondaryLabel)
+                        .frame(width: 38, height: 38)
+                        .liquidGlassCapsule(interactive: true)
                 }
             }
         }
@@ -199,10 +214,13 @@ struct CalendarMonthView: View {
                 }
             }
         }
-        .padding(4)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.secondarySystemBackground)
+        .padding(6)
+        // iOS 26 液态玻璃：月历网格使用 glassEffect 替代 Material
+        .liquidGlassCard(
+            cornerRadius: 18,
+            borderColor: Color.separator.opacity(0.5),
+            borderWidth: 0.5,
+            shadowOpacity: 0.04
         )
         .padding(.horizontal, 8)
     }
@@ -235,14 +253,19 @@ struct CalendarMonthView: View {
     private var dayPreviewPanel: some View {
         let huangli = HuangliGenerator.generate(for: selectedDate)
         let todaysEvents = store.events(on: selectedDate)
-        let todayFestivals = FestivalManager.festivals(on: selectedDate)
-        let primaryFest = FestivalManager.primaryFestival(on: selectedDate)
+        // P3 性能优化：复用 lunarMap 预计算结果或重新计算一次，避免 festivals/primaryFestival 各算一遍
+        let selLunar = selectedDate.lunar
+        let todayFestivals = FestivalManager.festivals(on: selectedDate, lunar: selLunar)
+        let primaryFest: Festival? = {
+            guard !todayFestivals.isEmpty else { return nil }
+            let primaryNames: Set<String> = [
+                "春节","元宵","端午","七夕","中秋","重阳","除夕",
+                "国庆节","元旦","劳动节","儿童节"
+            ]
+            return todayFestivals.first(where: { primaryNames.contains($0.name) }) ?? todayFestivals.first
+        }()
         let accentHex = primaryFest?.accentHex ?? "#C41A1A"
         let hasFestival = !todayFestivals.isEmpty
-
-        let cardBg: Color = hasFestival && primaryFest != nil
-            ? Color(hex: accentHex).opacity(0.08)
-            : Color.secondarySystemBackground
 
         return VStack(alignment: .leading, spacing: 10) {
             // 节日主题 Banner
@@ -452,24 +475,13 @@ struct CalendarMonthView: View {
                 }
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(cardBg)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(
-                    hasFestival ? Color(hex: accentHex).opacity(0.25) : Color.clear,
-                    lineWidth: 1
-                )
-        )
-        .shadow(
-            color: hasFestival
-                ? Color(hex: accentHex).opacity(0.08)
-                : Color.black.opacity(0.02),
-            radius: hasFestival ? 8 : 0,
-            x: 0, y: hasFestival ? 3 : 0
+        .padding(16)
+        // iOS 26 液态玻璃：底部面板材质卡片 + 可选节日描边
+        .liquidGlassCard(
+            cornerRadius: 22,
+            borderColor: hasFestival ? Color(hex: accentHex) : Color.separator.opacity(0.5),
+            borderWidth: hasFestival ? 1 : 0.5,
+            shadowOpacity: hasFestival ? 0.10 : 0.05
         )
     }
 

@@ -20,6 +20,10 @@ public final class EventStore {
 
     private(set) var events: [CalendarEvent] = []
 
+    /// 查询缓存：按日期首日缓存 occurs(on:) 结果，避免月视图 42 格 × N 事件全量遍历
+    private var eventCache: [Date: [CalendarEvent]] = [:]
+    private var statsCache: [Date: (has: Bool, priority: Priority?)] = [:]
+
     /// 脏事件 ID 集合（已变更但未推送到云端的事件）
     private var dirtyEventIDs: Set<String> = []
     /// 已删除但未推送到云端的事件 ID
@@ -27,6 +31,10 @@ public final class EventStore {
     /// 同步推送队列：序列化多个 push 请求，避免并发竞争
     private var pushQueue: [() async -> Void] = []
     private var isPushing = false
+
+    /// P5 性能：save debounce work item，合并 0.5s 内的多次 CRUD 的磁盘写入
+    private var pendingSaveWorkItem: DispatchWorkItem?
+    private let saveDebounceInterval: TimeInterval = 0.5
 
     private let saveURL: URL
     /// dirtyEventIDs 持久化路径（与 saveURL 同目录，P4 修复）
@@ -46,7 +54,7 @@ public final class EventStore {
         didSet {
             #if DEBUG
             if let id = widgetAppGroupID, !id.isEmpty {
-                print("[EventStore] ✅ App Group 已配置：\(id)")
+                AppLogger.app.notice("App Group 已配置：\(id)")
             }
             #endif
         }
@@ -104,7 +112,7 @@ public final class EventStore {
                 // BUG #34 修复：用 isEmpty(orNil:) 思路的可选链替代短路 + ! 强制解包
                 if (self.widgetAppGroupID?.isEmpty ?? true) {
                     #if canImport(UIKit)
-                    print("[EventStore] ⚠️  widgetAppGroupID 未设置——若使用 Widget Extension，"
+                    AppLogger.app.warning("widgetAppGroupID 未设置——若使用 Widget Extension，"
                         + "请在 App 启动时给 EventStore.shared.widgetAppGroupID 赋值你的 App Group ID。")
                     #endif
                 }
@@ -113,15 +121,35 @@ public final class EventStore {
         #endif
     }
 
+    // MARK: - 缓存失效
+
+    /// CRUD 后调用，清空查询缓存（下次查询时按需重建）
+    private func invalidateCache() {
+        eventCache.removeAll(keepingCapacity: true)
+        statsCache.removeAll(keepingCapacity: true)
+    }
+
     // MARK: - CRUD
 
-    /// 添加事件
-    /// - Parameters:
-    ///   - event: 新事件
-    ///   - skipSync: true=不推送到协调器（pull 合并回本地时使用，避免回环）
+    /// 添加事件：二分插入（数组已按 startDate 排序），避免全量 sort()
     public func add(_ event: CalendarEvent, skipSync: Bool = false) {
-        events.append(event)
-        sort()
+        // P6 性能：若已排序，二分查找插入位置；空数组直接 append
+        if events.isEmpty {
+            events.append(event)
+        } else {
+            let target = event.startDate
+            var lo = 0, hi = events.count
+            while lo < hi {
+                let mid = (lo + hi) / 2
+                if events[mid].startDate < target {
+                    lo = mid + 1
+                } else {
+                    hi = mid
+                }
+            }
+            events.insert(event, at: lo)
+        }
+        invalidateCache()
         save()
         // skipSync 时仍标记 dirty（供 syncBidirectional 等主动同步使用），只是不立即 enqueue
         dirtyEventIDs.insert(event.id.uuidString)
@@ -137,6 +165,7 @@ public final class EventStore {
         updated.updatedAt = Date()
         events[idx] = updated
         sort()
+        invalidateCache()
         save()
         dirtyEventIDs.insert(updated.id.uuidString)
         if !skipSync {
@@ -147,6 +176,7 @@ public final class EventStore {
     /// 删除事件
     public func delete(_ event: CalendarEvent, skipSync: Bool = false) {
         events.removeAll { $0.id == event.id }
+        invalidateCache()
         save()
         dirtyEventIDs.remove(event.id.uuidString)
         deletedEventIDs.insert(event.id.uuidString)
@@ -159,6 +189,7 @@ public final class EventStore {
         guard let idx = events.firstIndex(where: { $0.id == event.id }) else { return }
         events[idx].isCompleted.toggle()
         events[idx].updatedAt = Date()
+        invalidateCache()
         save()
         dirtyEventIDs.insert(events[idx].id.uuidString)
         if !skipSync {
@@ -173,6 +204,7 @@ public final class EventStore {
         guard let idx = events.firstIndex(where: { $0.id == event.id }) else { return }
         events[idx].isNotified = true
         events[idx].updatedAt = Date()
+        invalidateCache()
         save()
         if !skipSync {
             dirtyEventIDs.insert(events[idx].id.uuidString)
@@ -222,7 +254,7 @@ public final class EventStore {
             deletedEventIDs.removeAll()
         } catch {
             // 推送失败：保留 dirty 标记，下次重试
-            print("[EventStore] 推送云端失败: \(error)，将在下次同步时重试")
+            AppLogger.sync.warning("推送云端失败: \(error)，将在下次同步时重试")
         }
     }
 
@@ -240,30 +272,37 @@ public final class EventStore {
     }
 
 
-    // MARK: - 查询
+    // MARK: - 查询（带缓存）
 
     public func events(on date: Date) -> [CalendarEvent] {
-        events
+        let cal = Calendar(identifier: .gregorian)
+        let key = cal.startOfDay(for: date)
+        if let cached = eventCache[key] { return cached }
+        let result = events
             .filter { $0.occurs(on: date) }
             .sorted { lhs, rhs in
                 if lhs.isAllDay != rhs.isAllDay { return lhs.isAllDay }
                 if lhs.startDate != rhs.startDate { return lhs.startDate < rhs.startDate }
                 return lhs.priority > rhs.priority
             }
+        eventCache[key] = result
+        return result
     }
 
     public func hasEvents(on date: Date) -> Bool {
-        events.contains { $0.occurs(on: date) }
+        eventStats(on: date).has
     }
 
     /// 单次遍历同时返回是否有事件和最高优先级，避免 calendarGrid 里调两次
     public func eventStats(on date: Date) -> (has: Bool, priority: Priority?) {
+        let cal = Calendar(identifier: .gregorian)
+        let key = cal.startOfDay(for: date)
+        if let cached = statsCache[key] { return cached }
         var has = false
         var best: Priority? = nil
         for ev in events {
             if ev.occurs(on: date) {
                 has = true
-                // BUG #34 修复：用标准可选比较模式替代短路 + best! 强制解包
                 switch (best, ev.priority) {
                 case (nil, let p):          best = p
                 case (.some(let cur), let p) where p > cur: best = p
@@ -271,7 +310,9 @@ public final class EventStore {
                 }
             }
         }
-        return (has, best)
+        let result = (has, best)
+        statsCache[key] = result
+        return result
     }
 
     public func highestPriority(on date: Date) -> Priority? {
@@ -334,7 +375,8 @@ public final class EventStore {
         }
 
         sort()
-        save()
+        invalidateCache()
+        saveNow()
         // skipSync 时仍标记 dirty（供后续主动同步使用），只是不立即 enqueue
         for ev in pushedP {
             dirtyEventIDs.insert(ev.id.uuidString)
@@ -363,7 +405,8 @@ public final class EventStore {
             }
         }
         events.removeAll()
-        save()
+        invalidateCache()
+        saveNow()
         return removedCount
     }
 
@@ -395,21 +438,41 @@ public final class EventStore {
         } catch {
             // 数据损坏：不覆盖用户数据，保留空数组 + 打印告警
             // 用户之前的文件已损坏无法恢复，但避免 insertSampleData 直接"替换"导致误以为数据还在
-            print("[EventStore] 警告：本地数据文件损坏 (\(error))，已清空。请从备份/云端恢复。")
+            AppLogger.app.error("本地数据文件损坏 (\(error))，已清空。请从备份/云端恢复。")
             events = []
         }
+        invalidateCache()
     }
 
     private func save() {
+        // P5 性能：防抖写入。单条 CRUD 连续操作（如批量完成事件）合并为 0.5s 一次磁盘写入。
+        pendingSaveWorkItem?.cancel()
+        let wi = DispatchWorkItem { [weak self] in
+            self?.saveNow()
+        }
+        pendingSaveWorkItem = wi
+        DispatchQueue.main.asyncAfter(deadline: .now() + saveDebounceInterval, execute: wi)
+    }
+
+    /// 立即写盘（不防抖），用于 merge/clearAll/load/init 等需要立即落盘的事务性场景
+    private func saveNow() {
+        pendingSaveWorkItem?.cancel()
+        pendingSaveWorkItem = nil
         do {
             let data = try JSONEncoder().encode(events)
             try data.write(to: saveURL, options: .atomic)
-            // P4 修复：事件保存成功后，把 dirty/deleted 标记也持久化（下次重启可接着推送）
             saveDirtyFlags()
             writeWidgetSnapshotIfNeeded()
         } catch {
-            print("保存事件失败: \(error)")
+            AppLogger.app.error("保存事件失败: \(error)")
         }
+    }
+
+    // MARK: 测试辅助：立即触发一次防抖落盘（Linux XCTest 下 DispatchQueue.main.asyncAfter 不保证执行）
+    /// 强制把挂起的防抖保存立即执行；仅用于单元测试，生产代码请勿直接调用。
+    @MainActor
+    public func _testFlushSave() {
+        saveNow()
     }
 
     // MARK: - Dirty/Deleted 标记持久化（P4）
@@ -424,7 +487,7 @@ public final class EventStore {
                 let arr = try decoder.decode([String].self, from: data)
                 return Set(arr)
             } catch {
-                print("[EventStore] 警告：\(url.lastPathComponent) 读取失败（\(error)），当作空集合。")
+                AppLogger.app.warning("\(url.lastPathComponent) 读取失败（\(error)），当作空集合。")
                 return []
             }
         }
@@ -452,7 +515,7 @@ public final class EventStore {
                 let data = try encoder.encode(Array(set).sorted())  // 排序 + 数组编码体积更小
                 try data.write(to: url, options: .atomic)
             } catch {
-                print("[EventStore] 写入 \(url.lastPathComponent) 失败：\(error)")
+                AppLogger.app.error("写入 \(url.lastPathComponent) 失败：\(error)")
             }
         }
         writeSet(dirtyEventIDs, to: dirtyIDsURL)
@@ -491,7 +554,8 @@ public final class EventStore {
 
     private func insertSampleData() {
         let today = Date()
-        let cal = Calendar.current
+        // 一律用公历：避免用户将佛历/伊斯兰历设为系统日历时，示例数据月份分量错位。
+        let cal = Calendar(identifier: .gregorian)
 
         var compsTodayAllDay = cal.dateComponents([.year,.month,.day], from: today)
         compsTodayAllDay.hour = 0
@@ -555,6 +619,6 @@ public final class EventStore {
         )
 
         sort()
-        save()
+        saveNow()
     }
 }

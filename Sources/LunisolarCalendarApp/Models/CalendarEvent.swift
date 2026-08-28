@@ -68,7 +68,7 @@ public enum Priority: String, Codable, CaseIterable, Identifiable, Comparable, S
 
 // MARK: - 事件模型
 
-public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendable {
+public struct CalendarEvent: Identifiable, Codable, Sendable {
     public var id: UUID
     public var title: String
     public var type: EventType
@@ -84,6 +84,22 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
     public var isNotified: Bool
     public var createdAt: Date
     public var updatedAt: Date
+
+    /// CodingKeys：显式排除缓存字段
+    private enum CodingKeys: String, CodingKey {
+        case id, title, type, startDate, endDate, isAllDay, location, notes
+        case repeatRule, priority, isCompleted, isNotified, createdAt, updatedAt
+    }
+
+    /// 缓存 startDate 的农历转换结果（用引用类型绕过 struct 不可变性，同一事件永远不变）
+    private final class Box<T: Sendable>: @unchecked Sendable { var value: T?; init() {} }
+    private var _lunarBox: Box<LunarDate> = Box()
+    private var startLunarCached: LunarDate? {
+        if let cached = _lunarBox.value { return cached }
+        let lunar = ChineseCalendar.lunarDateSafe(from: startDate)
+        _lunarBox.value = lunar
+        return lunar
+    }
 
     nonisolated public init(
         id: UUID = UUID(),
@@ -150,14 +166,9 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
             return target >= start && tm.month == sm.month && tm.day == sm.day
         case .lunarAnnually:
             // 农历每年重复：匹配农历月日（父母生日、传统节日等）
-            // 民俗处理：
-            // - 起始是平月：要求 target 也是平月 + 同月同日（避免闰月罕见触发"多一次"）
-            // - 起始是闰月（闰五月初五）：只要求同月同日（五月初五 或 闰五月初五 都命中，保证每年至少一次）
-            // 日期门槛比较统一使用 startOfDay 归一化（和 never/daily/weekly/monthly/yearly 保持一致），
-            // 避免"起锚20:00的事件当天上午查不到"的一致性 BUG（BUG #1）。
+            // startLunar 使用缓存（同一事件永远不变）
             let targetLunar = ChineseCalendar.lunarDateSafe(from: date)
-            let startLunar = ChineseCalendar.lunarDateSafe(from: startDate)
-            guard let tl = targetLunar, let sl = startLunar else { return false }
+            guard let tl = targetLunar, let sl = startLunarCached else { return false }
             guard target >= start else { return false }
             guard tl.month == sl.month && tl.day == sl.day else { return false }
             if sl.isLeapMonth {
@@ -199,7 +210,7 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
             let d = max(1, c.day ?? 1)
             return "公历 \(m)月\(d)日 · 每年"
         case .lunarAnnually:
-            if let lunar = ChineseCalendar.lunarDateSafe(from: startDate) {
+            if let lunar = startLunarCached {
                 return "农历\(lunar.monthName)\(lunar.dayName) · 每年"
             }
             return "农历生日 · 每年"
@@ -248,26 +259,64 @@ public struct CalendarEvent: Identifiable, Equatable, Hashable, Codable, Sendabl
     }
 }
 
+// MARK: - Equatable & Hashable（手动实现，排除缓存字段）
+extension CalendarEvent: Equatable, Hashable {
+    public static func == (lhs: CalendarEvent, rhs: CalendarEvent) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.title == rhs.title &&
+        lhs.type == rhs.type &&
+        lhs.startDate == rhs.startDate &&
+        lhs.endDate == rhs.endDate &&
+        lhs.isAllDay == rhs.isAllDay &&
+        lhs.location == rhs.location &&
+        lhs.notes == rhs.notes &&
+        lhs.repeatRule == rhs.repeatRule &&
+        lhs.priority == rhs.priority &&
+        lhs.isCompleted == rhs.isCompleted &&
+        lhs.isNotified == rhs.isNotified &&
+        lhs.createdAt == rhs.createdAt &&
+        lhs.updatedAt == rhs.updatedAt
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
 #if canImport(SwiftUI)
 import SwiftUI
 
 extension EventType {
+    /// iOS 26 语义色：替换原生 .blue/.orange 为 UIColor 系统色（深浅模式一致表现）
     var tintColor: Color {
         switch self {
-        case .schedule: return .blue
-        case .reminder: return .orange
-        case .note:     return .purple
+        case .schedule: return .systemBlue
+        case .reminder: return .systemOrange
+        case .note:     return .systemPurple
         }
     }
 }
 
 extension Priority {
+    public var title: String { rawValue }
+
+    /// 胶囊徽标里的短文案（更紧凑，适合 EventRow 的优先级 badge）
+    public var shortTitle: String {
+        switch self {
+        case .low:    return "低"
+        case .normal: return "中"
+        case .high:   return "高"
+        case .urgent: return "紧急"
+        }
+    }
+
+    /// iOS 26 语义色：紧急=红；高=橙；中=蓝；低=绿
     var tintColor: Color {
         switch self {
-        case .low: return .green
-        case .normal: return .blue
-        case .high: return .orange
-        case .urgent: return .red
+        case .low:    return .systemGreen
+        case .normal: return .systemBlue
+        case .high:   return .systemOrange
+        case .urgent: return .systemRed
         }
     }
 }

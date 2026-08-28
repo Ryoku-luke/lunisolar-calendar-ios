@@ -10,13 +10,19 @@ struct LunisolarCalendarApp: App {
     @State private var store = EventStore.shared
     /// 持有同步协调器强引用（EventStore.syncCoordinator 为 weak，需要这里保活）
     @State private var syncCoordinator: EventSyncCoordinator?
+    /// 外观偏好：跟随系统 / 浅色 / 深色
+    @AppStorage("Lunisolar.appearance") private var appearanceRaw: String = AppAppearance.system.rawValue
+
+    private var appearance: AppAppearance {
+        AppAppearance(rawValue: appearanceRaw) ?? .system
+    }
 
     var body: some Scene {
         WindowGroup {
             AdaptiveRootView()
                 .environment(store)
-                .preferredColorScheme(.none)
-                .tint(Color.systemBlue)
+                .preferredColorScheme(appearance.colorScheme)
+                .tint(Color.appTint)
                 .task {
                     await setupCloudSyncIfNeeded()
                 }
@@ -46,7 +52,7 @@ struct LunisolarCalendarApp: App {
             // 用 isAvailable 探测 entitlement/账号状态（这是第一个真正跟 CloudKit 通信的点）
             let available = await provider.isAvailable
             if !available {
-                print("[LunisolarCalendarApp] iCloud entitlement 或账号不可用，跳过同步装配")
+                AppLogger.sync.warning("iCloud entitlement 或账号不可用，跳过同步装配")
                 UserDefaults.standard.set(false, forKey: "Lunisolar.sync.enabled")
                 return
             }
@@ -60,7 +66,7 @@ struct LunisolarCalendarApp: App {
             // 后台首次同步（pull 增量 + push 本地变更）
             _ = try? await coordinator.syncBidirectional()
         } catch {
-            print("[LunisolarCalendarApp] CloudKit 装配失败：\(error)")
+            AppLogger.sync.error("CloudKit 装配失败：\(error)")
             UserDefaults.standard.set(false, forKey: "Lunisolar.sync.enabled")
         }
         #endif

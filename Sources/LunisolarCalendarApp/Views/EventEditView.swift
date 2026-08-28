@@ -30,7 +30,8 @@ struct EventEditView: View {
         self.editing = editing
         self.defaultDate = defaultDate
 
-        let cal = Calendar.current
+        // BUG 修复：使用公历日历，避免用户系统日历（伊斯兰历/佛历）导致时间计算错乱
+        let cal = Calendar(identifier: .gregorian)
         let defaultStart: Date
         let defaultEnd: Date
         if let e = editing {
@@ -48,7 +49,7 @@ struct EventEditView: View {
 
         _title = State(initialValue: editing?.title ?? "")
         _type = State(initialValue: editing?.type ?? .schedule)
-        _date = State(initialValue: Calendar.current.startOfDay(for: defaultStart))
+        _date = State(initialValue: cal.startOfDay(for: defaultStart))
         _startTime = State(initialValue: defaultStart)
         _endTime = State(initialValue: defaultEnd)
         _isAllDay = State(initialValue: editing?.isAllDay ?? false)
@@ -86,9 +87,14 @@ struct EventEditView: View {
             .frame(maxWidth: hSizeClass == .regular ? 720 : .infinity)
             .navigationTitle(isEditing ? "编辑\(type.title)" : "新建\(type.title)")
             .navigationBarTitleDisplayMode(.inline)
+            // iOS 26：工具栏材质 + 全局 tint
+            .toolbarBackground(.navBar, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .tint(Color.appTint)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
+                        .foregroundStyle(Color.secondaryLabel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isEditing ? "保存" : "添加") {
@@ -103,6 +109,7 @@ struct EventEditView: View {
                             showDeleteConfirm = true
                         } label: {
                             Label("删除此\(type.title)", systemImage: "trash.fill")
+                                .symbolRenderingMode(.hierarchical)
                                 .foregroundStyle(Color.systemRed)
                         }
                     }
@@ -297,7 +304,8 @@ struct EventEditView: View {
     // MARK: - 操作
 
     private func buildEventDate() -> (start: Date, end: Date) {
-        let cal = Calendar.current
+        // 公历日历：避免用户系统日历错乱
+        let cal = Calendar(identifier: .gregorian)
         // 将 date + startTime 合成
         let dc = cal.dateComponents([.year,.month,.day], from: date)
         let stDC = cal.dateComponents([.hour,.minute,.second], from: startTime)

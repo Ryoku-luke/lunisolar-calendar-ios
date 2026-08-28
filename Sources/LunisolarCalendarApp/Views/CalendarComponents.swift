@@ -99,12 +99,13 @@ struct DayCellView: View {
         .frame(maxHeight: .infinity)
         .frame(maxWidth: .infinity)
         .background {
+            // iOS 26 液态玻璃：选中态使用 tinted glass 替代实心半透明
             if isSelected {
                 RoundedRectangle(cornerRadius: cellCornerRadius, style: .continuous)
-                    .fill(Color.systemBlue.opacity(0.15))
+                    .fill(Color.systemBlue.opacity(0.12))
                     .overlay(
                         RoundedRectangle(cornerRadius: cellCornerRadius, style: .continuous)
-                            .stroke(Color.systemBlue, lineWidth: 1.5)
+                            .strokeBorder(Color.systemBlue.opacity(0.6), lineWidth: 1.2)
                     )
             }
         }
