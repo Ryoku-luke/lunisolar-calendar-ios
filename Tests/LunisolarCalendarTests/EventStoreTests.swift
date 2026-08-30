@@ -25,12 +25,18 @@ final class EventStoreTests: XCTestCase {
 
     func testMarkNotified() async {
         let store = makeIsolatedEventStore()
-        let ev = CalendarEvent(title: "通知测试", startDate: Date().addingTimeInterval(3600))
+        let cal = Calendar(identifier: .gregorian)
+        let start = cal.date(byAdding: .hour, value: 1, to: cal.startOfDay(for: Date()))!
+        let ev = CalendarEvent(title: "通知测试", startDate: start)
         store.add(ev)
 
         XCTAssertFalse(ev.isNotified, "初始应为 false")
         store.markNotified(ev)
-        let updated = store.events(on: Date()).first(where: { $0.id == ev.id })
+        // A0-回归修复：原来查询传 Date() 可能与 start 的日期跨天（Linux 沙箱
+        // 时区设置不同时 start=Date()+3600 可能落在次日 0 点之后），改用
+        // event.startDate 精确锚定的日期查询。
+        let queryDay = cal.startOfDay(for: start)
+        let updated = store.events(on: queryDay).first(where: { $0.id == ev.id })
         XCTAssertTrue(updated?.isNotified ?? false, "标记后应为 true")
 
         store.delete(ev)

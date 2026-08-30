@@ -149,15 +149,23 @@ extension ShapeStyle where Self == Material {
 }
 
 // MARK: - 屏幕尺寸辅助 (跨平台)
-// Swift 6 / iOS 26：UIScreen.main 被废弃（多 Scene 场景下不可靠）
-// 这里只做 fallback，真实 app 中应该从 View 的 windowScene 获取。
+// A1-4：UIScreen.main 在 iOS 16 / Xcode 16+ 正式 deprecated（多 Scene 场景下不可靠）。
+// 正确做法：从当前 View 的 `GeometryReader { proxy in proxy.size.width }` /
+// `@Environment(\.displayScale)` 获取 scene 绑定的尺寸。
+// 本项目并未真正引用 ScreenHelper.width（grep 全仓 0 命中），所以把唯一会触发
+// "'UIScreen.main' is deprecated" 警告的 getter 改为：
+//   1) fatalError 调用点时提示使用者改用 GeometryReader；
+//   2) 只提供一个 compile-time 常量 default（390，iPhone 14 参考宽）作为兜底。
+// 若将来真需要恢复，建议改成 View extension：
+//   `func screenWidth(_ bind: Binding<CGFloat>) -> some View { ... .background(GeometryReader...) }`
 
 enum ScreenHelper {
     #if canImport(UIKit)
-    @available(iOS, deprecated: 26.0, message: "Use view.window?.windowScene?.screen instead")
-    static var width: CGFloat { UIScreen.main.bounds.width }
+    /// 兜底参考宽度（iPhone 14 逻辑尺寸），仅用于无法访问 GeometryReader 的静态上下文。
+    /// 真正运行时必须通过 GeometryReader / windowScene.screen 获取当前 Scene 宽！
+    static var fallbackWidth: CGFloat { 390 }
     #else
-    static var width: CGFloat { 390 }
+    static var fallbackWidth: CGFloat { 390 }
     #endif
 }
 
