@@ -1,6 +1,14 @@
 #if canImport(SwiftUI)
 import SwiftUI
 import Observation
+// N5-1 修复：setupCloudSyncIfNeeded 中 AppLogger.sync.warning/error 两条日志走
+// os.Logger，其字符串插值 init(stringInterpolation:) / appendLiteral /
+// appendInterpolation(_:privacy:attributes:) 在 module `os` 内定义；本文件 SwiftUI
+// 在某些 iOS SDK 组合下不自动 transitively 引入 os，Xcode 就把每条日志级联为 6 条
+// "defining module 'os'"错误，共 7 条（warning 有 2 次插值次数不同）。
+#if canImport(os)
+import os
+#endif
 
 // MARK: - App 入口
 
@@ -64,7 +72,11 @@ struct LunisolarCalendarApp: App {
             store.syncCoordinator = coordinator
             syncCoordinator = coordinator
             // 后台首次同步（pull 增量 + push 本地变更）
-            _ = try? await coordinator.syncBidirectional()
+            // N5-2 修复：原来写 `_ = try? await ...`。`try?` 把 throw 的错误吃成 nil，
+            // `do { } catch { }` 的 do-block 中就再没有任何 throwing 语句，
+            // iOS 18 SDK 新诊断会报 "'catch' block is unreachable because no errors are thrown in 'do' block"。
+            // 这里本意是要 catch CloudKit 装配错误 → 改为 `try await`（真的抛）。
+            _ = try await coordinator.syncBidirectional()
         } catch {
             AppLogger.sync.error("CloudKit 装配失败：\(error)")
             UserDefaults.standard.set(false, forKey: "Lunisolar.sync.enabled")
