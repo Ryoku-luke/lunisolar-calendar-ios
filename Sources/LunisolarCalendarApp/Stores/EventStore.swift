@@ -199,8 +199,16 @@ public final class EventStore {
                 // BUG #34 修复：用 isEmpty(orNil:) 思路的可选链替代短路 + ! 强制解包
                 if (self.widgetAppGroupID?.isEmpty ?? true) {
                     #if canImport(UIKit)
-                    AppLogger.app.warning("widgetAppGroupID 未设置——若使用 Widget Extension，"
-                        + "请在 App 启动时给 EventStore.shared.widgetAppGroupID 赋值你的 App Group ID。")
+                    // N4 修复：os.Logger.warning(_:) 形参为 OSLogMessage（ExpressibleByStringInterpolation），
+                    // 支持字符串字面量 / 插值，但不接受普通 String 表达式参与 `+` 二元拼接；
+                    // 拼接结果 Swift 不会隐式转 OSLogMessage → "Cannot convert String to OSLogMessage"。
+                    // 改成单字面量 + 换行 + 插值（任何平台下语义一致，跨 SPM/Xcode）。
+                    let gid = String(describing: EventStore.shared.widgetAppGroupID)
+                    AppLogger.app.warning("""
+                    widgetAppGroupID 未设置——若使用 Widget Extension，\
+                    请在 App 启动时给 EventStore.shared.widgetAppGroupID 赋值你的 App Group ID。\
+                    （当前值：\(gid)）
+                    """)
                     #endif
                 }
             }
