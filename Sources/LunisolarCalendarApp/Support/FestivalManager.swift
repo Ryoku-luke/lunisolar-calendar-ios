@@ -151,10 +151,5 @@ public extension Color {
         let b = Double(rgb & 0xFF) / 255.0
         self.init(red: r, green: g, blue: b)
     }
-
-    /// 金色 (中秋/重阳节日点缀)
-    static var festiveGold: Color {
-        Color(red: 0.94, green: 0.73, blue: 0.15)
-    }
 }
 #endif

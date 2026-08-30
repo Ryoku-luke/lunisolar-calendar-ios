@@ -85,7 +85,7 @@ struct EventEditView: View {
             .formStyle(.grouped)
             // iPad 宽屏下限制表单宽度，避免每行过宽影响可读性
             .frame(maxWidth: hSizeClass == .regular ? 720 : .infinity)
-            .navigationTitle(isEditing ? "编辑\(type.title)" : "新建\(type.title)")
+            .navigationTitle(isEditing ? "编辑\(type.displayTitle)" : "新建\(type.displayTitle)")
             .navigationBarTitleDisplayMode(.inline)
             // iOS 26：工具栏材质 + 全局 tint
             .toolbarBackground(.navBar, for: .navigationBar)
@@ -108,7 +108,7 @@ struct EventEditView: View {
                         Button(role: .destructive) {
                             showDeleteConfirm = true
                         } label: {
-                            Label("删除此\(type.title)", systemImage: "trash.fill")
+                            Label("删除此\(type.displayTitle)", systemImage: "trash.fill")
                                 .symbolRenderingMode(.hierarchical)
                                 .foregroundStyle(Color.systemRed)
                         }
@@ -119,7 +119,7 @@ struct EventEditView: View {
                 Button("删除", role: .destructive, action: delete)
                 Button("取消", role: .cancel) {}
             } message: {
-                Text("删除后将无法恢复此\(type.title)。")
+                Text("删除后将无法恢复此\(type.displayTitle)。")
             }
         }
     }
@@ -133,7 +133,7 @@ struct EventEditView: View {
 
             Picker("类型", selection: $type) {
                 ForEach(EventType.allCases) { t in
-                    Label(t.title, systemImage: t.systemIcon).tag(t)
+                    Label(t.displayTitle, systemImage: t.systemIcon).tag(t)
                 }
             }
             .pickerStyle(.segmented)
@@ -188,7 +188,7 @@ struct EventEditView: View {
 
             Picker("优先级", selection: $priority) {
                 ForEach(Priority.allCases) { p in
-                    Label(p.title, systemImage: "flag.fill")
+                    Label(p.displayTitle, systemImage: "flag.fill")
                         .foregroundStyle(p.tintColor)
                         .tag(p)
                 }
@@ -206,7 +206,7 @@ struct EventEditView: View {
         case .lunarAnnually:
             Label {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(rule.title)
+                    Text(rule.displayTitle)
                     Text("适合：农历生日 / 传统纪念日")
                         .font(.caption2)
                         .foregroundStyle(Color.secondary)
@@ -216,7 +216,7 @@ struct EventEditView: View {
                     .foregroundStyle(Color(hex: "#C41A1A"))
             }
         default:
-            Text(rule.title)
+            Text(rule.displayTitle)
         }
     }
 
@@ -282,7 +282,7 @@ struct EventEditView: View {
 
     private var statusSection: some View {
         Section {
-            Toggle("\(type.title)已完成", isOn: $isCompleted)
+            Toggle("\(type.displayTitle)已完成", isOn: $isCompleted)
                 .tint(Color.systemGreen)
             HStack {
                 Text("创建于")
