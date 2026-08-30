@@ -6,6 +6,12 @@ import UniformTypeIdentifiers
 #if canImport(UIKit)
 import UIKit
 #endif
+// N6 修复：本文件 5 处 AppLogger（setupCloudSync/warning/handleImportResult/error/enableSync
+// 首次失败 + handleSyncToggle 的 warning）最终走 os.Logger 的 OSLogMessage 插值；
+// 与 LunisolarCalendarApp 同样地，iOS 18 SDK 下 SwiftUI 不再 transitively 引入 os。
+#if canImport(os)
+import os
+#endif
 
 // MARK: - 设置页面
 

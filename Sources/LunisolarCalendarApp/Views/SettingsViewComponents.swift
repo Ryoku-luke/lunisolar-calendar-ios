@@ -7,6 +7,14 @@ import UIKit
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
 #endif
+// N6 修复：本文件 ToastBannerView 没有 AppLogger，但 Xcode 的"同模块共享"诊断
+// 会把 liquidGlassCard 所在的 ColorExtensions 一起扫；同时我们在
+// CalendarMonthView/DayDetailView 里统一使用 liquidGlassCard 的签名不含 tint。
+// 为避免 SettingsViewComponents 独立编译时也在 UIKit 路径下抛
+// "defining module 'os'" 级联，这里同样显式 import。
+#if canImport(os)
+import os
+#endif
 #endif
 
 // MARK: - 设置页辅助类型与子视图（从 SettingsView.swift 拆分，降低单文件体积与编译器负担）
@@ -63,9 +71,13 @@ struct ToastBannerView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         // iOS 26 液态玻璃：Toast 使用 glassEffect 替代 Material.thickMaterial
+        // N6-2 修复：liquidGlassCard 当前签名为
+        //   func liquidGlassCard(cornerRadius: borderColor: borderWidth: shadowOpacity: interactive:)
+        // 不含 tint（tint 是 liquidGlassCapsule 的参数，曾误用）；删掉 tint 参数即可。
+        // 若后续给 liquidGlassCard 加 tint 并在 iOS 26 分支里用它调制 glassEffect 颜色，
+        // 把 tint: bgAccent 加回来即可。
         .liquidGlassCard(
             cornerRadius: 16,
-            tint: bgAccent,
             borderColor: bgAccent.opacity(0.7),
             borderWidth: 1.0,
             shadowOpacity: 0.14
