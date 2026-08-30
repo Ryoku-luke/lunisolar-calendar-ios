@@ -384,6 +384,45 @@ final class EventStoreTests: XCTestCase {
 
     // MARK: Helper
 
+    // MARK: - 数据损坏隔离备份（BUG #41 回归）
+
+    /// EventStore.load() 解码失败时，不应在下次 saveNow() 把用户的损坏文件原子覆盖掉，
+    /// 必须先复制成 `calendar_events.json.corrupt.<ms>` 隔离文件，让用户能通过
+    /// Finder / iMazing / iTunes 备份自行救援。
+    func testCorruptFileIsQuarantinedNotOverwritten() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("corrupt-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let saveURL = dir.appendingPathComponent("calendar_events.json")
+
+        // 写入损坏的 JSON（不是合法的 [CalendarEvent] 数组）
+        let garbage = "{this is not valid json!!! ¥©π".data(using: .utf8) ?? Data()
+        try garbage.write(to: saveURL, options: .atomic)
+        let originalData = try Data(contentsOf: saveURL)
+        XCTAssertFalse(originalData.isEmpty, "前置：损坏文件非空")
+
+        // 触发 load() → 内部应走 quarantine 分支
+        let store = EventStore(storageBaseDir: dir)
+        // 启动发现损坏 → events 被置空（没有填充示例数据）
+        XCTAssertTrue(store.events.isEmpty, "损坏 JSON 解码失败后，内存 events 必须是 []，不能用样例数据掩人耳目")
+
+        // 关键断言：目录里必须有 .corrupt.<ms> 备份，且字节内容与损坏前一致
+        let fm = FileManager.default
+        let entries = try fm.contentsOfDirectory(atPath: dir.path)
+        let backups = entries.filter { $0.hasPrefix("calendar_events.json.corrupt.") }
+        XCTAssertEqual(backups.count, 1, "必须有且仅有一个隔离备份文件；实际：\(backups)")
+        let backupURL = dir.appendingPathComponent(backups[0])
+        let backed = try Data(contentsOf: backupURL)
+        XCTAssertEqual(backed, originalData, "隔离备份内容必须与损坏的原文件逐字节一致")
+
+        // 写一条事件 → 原子写不会丢备份
+        store.add(CalendarEvent(title: "新加的", startDate: Date()))
+        store._testFlushSave()
+        let entriesAfter = try fm.contentsOfDirectory(atPath: dir.path)
+        let backupsAfter = entriesAfter.filter { $0.hasPrefix("calendar_events.json.corrupt.") }
+        XCTAssertEqual(backupsAfter.count, 1, "写新事件后隔离备份仍需保留，不能被 .atomic 覆盖")
+    }
+
     /// 小性能包装：把操作和断言分离；Linux XCTest 没有 os_signpost，我们这里只打印耗时。
     private func measureAndCheck<T>(_ work: () -> T, completion: (T) -> Void) {
         let t0 = Date()

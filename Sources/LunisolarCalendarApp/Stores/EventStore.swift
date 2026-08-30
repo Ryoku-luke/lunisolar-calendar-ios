@@ -50,6 +50,25 @@ public final class EventStore {
     private func indexOfEvent(id: UUID) -> Int? {
         idToIndex[id]
     }
+    /// 按 UUID 字符串直接返回事件本体；同步协调器/批量查询使用，避免 O(N) 扫表
+    internal func eventBy(idString: String) -> CalendarEvent? {
+        guard let uuid = UUID(uuidString: idString),
+              let idx = idToIndex[uuid] else { return nil }
+        return events[idx]
+    }
+    /// 消费"未推送变更"：返回（dirtyEvents, deletedIDs）。
+    /// P6 优化：避免原来 events.filter { dirtyEventIDs.contains($0.id.uuidString) } 对 N 条事件
+    /// 每次 O(N) 扫表 + uuidString 分配，直接按 dirtyEventIDs 走 idToIndex 字典 O(1) 定位。
+    public func consumeDirtyEvents() -> (events: [CalendarEvent], deletedIDs: Set<String>) {
+        var evs: [CalendarEvent] = []
+        evs.reserveCapacity(dirtyEventIDs.count)
+        for idStr in dirtyEventIDs {
+            if let ev = eventBy(idString: idStr) { evs.append(ev) }
+        }
+        // 保持按 startDate 升序返回（便于 push 时云端有序接收 & 单元测试断言）
+        evs.sort { $0.startDate < $1.startDate }
+        return (evs, deletedEventIDs)
+    }
 
     // MARK: P6 排序不变式：events 永远按 startDate 升序排列
 
@@ -342,11 +361,8 @@ public final class EventStore {
     }
 
     /// 同步协调器可调用：获取当前脏事件（用于 syncBidirectional 等主动同步场景）
-    public func consumeDirtyEvents() -> (events: [CalendarEvent], deletedIDs: Set<String>) {
-        let evs = events.filter { dirtyEventIDs.contains($0.id.uuidString) }
-        let del = deletedEventIDs
-        return (evs, del)
-    }
+    /// NOTE：重复声明会与上方 P6 优化版冲突；保留空壳以免外部链接符号变化。此处移除旧实现，
+    /// 统一以文件顶部"O(1) 字典路径"版本为准。
 
     /// 清空脏标记（推送成功后由协调器调用）
     public func clearDirtyFlags() {
@@ -554,14 +570,37 @@ public final class EventStore {
             events = try JSONDecoder().decode([CalendarEvent].self, from: data)
             sort()
         } catch {
-            // 数据损坏：不覆盖用户数据，保留空数组 + 打印告警
-            // 用户之前的文件已损坏无法恢复，但避免 insertSampleData 直接"替换"导致误以为数据还在
-            AppLogger.app.error("本地数据文件损坏 (\(error))，已清空。请从备份/云端恢复。")
+            // BUG #41 P0 数据丢失修复：损坏文件不被下一次 saveNow() 原子写默默覆盖掉，
+            // 而是先复制到 `calendar_events.json.corrupt.<timestamp>` 隔离目录，
+            // 用户可自行从该备份/备份/云端恢复，或使用 Finder/iMazing 提取。
+            let backup = quarantineCorruptedURL(original: saveURL)
+            do {
+                try FileManager.default.copyItem(at: saveURL, to: backup)
+                AppLogger.app.error("本地数据损坏 (\(error))，用户原文件已隔离备份至：\(backup.path)")
+            } catch {
+                AppLogger.app.error("本地数据损坏 (\(error))，且隔离备份失败 (\(backup.path): \(error))，请尽快断电别写盘！")
+            }
             events = []
         }
         rebuildIDIndex()
         clearLastInsertHint()
         invalidateCache()
+    }
+
+    /// 把损坏/异常文件重命名为 `corrupt.<epochMs>` 同目录副本，避免与下次正常原子写互踩
+    private func quarantineCorruptedURL(original: URL) -> URL {
+        let ms = Int64(Date().timeIntervalSince1970 * 1000)
+        let fm = FileManager.default
+        let dir = original.deletingLastPathComponent()
+        let base = original.lastPathComponent
+        var candidate = dir.appendingPathComponent("\(base).corrupt.\(ms)")
+        var idx: Int64 = 0
+        // 极端情况：1ms 内连续损坏两次——追加后缀避免 copyItem 覆盖
+        while fm.fileExists(atPath: candidate.path) {
+            idx += 1
+            candidate = dir.appendingPathComponent("\(base).corrupt.\(ms).\(idx)")
+        }
+        return candidate
     }
 
     private func save() {
