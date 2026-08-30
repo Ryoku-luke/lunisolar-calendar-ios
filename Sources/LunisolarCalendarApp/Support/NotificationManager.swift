@@ -1,4 +1,11 @@
 import Foundation
+// N1 修复：Apple 平台下 AppLogger.app.error/warning/debug 最终落到 os.Logger。
+// OSLogMessage(_:) 的字符串插值由 module `os` 提供 OSLogInterpolation / appendLiteral /
+// appendInterpolation(_:privacy:attributes:)；缺 import 会级联报 6 条"defining module 'os'"
+// 错误（见 DataPortability.swift BUG-DP2 同类修复）。
+#if canImport(os)
+import os
+#endif
 
 #if canImport(UserNotifications)
 import UserNotifications

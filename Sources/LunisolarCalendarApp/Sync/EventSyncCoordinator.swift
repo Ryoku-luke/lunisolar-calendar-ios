@@ -1,5 +1,11 @@
 import Foundation
 import Observation
+// N2 修复：AppLogger.sync.error / warning 最终落到 os.Logger，其字符串插值
+// appendLiteral / appendInterpolation(_:privacy:attributes:) / init(stringInterpolation:)
+// 均定义在 module `os`。缺 import 会在每条日志处级联 6 条"defining module 'os'"错误。
+#if canImport(os)
+import os
+#endif
 
 // MARK: - 事件同步协调器（夹在 EventStore 与 ICloudSyncProvider 中间）
 
@@ -356,7 +362,10 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             if let raw = defaults.dictionary(forKey: versionTrackingKey) as? [String: Int] {
                 versionMap = raw.mapValues { Int64($0) }
             }
-            AppLogger.sync.warning("loadVersionMap 失败: \(error)，\(versionMap.isEmpty ? "已清空" : "已回退旧格式")")
+            // N2-2 修复：iOS 18 SDK 中的 OSLogMessage (os.Logger) 即使是 autoclosure 形参，
+            // 对隐式 self 属性访问也要求显式写 `self.`；否则报
+            // "Reference to property 'versionMap' in closure requires explicit use of 'self'..."
+            AppLogger.sync.warning("loadVersionMap 失败: \(error)，\(self.versionMap.isEmpty ? "已清空" : "已回退旧格式")")
         }
     }
 
