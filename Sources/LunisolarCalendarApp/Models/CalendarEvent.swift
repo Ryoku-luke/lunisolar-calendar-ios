@@ -97,6 +97,52 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
     /// 缓存 startDate 的农历转换结果（用引用类型绕过 struct 不可变性，同一事件永远不变）
     private final class Box<T: Sendable>: @unchecked Sendable { var value: T?; init() {} }
     private var _lunarBox: Box<LunarDate> = Box()
+
+    // MARK: - W2/W3 修复：非隔离 Codable 实现
+    // Swift 6 strict mode 下，对 Sendable struct 的 synthesized Encodable/Decodable
+    // 有时会被推断为 @MainActor（特别是类型内含有 reference-type cached field 时），
+    // 导致 SyncCoders.encoder() 在 nonisolated 上下文调用时触发
+    // "Main actor-isolated conformance of 'CalendarEvent' to 'Encodable/Decodable'
+    // cannot be used in nonisolated context" 警告。
+    // 显式 nonisolated 实现 encode(to:)/init(from:) 即可消除。
+
+    nonisolated public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(type, forKey: .type)
+        try c.encode(startDate, forKey: .startDate)
+        try c.encode(endDate, forKey: .endDate)
+        try c.encode(isAllDay, forKey: .isAllDay)
+        try c.encode(location, forKey: .location)
+        try c.encode(notes, forKey: .notes)
+        try c.encode(repeatRule, forKey: .repeatRule)
+        try c.encode(priority, forKey: .priority)
+        try c.encode(isCompleted, forKey: .isCompleted)
+        try c.encode(isNotified, forKey: .isNotified)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+    }
+
+    nonisolated public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id             = try c.decode(UUID.self, forKey: .id)
+        title          = try c.decode(String.self, forKey: .title)
+        type           = try c.decode(EventType.self, forKey: .type)
+        startDate      = try c.decode(Date.self, forKey: .startDate)
+        endDate        = try c.decode(Date.self, forKey: .endDate)
+        isAllDay       = try c.decode(Bool.self, forKey: .isAllDay)
+        location       = try c.decodeIfPresent(String.self, forKey: .location)
+        notes          = try c.decodeIfPresent(String.self, forKey: .notes)
+        repeatRule     = try c.decode(RepeatRule.self, forKey: .repeatRule)
+        priority       = try c.decode(Priority.self, forKey: .priority)
+        isCompleted    = try c.decode(Bool.self, forKey: .isCompleted)
+        isNotified     = try c.decode(Bool.self, forKey: .isNotified)
+        createdAt      = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt      = try c.decode(Date.self, forKey: .updatedAt)
+        // 缓存字段重建
+        _lunarBox      = Box()
+    }
     private var startLunarCached: LunarDate? {
         if let cached = _lunarBox.value { return cached }
         let lunar = ChineseCalendar.lunarDateSafe(from: startDate)

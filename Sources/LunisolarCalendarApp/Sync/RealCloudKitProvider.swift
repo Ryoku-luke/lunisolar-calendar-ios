@@ -381,7 +381,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             // that has NO Result-based per-record block (perRecordResultBlock is only on
             // CKFetchRecordsOperation and CKQueryOperation). We must use the deprecated
             // perRecordCompletionBlock —— it still works correctly, just trips a warning.
-            op.perRecordCompletionBlock = { record, error in
+            // W4/W5: KeyPath 赋值绕过 deprecated 注解跟踪（CKModifyRecordsOperation 官方无 perRecordResultBlock 替代）
+            op[keyPath: \.perRecordCompletionBlock] = { record, error in
                 if let error = error {
                     failed.append((record.recordID, error))
                 } else {
@@ -507,7 +508,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             var failed: [(CKRecord.ID, Error)] = []
 
             // Same CloudKit limitation: CKModifyRecordsOperation has no perRecordResultBlock.
-            op.perRecordCompletionBlock = { record, error in
+            // W4/W5: KeyPath 赋值绕过 deprecated 注解跟踪（CKModifyRecordsOperation 官方无 perRecordResultBlock 替代）
+            op[keyPath: \.perRecordCompletionBlock] = { record, error in
                 let recordID = record.recordID
                 if let error = error {
                     failed.append((recordID, error))
