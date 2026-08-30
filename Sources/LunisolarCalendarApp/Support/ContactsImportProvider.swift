@@ -31,18 +31,25 @@ public struct ContactsImportProvider: SystemImportProviding {
     }
 
     public func requestAuthorization() async throws -> Bool {
+        // A1-2 修复：iOS 18+ / macOS 15+ 使用 `requestAccess(for:)` async throws 版本
+        // （替代 iOS 18 起 deprecated 的 completion-handler 版），旧版 SDK 回退到
+        // withCheckedThrowingContinuation 包 completion handler。
         let entityType = CNEntityType.contacts
         let status = CNContactStore.authorizationStatus(for: entityType)
         switch status {
         case .authorized, .limited:
             return true
         case .notDetermined:
-            return try await withCheckedThrowingContinuation { continuation in
-                store.requestAccess(for: entityType) { granted, error in
-                    if let error = error {
-                        continuation.resume(throwing: error)
-                    } else {
-                        continuation.resume(returning: granted)
+            if #available(iOS 18.0, macOS 15.0, watchOS 11.0, *) {
+                return try await store.requestAccess(for: entityType)
+            } else {
+                return try await withCheckedThrowingContinuation { continuation in
+                    store.requestAccess(for: entityType) { granted, error in
+                        if let error = error {
+                            continuation.resume(throwing: error)
+                        } else {
+                            continuation.resume(returning: granted)
+                        }
                     }
                 }
             }
@@ -130,14 +137,20 @@ public struct ContactsImportProvider: SystemImportProviding {
         contactID: String,
         label: String?,
         name: String,
-        dateComponents: NSDateComponents
+        dateComponents: DateComponents
     ) -> SystemImportEvent? {
-        guard dateComponents.month > 0, dateComponents.day > 0 else { return nil }
+        // A1-2: CNContact.dates[i].value 原签名是 NSDateComponents（与 birthday 的
+        // DateComponents 不一致），Swift 会在 iOS 18 SDK 警告 "use of DateComponents
+        // instead of NSDateComponents"，外加 .month / .year 对可选 Int? 的空值比较
+        // 警告。统一先 bridge 成 DateComponents 再处理。
+        let dc = dateComponents
+        guard let month = dc.month, month > 0,
+              let day = dc.day, day > 0 else { return nil }
         let cal = Calendar(identifier: .gregorian)
-        let year = dateComponents.year > 0 ? dateComponents.year : 1900
+        let year = (dc.year ?? 0) > 0 ? dc.year : 1900
         guard let s = cal.date(from: DateComponents(year: year,
-                                                    month: dateComponents.month,
-                                                    day: dateComponents.day,
+                                                    month: month,
+                                                    day: day,
                                                     hour: 10)) else { return nil }
         let labelName = (label ?? "纪念日").isEmpty ? "纪念日" : (label ?? "纪念日")
         return SystemImportEvent(

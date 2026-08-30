@@ -29,17 +29,25 @@ public struct CalendarImportProvider: SystemImportProviding {
     }
 
     public func requestAuthorization() async throws -> Bool {
-        // iOS 17+ 用 fullAccess；旧版用 writeOnly/legacy
+        // iOS 17+ 用 requestFullAccessToEvents；iOS 16 及以下用 legacy requestAccess(to:)。
+        // A1-1 修复：分别在各自的 availability 范围内调用，避免 iOS 17+ SDK 的
+        // "'requestAccess(to:)' was deprecated in iOS 17.0" 警告。
         let granted: Bool
         if #available(iOS 17.0, *) {
             granted = (try? await store.requestFullAccessToEvents()) ?? false
         } else {
             let status = EKEventStore.authorizationStatus(for: .event)
             switch status {
-            case .authorized:
+            case .authorized, .fullAccess, .writeOnly:
                 granted = true
             case .notDetermined:
-                granted = (try? await store.requestAccess(to: .event)) ?? false
+                granted = (try? await withCheckedThrowingContinuation { cont in
+                    // iOS < 17 仍然安全合法；swiftlint:disable:next legacy_hashing
+                    store.requestAccess(to: .event) { g, e in
+                        if let e = e { cont.resume(throwing: e) }
+                        else { cont.resume(returning: g) }
+                    }
+                }) ?? false
             default:
                 granted = false
             }

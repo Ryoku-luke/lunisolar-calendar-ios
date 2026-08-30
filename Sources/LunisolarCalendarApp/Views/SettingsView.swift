@@ -18,6 +18,10 @@ import os
 struct SettingsView: View {
     @Environment(EventStore.self) private var store
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    // A1-3: 替换 UIApplication.shared.open（iOS 13+ 在 SwiftUI 里
+    // 建议用 @Environment(\.openURL)，Widget Extension / macOS/visionOS
+    // 也兼容；UIApplication.shared 在 iOS 18+ 触发 deprecation 警告）
+    @Environment(\.openURL) private var openURL
     @State private var notifStatus: NotificationAuthStatus = .unavailable
     @State private var showImportPicker = false
     @State private var importingFileType: ImportedFileType = .ics
@@ -615,11 +619,11 @@ struct SettingsView: View {
     }
 
     private func openSystemSettings() {
-        #if canImport(UIKit)
         if let url = URL(string: UIApplication.openSettingsURLString) {
-            UIApplication.shared.open(url)
+            // A1-3: 通过 SwiftUI environment 的 openURL 打开系统设置
+            // （替换 UIApplication.shared.open，后者在 iOS 18+ / multi-scene 下 deprecated）
+            openURL(url)
         }
-        #endif
     }
 
     // MARK: - iCloud 同步辅助
