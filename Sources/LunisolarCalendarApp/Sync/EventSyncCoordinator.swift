@@ -132,7 +132,7 @@ public final class EventSyncCoordinator: @unchecked Sendable {
         for delID in deletedIDs {
             guard !records.contains(where: { $0.id == delID }) else { continue }
             let nextVer = (versionMap[delID] ?? 0) + 1
-            let existing = eventStore.events.first(where: { $0.id.uuidString == delID })
+            let existing = eventStore.eventBy(idString: delID)
             let ms: Int64 = {
                 if let d = existing?.updatedAt { return Int64(d.timeIntervalSince1970 * 1000) }
                 return Int64(Date().timeIntervalSince1970 * 1000)
@@ -222,7 +222,7 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             if remoteRec.version > localVersion {
                 // 冲突：本地版本追踪落后于云端，并且本地已经有这个 ID 的事件
                 // （若本地不存在这个 ID，就是"云端新增"，不算冲突）
-                let localExisting = eventStore.events.first(where: { $0.id.uuidString == remoteRec.id })
+                let localExisting = eventStore.eventBy(idString: remoteRec.id)
                 let isConflict: Bool = (localExisting != nil) && (localVersion > 0)
                 if isConflict { conflicts += 1 }
 
