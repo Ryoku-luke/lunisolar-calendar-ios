@@ -1,4 +1,11 @@
 import Foundation
+// EventStore 里多处 AppLogger.app.error/warning/notice 使用 os.Logger 字符串插值
+// （appendLiteral / appendInterpolation / OSLogInterpolation），这些由 module `os` 提供。
+// 仅 import Foundation 在 iOS SDK 下不自动 transitively 引入 os，Xcode 会级联报 N*6 条
+// "defining module 'os'"错误，一并补上。
+#if canImport(os)
+import os
+#endif
 
 #if canImport(Observation)
 import Observation
