@@ -4,6 +4,14 @@ import Crypto  // Apple 平台推荐 CryptoKit (import Crypto 会把 SHA256 暴�
 #elseif canImport(CommonCrypto)
 import CommonCrypto
 #endif
+// DP2 修复：在 iOS 15+ SDK 中 AppLogger.app = os.Logger，其 Logger.error(_:) / log 方法
+// 使用 OSLogMessage（ExpressibleByStringInterpolation）实现带 privacy 的字符串插值。
+// OSLogInterpolation 等类型属于 module `os`，DataPortability 不 import 时会报
+// "appendInterpolation / appendLiteral / init(stringInterpolation:) is not available due to
+// missing import of defining module 'os'"。
+#if canImport(os)
+import os
+#endif
 
 // MARK: - 合并结果统计（ICS / JSON 导入都会返回）
 
@@ -163,14 +171,14 @@ public enum DataPortability {
         for event in events {
             let row: [String] = [
                 escapeCSV(event.title),
-                event.type.title,
+                event.type.displayTitle,
                 dfmt.string(from: event.startDate),
                 dfmt.string(from: event.endDate),
                 event.isAllDay ? "是" : "否",
                 escapeCSV(event.location ?? ""),
                 escapeCSV(event.notes ?? ""),
-                event.repeatRule.title,
-                event.priority.title,
+                event.repeatRule.displayTitle,
+                event.priority.displayTitle,
                 event.isCompleted ? "是" : "否",
                 dfmt.string(from: event.createdAt)
             ]

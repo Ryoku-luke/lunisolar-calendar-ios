@@ -250,13 +250,30 @@ extension View {
         interactive: Bool
     ) -> some View {
         #if canImport(UIKit)
+        // iOS 26 GlassEffect / LiquidGlass 在 Xcode 公开 SDK（截至 iOS 18 GM）中尚未正式声明，
+        // 直接写 `GlassEffect.regular` 会触发 "Cannot find 'GlassEffect' in scope"。
+        // 为了让当前 Xcode App Target 能过编译，这里统一使用 iOS 15+ 的 thickMaterial +
+        // 半透明渐变高光来模拟液态玻璃的折射/高光感；一旦 Apple 公开 Liquid Glass API，
+        // 只要把下面 iOS 26 分支换回 .glassEffect(GlassEffect...) 即可。
         if #available(iOS 26.0, *) {
             self
-                .glassEffect(
-                    interactive
-                        ? GlassEffect.regular.interactive()
-                        : GlassEffect.regular,
-                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .background(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(.thickMaterial)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        // 顶部内高光，模拟折射边缘
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(interactive ? 0.45 : 0.25),
+                                    .white.opacity(0.04)
+                                ],
+                                startPoint: .top, endPoint: .bottom
+                            ),
+                            lineWidth: 0.6
+                        )
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -265,6 +282,7 @@ extension View {
                 .shadow(color: .black.opacity(shadowOpacity),
                         radius: shadowOpacity > 0 ? 8 : 0,
                         x: 0, y: 3)
+                .scaleEffect(interactive ? 1.0 : 1.0) // 占位，未来 interactive 用 animation
         } else {
             self
                 .ios26Card(
@@ -295,22 +313,33 @@ extension View {
     ) -> some View {
         #if canImport(UIKit)
         if #available(iOS 26.0, *) {
-            if interactive {
-                self.glassEffect(
-                    .regular.interactive().tint(tint ?? .clear),
-                    in: Capsule()
+            // iOS 26 模拟液态玻璃胶囊：thickMaterial + 顶部折射高光 + tint 混色
+            self
+                .background(
+                    Capsule()
+                        .fill(.thickMaterial)
+                        .overlay(
+                            Capsule()
+                                .fill((tint ?? .clear).opacity(interactive ? 0.20 : 0.12))
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [
+                                            .white.opacity(interactive ? 0.40 : 0.22),
+                                            .white.opacity(0.03)
+                                        ],
+                                        startPoint: .top, endPoint: .bottom
+                                    ),
+                                    lineWidth: 0.6
+                                )
+                        )
                 )
-            } else if let tint {
-                self.glassEffect(
-                    .regular.tint(tint),
-                    in: Capsule()
+                .overlay(
+                    Capsule()
+                        .stroke(Color.separator.opacity(0.3), lineWidth: 0.5)
                 )
-            } else {
-                self.glassEffect(
-                    .regular,
-                    in: Capsule()
-                )
-            }
         } else {
             self
                 .background(
@@ -336,17 +365,9 @@ extension View {
     fileprivate func glassContainerFallback<Content: View>(
         _ content: () -> Content
     ) -> some View {
-        #if canImport(UIKit)
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: 8) {
-                content()
-            }
-        } else {
-            content()
-        }
-        #else
-        content()
-        #endif
+        // 注：GlassEffectContainer 在当前 Xcode SDK 同样不可用；用 VStack + content shape
+        // 模拟"分组折射容器"，视觉一致、API 稳定。
+        VStack(alignment: .leading, spacing: 8, content: content)
     }
 }
 
