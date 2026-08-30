@@ -3,6 +3,11 @@ import SwiftUI
 
 // MARK: - 月视图日历主界面
 
+/// 轻量 ref wrapper：让 Binding 的 get/set 闭包共享同一份可变状态，
+/// 避免把 State(initialValue:) 拿到 View 体外创建（Xcode 16 会警告
+/// "Accessing State's value outside of being installed on a View"）。
+fileprivate final class _Box<T>: @unchecked Sendable { var value: T; init(_ v: T) { self.value = v } }
+
 fileprivate struct DaySlot: Identifiable, Hashable {
     let id = UUID()
     let date: Date
@@ -11,7 +16,7 @@ fileprivate struct DaySlot: Identifiable, Hashable {
 
 struct CalendarMonthView: View {
     @State private var currentMonth: Date = Date().gregorianFirstDayOfMonth
-    /// iPad 模式下从外部 Binding 注入；iPhone 模式下用本地 @State
+    /// iPad 模式下从外部 Binding 注入；iPhone 模式下用本地 closure-based Binding（零 State 外创建）
     @Binding private var selectedDate: Date
     /// 底部面板展开状态（点击就地显示完整时间轴）
     @State private var isPanelExpanded: Bool = false
@@ -19,13 +24,20 @@ struct CalendarMonthView: View {
     @Environment(EventStore.self) private var store
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
-    /// iPhone 便捷初始化（内部自带 selectedDate State）
+    /// iPhone 便捷初始化（内部自带 selectedDate Binding；用 closure + ref-wrapper，避免 State 在 Init 外实例化警告）
     init(selectedDate: Binding<Date>? = nil) {
         if let binding = selectedDate {
             self._selectedDate = binding
         } else {
-            let local = State(initialValue: Date())
-            self._selectedDate = local.projectedValue
+            // W1 修复：把 selectedDate 的本地状态塞进一个 _Box<Date>，
+            // 然后用 Binding(get:set:) 构造一个闭包式 Binding。
+            // 这样 init 里没有任何 `State(initialValue:)` 调用，
+            // 彻底消除 Xcode 16 的 "Accessing State's value outside View" 警告。
+            let localBox = _Box(Date())
+            self._selectedDate = Binding(
+                get: { localBox.value },
+                set: { localBox.value = $0 }
+            )
         }
     }
 
