@@ -1,132 +1,100 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-// MARK: - 星期标题行
-
 struct WeekHeaderView: View {
     private let weekdays = ["日","一","二","三","四","五","六"]
     @Environment(\.horizontalSizeClass) private var hSizeClass
-
+    private var isRegular: Bool { hSizeClass == .regular }
     var body: some View {
         HStack(spacing: 0) {
             ForEach(0..<7, id: \.self) { idx in
                 Text(weekdays[idx])
-                    .font(hSizeClass == .regular
-                          ? .body.weight(.semibold)
-                          : .caption.weight(.semibold))
-                    .foregroundStyle(idx == 0 || idx == 6 ? Color.systemRed : Color.secondaryLabel)
+                    .font(isRegular ? .system(size: 13, weight: .semibold, design: .rounded)
+                                     : .system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(idx == 0 || idx == 6
+                                     ? Color.systemRed.opacity(0.65)
+                                     : Color.secondaryLabel.opacity(0.85))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, hSizeClass == .regular ? 8 : 6)
             }
         }
-        .padding(.horizontal, 2)
+        .padding(.vertical, isRegular ? 10 : 8)
+        .padding(.horizontal, isRegular ? 16 : 12)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.hairSeparator)
+                .frame(height: AppTheme.Stroke.hair)
+                .padding(.horizontal, isRegular ? 20 : 14)
+        }
     }
 }
-
-// MARK: - 单个日期单元格
 
 struct DayCellView: View {
-    let date: Date
-    let isCurrentMonth: Bool
-    let isSelected: Bool
-    let isToday: Bool
-    let lunar: LunarDate
-    let huangli: HuangliDay
-    let hasEvents: Bool
-    let eventPriority: Priority?
-
+    let date: Date, isCurrentMonth: Bool, isSelected: Bool, isToday: Bool
+    let lunar: LunarDate, huangli: HuangliDay
+    let hasEvents: Bool, eventPriority: Priority?, eventCount: Int
     @Environment(\.horizontalSizeClass) private var hSizeClass
-
-    /// iPad regular 宽屏字体放大；iPhone compact 保持原尺寸
     private var isRegular: Bool { hSizeClass == .regular }
-    private var dayFontSize: CGFloat { isToday ? (isRegular ? 22 : 17) : (isRegular ? 20 : 16) }
-    private var lunarFontSize: CGFloat { isRegular ? 12 : 9 }
-    private var badgeFontSize: CGFloat { isRegular ? 10 : 8 }
-    private var badgeHeight: CGFloat { isRegular ? 16 : 12 }
-    private var dotSize: CGFloat { isRegular ? 7 : 5 }
-    private var cellCornerRadius: CGFloat { isRegular ? 14 : 10 }
-
+    private var numeralFont: Font { isRegular ? AppTheme.Font.numeralL : AppTheme.Font.numeralM }
     var body: some View {
-        VStack(spacing: isRegular ? 3 : 1) {
-            // 公历日期 + 今日圆点
-            ZStack(alignment: .topTrailing) {
-                Text("\(date.day)")
-                    .font(.system(size: dayFontSize, weight: isToday ? .bold : .medium))
-                    .foregroundStyle(dayForegroundColor)
-
-                if isToday {
-                    Circle()
-                        .fill(Color.systemRed)
-                        .frame(width: dotSize, height: dotSize)
-                        .padding(2)
-                }
-            }
-            .frame(maxWidth: .infinity)
-
-            // 农历日期 / 节日
-            Text(lunar.shortDisplayString)
-                .font(.system(size: lunarFontSize))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .foregroundStyle(lunarForegroundColor)
-
-            Spacer(minLength: 2)
-
-            // 底部：吉日 badge 或事件点（共存不重叠）
-            HStack(spacing: 2) {
-                if huangli.isAuspicious && isCurrentMonth {
-                    Text("吉")
-                        .font(.system(size: badgeFontSize, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: isRegular ? 18 : 14, height: badgeHeight)
-                        .background(
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(Color.auspicious)
+        VStack(spacing: isRegular ? 4 : 2) {
+            ZStack {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: isRegular ? 14 : 10, style: .continuous)
+                        .fill(Color.appTint)
+                        .shadow(color: Color.appTint.opacity(0.28), radius: 8, x: 0, y: 3)
+                } else if isToday {
+                    RoundedRectangle(cornerRadius: isRegular ? 14 : 10, style: .continuous)
+                        .fill(Color.todayCapsule)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: isRegular ? 14 : 10, style: .continuous)
+                                .stroke(Color.systemRed.opacity(0.35), lineWidth: AppTheme.Stroke.hair)
                         )
                 }
-                if hasEvents {
-                    Circle()
-                        .fill(eventPriority?.tintColor ?? Color.systemBlue)
-                        .frame(width: dotSize, height: dotSize)
-                }
-                if !(huangli.isAuspicious && isCurrentMonth) && !hasEvents {
-                    Color.clear.frame(width: dotSize, height: dotSize)
-                }
+                Text("\(date.day)")
+                    .font(numeralFont)
+                    .foregroundStyle(foregroundForDay)
             }
-            .frame(height: badgeHeight)
+            .frame(height: isRegular ? 40 : 34).frame(maxWidth: .infinity)
+            Text(lunar.shortDisplayString)
+                .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
+                .foregroundStyle(foregroundForLunar)
+                .lineLimit(1).minimumScaleFactor(0.6)
+            if hasEvents || (huangli.isAuspicious && isCurrentMonth) {
+                HStack(spacing: 2) {
+                    if huangli.isAuspicious && isCurrentMonth {
+                        Capsule().fill(Color.auspicious.opacity(0.85))
+                            .frame(width: isRegular ? 12 : 9, height: isRegular ? 5 : 4)
+                    }
+                    if hasEvents {
+                        ForEach(0..<min(eventCount, 3), id: \.self) { _ in
+                            Capsule().fill(eventPriority?.tintColor ?? Color.appTint)
+                                .frame(width: isRegular ? 12 : 9, height: isRegular ? 5 : 4)
+                        }
+                    }
+                }
+                .frame(height: isRegular ? 6 : 5)
+            } else {
+                Color.clear.frame(height: isRegular ? 6 : 5)
+            }
         }
         .padding(.vertical, isRegular ? 6 : 4)
-        .frame(maxHeight: .infinity)
-        .frame(maxWidth: .infinity)
-        .background {
-            // iOS 26 液态玻璃：选中态使用 tinted glass 替代实心半透明
-            if isSelected {
-                RoundedRectangle(cornerRadius: cellCornerRadius, style: .continuous)
-                    .fill(Color.systemBlue.opacity(0.12))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cellCornerRadius, style: .continuous)
-                            .strokeBorder(Color.systemBlue.opacity(0.6), lineWidth: 1.2)
-                    )
-            }
-        }
-        .opacity(isCurrentMonth ? 1.0 : 0.35)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .opacity(isCurrentMonth ? 1 : 0.32)
+        .contentShape(Rectangle())
     }
-
-    private var dayForegroundColor: Color {
-        if !isCurrentMonth { return Color.secondaryLabel }
+    private var foregroundForDay: Color {
+        if isSelected { return .white }
+        guard isCurrentMonth else { return Color.tertiaryLabel }
         if isToday { return Color.systemRed }
-        // 周末
         let wd = date.weekday
-        if wd == 1 || wd == 7 { return Color.systemRed.opacity(0.8) }
+        if wd == 1 || wd == 7 { return Color.systemRed.opacity(0.78) }
         return Color.label
     }
-
-    private var lunarForegroundColor: Color {
-        if !isCurrentMonth { return Color.tertiaryLabel }
-        // 节气/初一用喜庆色
-        if lunar.day == 1 { return Color.auspicious.opacity(0.85) }
-        return Color.secondaryLabel
+    private var foregroundForLunar: Color {
+        guard isCurrentMonth else { return Color.quaternaryLabel }
+        if isSelected { return .white.opacity(0.9) }
+        if lunar.day == 1 { return Color.festiveRed.opacity(0.9) }
+        if huangli.isAuspicious { return Color.auspicious.opacity(0.92) }
+        return Color.tertiaryLabel
     }
 }
-
 #endif
