@@ -11,7 +11,6 @@ public struct HuangliDay: Equatable, Hashable, Sendable {
     public let sha: String        // 煞
     public let wuXing: String     // 五行
     public let shenWei: String    // 神位
-    public let isAuspicious: Bool // 黄道吉日
 
     public var displayChongSha: String {
         "\(chong) \(sha)"
@@ -162,9 +161,6 @@ public enum HuangliGenerator {
         // 神位 (喜神/财神方位，简化)
         let shenWei = shenWeiDirection(zhiIndex)
 
-        // 黄道吉日判断：基于建除十二神 + 值日 + 28宿吉凶综合
-        let isAuspicious = determineAuspicious(date: date, dayGanZhi: dayGanZhi, lunar: lunar)
-
         return HuangliDay(
             date: date,
             lunar: lunar,
@@ -173,8 +169,7 @@ public enum HuangliGenerator {
             chong: chong,
             sha: sha,
             wuXing: wuXing,
-            shenWei: shenWei,
-            isAuspicious: isAuspicious
+            shenWei: shenWei
         )
     }
 
@@ -248,40 +243,5 @@ public enum HuangliGenerator {
         let xiShen = ["东北","西北","西南","东南","东北","西北","西南","东南","东北","西北","西南","东南"][zhiIndex]
         let caiShen = ["西南","正西","正北","正南","正东","东南","东北","西南","正西","正北","正南","正东"][zhiIndex]
         return "喜神:\(xiShen) 财神:\(caiShen)"
-    }
-
-    private static func determineAuspicious(
-        date: Date,
-        dayGanZhi: (gan: Int, zhi: Int, text: String),
-        lunar: LunarDate
-    ) -> Bool {
-        // 简化的黄道吉日判定：
-        // 1. 建除十二神：除、满、平、定、执、破、危、成、收、开、闭
-        // 2. 黄道日 = 青龙、明堂、金匮、天德、玉堂、司命
-        // 这里使用基于地支的简单判定 + 奇偶日 + 28宿吉凶加权
-
-        let zhi = dayGanZhi.zhi
-        // 值日吉凶（地支->黄道六神的判定简化）
-        let huangDaoShen = [1, 3, 5, 6, 8, 10] // 黄黑道日（简化版）
-        var score = 0
-        if huangDaoShen.contains(zhi) { score += 2 }
-
-        // 建除十二神：以农历日推算（简化版）
-        // 建=初一对应，除=满...黄道：除、满、定、执、成、开
-        let jianChu = (lunar.day - 1) % 12
-        let goodJianChu = [1, 2, 4, 5, 7, 9] // 除、满、定、执、成、开
-        if goodJianChu.contains(jianChu) { score += 2 }
-
-        // 28宿吉宿：角、亢、房、心、尾、箕、斗、室、壁、娄、胃、毕、参、井、柳、张、翼
-        let cal = Calendar(identifier: .gregorian)
-        var dc = DateComponents()
-        dc.year = 1900; dc.month = 1; dc.day = 1
-        let base = cal.date(from: dc) ?? date
-        let diff = cal.dateComponents([.day], from: base, to: date).day ?? 0
-        let xiuIndex = ((diff % 28) + 28) % 28
-        let goodXiu: Set<Int> = [0,1,3,4,5,6,7,15,16,17,20,22,25,26]
-        if goodXiu.contains(xiuIndex) { score += 1 }
-
-        return score >= 3
     }
 }

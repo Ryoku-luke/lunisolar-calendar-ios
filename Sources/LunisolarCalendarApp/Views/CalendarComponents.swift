@@ -58,12 +58,8 @@ struct DayCellView: View {
                 .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
                 .foregroundStyle(foregroundForLunar)
                 .lineLimit(1).minimumScaleFactor(0.6)
-            if hasEvents || (huangli.isAuspicious && isCurrentMonth) {
+            if hasEvents {
                 HStack(spacing: 2) {
-                    if huangli.isAuspicious && isCurrentMonth {
-                        Capsule().fill(Color.auspicious.opacity(0.85))
-                            .frame(width: isRegular ? 12 : 9, height: isRegular ? 5 : 4)
-                    }
                     if hasEvents {
                         ForEach(0..<min(eventCount, 3), id: \.self) { _ in
                             Capsule().fill(eventPriority?.tintColor ?? Color.appTint)
@@ -93,7 +89,6 @@ struct DayCellView: View {
         guard isCurrentMonth else { return Color.quaternaryLabel }
         if isSelected { return .white.opacity(0.9) }
         if lunar.day == 1 { return Color.festiveRed.opacity(0.9) }
-        if huangli.isAuspicious { return Color.auspicious.opacity(0.92) }
         return Color.tertiaryLabel
     }
 }

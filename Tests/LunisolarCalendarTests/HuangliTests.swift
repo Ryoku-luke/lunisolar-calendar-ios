@@ -21,10 +21,4 @@ final class HuangliTests: XCTestCase {
         let h = HuangliGenerator.generate(for: date)
         XCTAssertEqual(h.chong, "冲龙", "2024-10-01 戊戌日 应冲龙")
     }
-
-    func testAuspiciousIsBool() {
-        let h = HuangliGenerator.generate(for: Date())
-        // isAuspicial 应该是 true 或 false，不应该崩溃
-        _ = h.isAuspicious
-    }
 }

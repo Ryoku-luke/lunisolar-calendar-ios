@@ -3,6 +3,16 @@ import SwiftUI
 
 // MARK: - AppTheme · DesignToken (iOS 现代风格)
 public enum AppTheme {
+    public enum Touch {
+        /// iOS HIG 最小点击目标
+        public static let minTarget: CGFloat = 44
+        /// Chip 最小高度（内容 + 呼吸空间）
+        public static let chipHeight: CGFloat = 40
+        /// 复选框图标尺寸
+        public static let checkboxSize: CGFloat = 24
+        /// 日历格最小行高（保证 7 列布局下仍可点中）
+        public static let minCellHeight: CGFloat = 56
+    }
     public enum Spacing {
         public static let xs: CGFloat = 4
         public static let sm: CGFloat = 8
@@ -99,6 +109,11 @@ extension View {
         #else
         self
         #endif
+    }
+    /// 统一将交互元素扩展到最小 44×44 触碰区域（iOS HIG）
+    public func touchTarget(min: CGFloat = AppTheme.Touch.minTarget) -> some View {
+        self.frame(minWidth: min, minHeight: min, alignment: .center)
+            .contentShape(Rectangle())
     }
 }
 

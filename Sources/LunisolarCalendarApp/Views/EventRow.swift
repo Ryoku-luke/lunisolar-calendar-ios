@@ -44,16 +44,20 @@ struct EventRow: View {
                 if !compact, event.type == .reminder || event.type == .schedule {
                     Button { store.toggleCompleted(for: event.id) } label: {
                         Image(systemName: event.isCompleted ? "checkmark.circle.fill" : "circle")
-                            .font(AppTheme.Font.title3)
+                            .font(.system(size: AppTheme.Touch.checkboxSize, weight: .semibold))
                             .foregroundStyle(
                                 event.isCompleted ? Color.systemGreen : Color.tertiaryLabel.opacity(0.7))
                             .symbolRenderingMode(.hierarchical)
+                            .frame(minWidth: AppTheme.Touch.minTarget,
+                                   minHeight: AppTheme.Touch.minTarget,
+                                   alignment: .trailing)
+                            .contentShape(Rectangle())
                     }.buttonStyle(.plain)
                 }
             }
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
-        .padding(.vertical, compact ? AppTheme.Spacing.md : AppTheme.Spacing.lg)
+        .padding(.vertical, compact ? AppTheme.Spacing.lg : AppTheme.Spacing.xl)
         .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
             .fill(Color.secondarySystemGroupedBackground))
         .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)

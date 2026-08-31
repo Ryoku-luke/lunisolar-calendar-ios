@@ -32,8 +32,7 @@ while cursor < end {
         "c": String(h.chong.dropFirst(1)), // 去前缀"冲"
         "s": String(h.sha.dropFirst(1)),  // 去前缀"煞"
         "w": h.wuXing,
-        "g": h.shenWei,
-        "a": h.isAuspicious ? 1 : 0
+        "g": h.shenWei
     ]
     cursor = cal.date(byAdding: .day, value: 1, to: cursor)!
     total += 1

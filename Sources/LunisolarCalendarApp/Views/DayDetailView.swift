@@ -34,6 +34,7 @@ struct DayDetailView: View {
                     Button { showAdd = true } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title3).foregroundStyle(Color.appTint)
+                            .touchTarget(min: AppTheme.Touch.minTarget)
                     }
                 }
             }
@@ -78,10 +79,6 @@ struct DayDetailView: View {
                         ChipLabel(title: lunar.yearAnimal,
                                   systemImage: "pawprint.circle.fill",
                                   tint: Color.systemOrange, font: AppTheme.Font.caption)
-                        if huangli.isAuspicious {
-                            ChipLabel(title: "黄道吉日", systemImage: "sparkles",
-                                      tint: Color.auspicious, font: AppTheme.Font.caption)
-                        }
                     }
                 }
                 Spacer()
@@ -101,9 +98,11 @@ struct DayDetailView: View {
                             .foregroundStyle(item.2).lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(AppTheme.Spacing.sm)
+                    .padding(.horizontal, AppTheme.Spacing.sm)
+                    .padding(.vertical, AppTheme.Spacing.md)
                     .background(RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
                         .fill(Color.quaternarySystemFill))
+                    .contentShape(Rectangle())
                 }
             }
         }
@@ -119,9 +118,6 @@ struct DayDetailView: View {
                 Label("黄历宜忌", systemImage: "book.and.wrench.fill")
                     .font(AppTheme.Font.title3).foregroundStyle(Color.label)
                 Spacer()
-                if huangli.isAuspicious {
-                    ChipLabel(title: "大吉", systemImage: "sparkles", tint: Color.auspicious)
-                }
             }
             HStack(alignment: .top, spacing: AppTheme.Spacing.lg) {
                 yiBlockFull(huangli.yi)
@@ -196,12 +192,13 @@ struct DayDetailView: View {
             } label: {
                 Label("新建\(EventType.schedule.displayTitle)", systemImage: "plus.circle.fill")
                     .font(AppTheme.Font.bodyBold).frame(maxWidth: .infinity)
-                    .padding(.vertical, AppTheme.Spacing.md)
+                    .frame(minHeight: AppTheme.Touch.minTarget)
                     .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                         .fill(LinearGradient(colors: [Color.appTint, Color.appTint.opacity(0.82)],
                                              startPoint: .topLeading, endPoint: .bottomTrailing)))
                     .foregroundStyle(.white)
                     .shadow(color: Color.appTint.opacity(0.30), radius: 12, x: 0, y: 5)
+                    .contentShape(Rectangle())
             }.buttonStyle(.plain)
         }
         .padding(AppTheme.Spacing.xl).modernCard()

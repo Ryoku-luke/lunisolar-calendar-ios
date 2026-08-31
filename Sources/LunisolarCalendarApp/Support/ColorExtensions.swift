@@ -100,14 +100,6 @@ extension Color {
                 : UIColor(red: 0.77, green: 0.10, blue: 0.10, alpha: 1.0)
         })
     }
-    /// 吉祥红 (黄道吉日)：深色模式降低不透明度避免过曝
-    static var auspicious: Color {
-        Color(UIColor { tc in
-            tc.userInterfaceStyle == .dark
-                ? UIColor(red: 0.88, green: 0.35, blue: 0.35, alpha: 0.90)
-                : UIColor(red: 0.82, green: 0.22, blue: 0.22, alpha: 0.88)
-        })
-    }
     /// 喜庆金：深色模式更暖更亮
     static var festiveGold: Color {
         Color(UIColor { tc in
@@ -127,7 +119,6 @@ extension Color {
     #else
     // macOS / Linux fallback（固定色值）
     static var festiveRed: Color { Color(red: 0.77, green: 0.10, blue: 0.10) }
-    static var auspicious: Color { Color(red: 0.82, green: 0.22, blue: 0.22, opacity: 0.88) }
     static var festiveGold: Color { Color(red: 0.88, green: 0.72, blue: 0.35) }
     static var appTint: Color { Color(red: 0.07, green: 0.45, blue: 0.93) }
     #endif
