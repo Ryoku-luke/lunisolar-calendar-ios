@@ -1,357 +1,214 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-// MARK: - 日详情视图：黄历 + 当日日程列表
-
 struct DayDetailView: View {
-    @Environment(EventStore.self) private var store
-    @Environment(\.horizontalSizeClass) private var hSizeClass
     let date: Date
-
-    /// iPad regular 宽屏下约束内容最大宽度，避免文字行宽过大影响可读性
-    private var isRegular: Bool { hSizeClass == .regular }
+    @Environment(EventStore.self) private var store
+    @State private var showAdd: Bool = false
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+    private var isWide: Bool { hSizeClass == .regular }
 
     var body: some View {
-        let huangli = HuangliGenerator.generate(for: date)
-        let events = store.events(on: date)
-
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 16) {
-                // 顶部：日期 + 农历 + 黄道
-                headerCard(huangli: huangli)
-
-                // 黄历宜忌
-                huangliCard(huangli: huangli)
-
-                // 其他信息：冲煞、五行、神位
-                extraHuangliCard(huangli: huangli)
-
-                // 当日日程
-                eventsCard(events: events)
-
-                // 底部留白
-                Color.clear.frame(height: 40)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .frame(maxWidth: isRegular ? 720 : .infinity) // iPad 限宽
-            .frame(maxWidth: .infinity) // 居中
-        }
-        .background(Color.systemGroupedBackground.ignoresSafeArea())
-        .navigationTitle(navTitle)
-        .navigationBarTitleDisplayMode(.inline)
-        // iOS 26：详情页使用常规材质导航栏（与月视图保持一致）
-        .toolbarBackground(.navBar, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    EventEditView(editing: nil, defaultDate: date)
-                        .environment(store)
-                } label: {
-                    // iOS 26：SF Symbols 5 palette 渲染
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title2)
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.appTint, Color.quaternarySystemFill)
-                }
-            }
-        }
-        .tint(Color.appTint)
-    }
-
-    private var navTitle: String {
-        "\(date.year)/\(date.month)/\(date.day)"
-    }
-
-    // MARK: - 顶部卡片
-
-    private func headerCard(huangli: HuangliDay) -> some View {
-        HStack(alignment: .top, spacing: 18) {
-            VStack(spacing: 4) {
-                Text("\(date.day)")
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
-                    .foregroundStyle(date.isToday ? Color.systemRed : Color.label)
-                Text(date.weekdaySymbol)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.secondaryLabel)
-                Text(date.isToday ? "今天" : "")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(Color.systemRed)
-            }
-            .frame(width: 78)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.secondarySystemGroupedBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.separator.opacity(0.35), lineWidth: 0.5)
-            )
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("\(date.year)年\(date.month)月\(date.day)日")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color.secondaryLabel)
-
-                Text(huangli.lunar.displayString)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(Color.label)
-
-                HStack(spacing: 8) {
-                    Text("\(huangli.lunar.yearGanZhi)年")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(
-                            Capsule().fill(Color.systemIndigo.opacity(0.14))
-                        )
-                        .foregroundStyle(Color.systemIndigo)
-
-                    Label(huangli.lunar.yearAnimal, systemImage: "pawprint.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(
-                            Capsule().fill(Color.systemOrange.opacity(0.14))
-                        )
-                        .foregroundStyle(Color.systemOrange)
-                }
-
-                if huangli.isAuspicious {
-                    Label("黄道吉日 · 诸事顺遂", systemImage: "sparkles")
-                        .font(.caption.weight(.bold))
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(
-                            Capsule().fill(Color.auspicious.opacity(0.14))
-                        )
-                        .foregroundStyle(Color.auspicious)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(18)
-        // iOS 26 液态玻璃：头部卡片
-        .liquidGlassCard(
-            cornerRadius: 24,
-            borderColor: Color.separator.opacity(0.4),
-            borderWidth: 0.5,
-            shadowOpacity: 0.06
-        )
-    }
-
-    // MARK: - 黄历宜忌卡片
-
-    private func huangliCard(huangli: HuangliDay) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "book.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.systemOrange)
-                Text("黄历宜忌")
-                    .font(.headline)
-                    .foregroundStyle(Color.label)
-                Spacer()
-            }
-
-            HStack(alignment: .top, spacing: 12) {
-                // 宜
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 4) {
-                        Text("宜")
-                            .font(.caption2.weight(.bold))
-                            .frame(width: 22, height: 22)
-                            .background(Circle().fill(Color.systemGreen.opacity(0.88)))
-                            .foregroundStyle(.white)
-                        Spacer()
+        NavigationStack {
+            ZStack {
+                Color.systemGroupedBackground.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: AppTheme.Spacing.section) {
+                        headerCard.padding(.top, AppTheme.Spacing.lg)
+                        almanacCard
+                        eventsCard
+                        Color.clear.frame(height: AppTheme.Spacing.xxl)
                     }
-                    tagGrid(tags: huangli.yi, tint: Color.systemGreen)
+                    .padding(.horizontal, isWide ? AppTheme.Spacing.xxl : AppTheme.Spacing.lg)
+                    .frame(maxWidth: isWide ? 760 : .infinity)
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                // 忌
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 4) {
-                        Text("忌")
-                            .font(.caption2.weight(.bold))
-                            .frame(width: 22, height: 22)
-                            .background(Circle().fill(Color.systemRed.opacity(0.88)))
-                            .foregroundStyle(.white)
-                        Spacer()
-                    }
-                    tagGrid(tags: huangli.ji, tint: Color.systemRed)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-        }
-        .padding(16)
-        // iOS 26 液态玻璃：黄历宜忌卡片
-        .liquidGlassCard(
-            cornerRadius: 20,
-            borderColor: Color.separator.opacity(0.4),
-            borderWidth: 0.5,
-            shadowOpacity: 0.05
-        )
-    }
-
-    /// 使用FlowLayout排列标签（每行按宽度自动换行，不依赖屏幕宽度硬编码）
-    private func tagGrid(tags: [String], tint: Color) -> some View {
-        FlowLayout(spacing: 4, lineSpacing: 4) {
-            ForEach(tags.indices, id: \.self) { idx in
-                Text(tags[idx])
-                    .font(.caption2.weight(.medium))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(tint.opacity(0.12))
-                    )
-                    .foregroundStyle(tint)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    // MARK: - 其他黄历信息
-
-    private func extraHuangliCard(huangli: HuangliDay) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "info.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.systemTeal)
-                Text("其他信息")
-                    .font(.headline)
-                Spacer()
-            }
-
-            LazyVGrid(
-                columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
-                alignment: .leading,
-                spacing: 10
-            ) {
-                infoRow(title: "冲煞", value: huangli.displayChongSha, icon: "xmark.shield")
-                infoRow(title: "五行纳音", value: huangli.wuXing, icon: "flame.circle")
-                infoRow(title: "神位", value: huangli.shenWei, icon: "sparkles", span: 2)
-            }
-        }
-        .padding(16)
-        // iOS 26 液态玻璃：其他信息卡片
-        .liquidGlassCard(
-            cornerRadius: 20,
-            borderColor: Color.separator.opacity(0.4),
-            borderWidth: 0.5,
-            shadowOpacity: 0.05
-        )
-    }
-
-    private func infoRow(title: String, value: String, icon: String, span: Int = 1) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: icon)
-                .font(.caption)
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(Color.systemTeal)
-                .frame(width: 16)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(Color.secondaryLabel)
-                Text(value)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.label)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.secondarySystemGroupedBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.separator.opacity(0.3), lineWidth: 0.5)
-        )
-        .gridCellColumns(span)
-    }
-
-    // MARK: - 当日日程卡片
-
-    private func eventsCard(events: [CalendarEvent]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "list.bullet.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.systemBlue)
-                Text("当日日程 (\(events.count))")
-                    .font(.headline)
-                Spacer()
-                NavigationLink {
-                    EventEditView(editing: nil, defaultDate: date)
-                        .environment(store)
-                } label: {
-                    HStack(spacing: 4) {
+            .navigationTitle(date.weekdaySymbol)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.navBar, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .tint(Color.appTint)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showAdd = true } label: {
                         Image(systemName: "plus.circle.fill")
-                            .symbolRenderingMode(.palette)
-                        Text("添加")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.title3).foregroundStyle(Color.appTint)
                     }
-                    .foregroundStyle(Color.appTint)
                 }
             }
+            .sheet(isPresented: $showAdd) {
+                EventEditView(editing: nil, defaultDate: date).environment(store)
+            }
+        }
+    }
 
-            if events.isEmpty {
-                emptyEventsState
-            } else {
-                VStack(spacing: 10) {
-                    ForEach(events) { event in
-                        NavigationLink {
-                            EventEditView(editing: event, defaultDate: date)
-                                .environment(store)
-                        } label: {
-                            EventRow(event: event)
-                                .environment(store)
+    private var headerCard: some View {
+        let lunar = date.lunar
+        let festivals = FestivalManager.festivals(on: date, lunar: lunar)
+        let accent: Color = festivals.first.map { Color(hex: $0.accentHex) } ?? Color.appTint
+        let huangli = HuangliGenerator.generate(for: date)
+        return VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
+            HStack(alignment: .top, spacing: AppTheme.Spacing.xl) {
+                VStack(spacing: 2) {
+                    Text("\(date.day)")
+                        .font(AppTheme.Font.numeralXL)
+                        .foregroundStyle(date.isToday ? Color.systemRed : Color.label)
+                    Text("\(date.gregorianYear) 年 \(date.gregorianMonth) 月")
+                        .font(AppTheme.Font.caption).foregroundStyle(Color.secondaryLabel)
+                }
+                .frame(width: 110).padding(.vertical, AppTheme.Spacing.lg)
+                .background(RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous)
+                    .fill(date.isToday ? Color.todayCapsule : Color.secondarySystemGroupedBackground))
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                    Text(lunar.displayString).font(AppTheme.Font.title2).foregroundStyle(Color.label)
+                    if !festivals.isEmpty {
+                        HStack(spacing: AppTheme.Spacing.xs) {
+                            ForEach(Array(festivals.prefix(3)), id: \.name) { f in
+                                Text("\(f.emoji) \(f.name)")
+                                    .font(AppTheme.Font.caption.weight(.bold))
+                                    .capsuleTag(fill: Color(hex: f.accentHex).opacity(0.18),
+                                                border: Color(hex: f.accentHex).opacity(0.25), hPad: 10, vPad: 5)
+                                    .foregroundStyle(Color(hex: f.accentHex))
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
+                    HStack(spacing: AppTheme.Spacing.xs) {
+                        ChipLabel(title: lunar.yearGanZhi, tint: Color.systemIndigo, font: AppTheme.Font.caption)
+                        ChipLabel(title: lunar.yearAnimal,
+                                  systemImage: "pawprint.circle.fill",
+                                  tint: Color.systemOrange, font: AppTheme.Font.caption)
+                        if huangli.isAuspicious {
+                            ChipLabel(title: "黄道吉日", systemImage: "sparkles",
+                                      tint: Color.auspicious, font: AppTheme.Font.caption)
+                        }
+                    }
+                }
+                Spacer()
+            }
+            let rows: [(String, String, Color)] = [
+                ("冲煞", huangli.chongSha.isEmpty ? "—" : huangli.chongSha, Color.systemRed),
+                ("五行", huangli.wuXing.isEmpty ? "—" : huangli.wuXing, Color.systemBrown),
+                ("纳音", huangli.naYin.isEmpty ? "—" : huangli.naYin, Color.systemPurple),
+                ("喜神", huangli.xiShenDirection.isEmpty ? "—" : huangli.xiShenDirection, Color.systemPink),
+                ("财神", huangli.caiShenDirection.isEmpty ? "—" : huangli.caiShenDirection, Color.systemGold)
+            ]
+            HStack(spacing: AppTheme.Spacing.xs) {
+                ForEach(rows, id: \.0) { item in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.0).font(AppTheme.Font.caption2).foregroundStyle(Color.tertiaryLabel)
+                        Text(item.1).font(AppTheme.Font.caption.weight(.semibold))
+                            .foregroundStyle(item.2).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(AppTheme.Spacing.sm)
+                    .background(RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                        .fill(Color.quaternarySystemFill))
                 }
             }
         }
-        .padding(16)
-        // iOS 26 液态玻璃：当日日程卡片
-        .liquidGlassCard(
-            cornerRadius: 20,
-            borderColor: Color.separator.opacity(0.4),
-            borderWidth: 0.5,
-            shadowOpacity: 0.05
-        )
+        .padding(AppTheme.Spacing.xl)
+        .modernCard(radius: AppTheme.Radius.xl, material: .thinMaterial,
+                    border: accent.opacity(0.12), shadow: AppTheme.Shadow.card)
     }
 
-    private var emptyEventsState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "moon.stars")
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(Color.tertiaryLabel)
-            Text("这天还没有安排")
-                .font(.subheadline)
-                .foregroundStyle(Color.secondaryLabel)
-            Text("添加日程、提醒或记事，让生活更有条理")
-                .font(.caption)
-                .foregroundStyle(Color.tertiaryLabel)
-                .multilineTextAlignment(.center)
+    private var almanacCard: some View {
+        let huangli = HuangliGenerator.generate(for: date)
+        return VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
+            HStack {
+                Label("黄历宜忌", systemImage: "book.and.wrench.fill")
+                    .font(AppTheme.Font.title3).foregroundStyle(Color.label)
+                Spacer()
+                if huangli.isAuspicious {
+                    ChipLabel(title: "大吉", systemImage: "sparkles", tint: Color.auspicious)
+                }
+            }
+            HStack(alignment: .top, spacing: AppTheme.Spacing.lg) {
+                yiBlockFull(huangli.yi)
+                Divider().frame(maxHeight: .infinity)
+                jiBlockFull(huangli.ji)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .padding(AppTheme.Spacing.xl).modernCard()
+    }
+
+    private func yiBlockFull(_ yi: [String]) -> some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+            HStack(spacing: 6) {
+                Text("宜").font(AppTheme.Font.caption2.weight(.bold))
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(Color.systemGreen)).foregroundStyle(.white)
+                Text("适宜").font(AppTheme.Font.subheadline.weight(.semibold)).foregroundStyle(Color.secondaryLabel)
+            }
+            TagCloudView(tags: yi, tint: Color.systemGreen, font: AppTheme.Font.caption)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private func jiBlockFull(_ ji: [String]) -> some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+            HStack(spacing: 6) {
+                Text("忌").font(AppTheme.Font.caption2.weight(.bold))
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(Color.systemRed)).foregroundStyle(.white)
+                Text("忌讳").font(AppTheme.Font.subheadline.weight(.semibold)).foregroundStyle(Color.secondaryLabel)
+            }
+            TagCloudView(tags: ji, tint: Color.systemRed, font: AppTheme.Font.caption)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var eventsCard: some View {
+        let todays = store.events(on: date)
+        return VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+            HStack {
+                Label("当日安排", systemImage: "list.bullet.clipboard.fill")
+                    .font(AppTheme.Font.title3).foregroundStyle(Color.label)
+                Spacer()
+                if !todays.isEmpty {
+                    ChipLabel(title: "\(todays.count) 项", systemImage: "calendar.day.timeline.left", tint: Color.appTint)
+                }
+            }
+            if todays.isEmpty {
+                HStack(spacing: AppTheme.Spacing.md) {
+                    Image(systemName: "sun.max")
+                        .font(AppTheme.Font.numeralL).foregroundStyle(Color.systemYellow)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("今天很空闲").font(AppTheme.Font.bodyBold).foregroundStyle(Color.label)
+                        Text("去安排点美好的事吧").font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
+                    }
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(AppTheme.Spacing.xl)
+                .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                    .fill(Color.secondarySystemGroupedBackground))
+            } else {
+                VStack(spacing: AppTheme.Spacing.sm) {
+                    ForEach(todays) { ev in
+                        NavigationLink {
+                            EventEditView(editing: ev, defaultDate: date).environment(store)
+                        } label: {
+                            EventRow(event: ev, compact: false).environment(store)
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+            Button {
+                showAdd = true
+            } label: {
+                Label("新建\(EventType.schedule.displayTitle)", systemImage: "plus.circle.fill")
+                    .font(AppTheme.Font.bodyBold).frame(maxWidth: .infinity)
+                    .padding(.vertical, AppTheme.Spacing.md)
+                    .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .fill(LinearGradient(colors: [Color.appTint, Color.appTint.opacity(0.82)],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    .foregroundStyle(.white)
+                    .shadow(color: Color.appTint.opacity(0.30), radius: 12, x: 0, y: 5)
+            }.buttonStyle(.plain)
+        }
+        .padding(AppTheme.Spacing.xl).modernCard()
     }
 }
 
-#Preview {
-    NavigationStack {
-        DayDetailView(date: Date())
-            .environment(EventStore.shared)
-    }
+extension Color {
+    fileprivate static var systemGold: Color { Color.festiveGold }
 }
-
 #endif
