@@ -11,7 +11,6 @@ internal struct HuangliDBEntry: Decodable {
         case sha = "s"
         case wuXing = "w"
         case shenWei = "g"
-        case auspicious = "a"
     }
     let yi: [String]
     let ji: [String]
@@ -19,7 +18,6 @@ internal struct HuangliDBEntry: Decodable {
     let sha: String          // "煞" 字已剔除，读入时再拼回
     let wuXing: String
     let shenWei: String
-    let auspicious: Int      // 0 / 1
 }
 
 /// 离散黄历数据库的顶层容器
@@ -129,8 +127,7 @@ public enum HuangliDBProvider {
                 chong: "冲\(entry.chong)",
                 sha: "煞\(entry.sha)",
                 wuXing: entry.wuXing,
-                shenWei: entry.shenWei,
-                isAuspicious: entry.auspicious == 1
+                shenWei: entry.shenWei
             )
             return Resolved(huangliDay: day, source: .discreteDB)
         }

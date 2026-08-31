@@ -67,7 +67,9 @@ struct EventEditView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }.font(.subheadline.weight(.medium))
+                    Button("取消") { dismiss() }
+                        .font(.subheadline.weight(.medium))
+                        .touchTarget(min: AppTheme.Touch.minTarget)
                 }
             }
             .tint(Color.appTint)
@@ -92,25 +94,29 @@ struct EventEditView: View {
                     Label("删除此\(type.displayTitle)", systemImage: "trash.fill")
                         .font(AppTheme.Font.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, AppTheme.Spacing.md)
+                        .frame(minHeight: AppTheme.Touch.minTarget)
                         .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                             .fill(Color.systemRed.opacity(0.10)))
                         .foregroundStyle(Color.systemRed)
-                }
+                        .contentShape(Rectangle())
+                }.buttonStyle(.plain)
             }
             Button { save() } label: {
                 Label(isEditing ? "保存修改" : "添加\(type.displayTitle)", systemImage: "checkmark.circle.fill")
                     .font(AppTheme.Font.bodyBold).frame(maxWidth: .infinity)
-                    .padding(.vertical, AppTheme.Spacing.md)
+                    .frame(minHeight: AppTheme.Touch.minTarget)
                     .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                         .fill(LinearGradient(colors: [Color.appTint, Color.appTint.opacity(0.85)],
                                              startPoint: .topLeading, endPoint: .bottomTrailing)))
                     .foregroundStyle(.white)
                     .shadow(color: Color.appTint.opacity(0.30), radius: 12, x: 0, y: 5)
-            }
+                    .contentShape(Rectangle())
+            }.buttonStyle(.plain)
+             .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+             .opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
-        .padding(.top, AppTheme.Spacing.sm)
+        .padding(.top, AppTheme.Spacing.md)
         .padding(.bottom, AppTheme.Spacing.lg)
         .background(
             UnevenRoundedRectangle(cornerRadii: .init(topLeading: 24, topTrailing: 24))
@@ -134,12 +140,13 @@ struct EventEditView: View {
                             }
                             .foregroundStyle(type == t ? .white : Color.label)
                             .padding(.horizontal, AppTheme.Spacing.md)
-                            .padding(.vertical, AppTheme.Spacing.sm)
+                            .frame(minHeight: AppTheme.Touch.chipHeight)
                             .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
                                 .fill(type == t ? t.tintColor : Color.quaternarySystemFill))
                             .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
                                 .stroke(type == t ? t.tintColor.opacity(0.45) : .clear,
                                         lineWidth: AppTheme.Stroke.hair))
+                            .contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
                 }
@@ -206,12 +213,13 @@ struct EventEditView: View {
                                 .font(AppTheme.Font.subheadline.weight(.semibold))
                                 .foregroundStyle(repeatRule == rule ? .white : Color.label)
                                 .padding(.horizontal, AppTheme.Spacing.md)
-                                .padding(.vertical, AppTheme.Spacing.sm)
+                                .frame(minHeight: AppTheme.Touch.chipHeight)
                                 .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
                                     .fill(repeatRule == rule ? Color.appTint : Color.quaternarySystemFill))
                                 .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
                                     .stroke(repeatRule == rule ? Color.appTint.opacity(0.5) : .clear,
                                             lineWidth: AppTheme.Stroke.hair))
+                                .contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
                 }
@@ -240,12 +248,13 @@ struct EventEditView: View {
                             }
                             .foregroundStyle(priority == p ? .white : p.tintColor)
                             .padding(.horizontal, AppTheme.Spacing.md)
-                            .padding(.vertical, AppTheme.Spacing.sm)
+                            .frame(minHeight: AppTheme.Touch.chipHeight)
                             .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
                                 .fill(priority == p ? p.tintColor : p.tintColor.opacity(0.10)))
                             .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
                                 .stroke(priority == p ? p.tintColor.opacity(0.45) : .clear,
                                         lineWidth: AppTheme.Stroke.hair))
+                            .contentShape(Rectangle())
                         }.buttonStyle(.plain)
                     }
                 }

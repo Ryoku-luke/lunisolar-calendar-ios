@@ -40,7 +40,6 @@ final class HuangliDBProviderTests: XCTestCase {
         XCTAssertEqual(h1?.chong, h2.chong)
         XCTAssertEqual(h1?.sha, h2.sha)
         XCTAssertEqual(h1?.wuXing, h2.wuXing)
-        XCTAssertEqual(h1?.isAuspicious, h2.isAuspicious)
     }
 
     // MARK: 离散库尾端 2028-12-31 必须命中；2029-01-01 应该走算法
@@ -105,7 +104,6 @@ final class HuangliDBProviderTests: XCTestCase {
             XCTAssertEqual(dbDay.sha, algo.sha, "sha 不一致: \(cursor)")
             XCTAssertEqual(dbDay.wuXing, algo.wuXing, "wuxing 不一致: \(cursor)")
             XCTAssertEqual(dbDay.shenWei, algo.shenWei, "shenwei 不一致: \(cursor)")
-            XCTAssertEqual(dbDay.isAuspicious, algo.isAuspicious, "auspicious 不一致: \(cursor)")
             checked += 1
             // 每 65 天取 1 个样本（5 年 1827 天 → 抽 29 个）
             cursor = cal.date(byAdding: .day, value: 65, to: cursor)!

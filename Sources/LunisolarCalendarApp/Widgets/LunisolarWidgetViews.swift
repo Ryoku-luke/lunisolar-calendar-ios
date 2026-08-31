@@ -134,13 +134,6 @@ public struct HuangliOverviewWidgetView: View {
                     .foregroundStyle(Color.primary)
             }
             Spacer(minLength: 0)
-            if entry.huangli?.isAuspicious == true {
-                Label("黄道", systemImage: "star.fill")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(Capsule().fill(accent))
-            }
         }
     }
 
@@ -227,14 +220,12 @@ public struct LunarCardWidgetView: View {
                     }
                     .padding(.horizontal, 6).padding(.vertical, 3)
                     .background(Capsule().fill(Color.white))
-                } else {
-                    if entry.huangli?.isAuspicious == true {
-                        Label("吉日", systemImage: "star.fill")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(accent)
-                            .padding(.horizontal, 5).padding(.vertical, 2)
-                            .background(Capsule().fill(Color.white))
-                    }
+                } else if let lunar = entry.lunar {
+                    Text(lunar.yearGanZhi)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Capsule().fill(Color.white.opacity(0.18)))
                 }
             }
             .padding(10)
@@ -298,10 +289,8 @@ public struct LunarCardWidgetView: View {
                             .foregroundStyle(Color.white)
                     }
                     if entry.festivals.isEmpty {
-                        Label(
-                            (entry.huangli?.isAuspicious ?? false) ? "黄道吉日" : "平日",
-                            systemImage: (entry.huangli?.isAuspicious ?? false) ? "star.fill" : "moon.stars.fill"
-                        )
+                        Label(entry.lunar?.yearGanZhi ?? "",
+                              systemImage: "moon.stars.fill")
                         .font(.system(size: 11, weight: .heavy))
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 7).padding(.vertical, 3)
