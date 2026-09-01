@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
+import LunarCore
 
 struct WeekHeaderView: View {
     private let weekdays = ["日","一","二","三","四","五","六"]

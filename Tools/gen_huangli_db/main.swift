@@ -1,4 +1,4 @@
-import LunisolarCalendarApp
+import LunarCore
 import Foundation
 
 // 生成 huangli_db.json：2024-01-01 ~ 2028-12-31 离散黄历库
