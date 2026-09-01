@@ -9,11 +9,37 @@ public struct HuangliDay: Equatable, Hashable, Sendable {
     public let ji: [String]       // 忌
     public let chong: String      // 冲
     public let sha: String        // 煞
-    public let wuXing: String     // 五行
-    public let shenWei: String    // 神位
+    public let wuXing: String     // 五行纳音（离散库 w 字段，算法生成也是纳音）
+    public let shenWei: String    // 神位（含喜神/财神，如 "喜神:东北 财神:西南"）
 
-    public var displayChongSha: String {
-        "\(chong) \(sha)"
+    /// UI 展示用：冲煞合并（与 chong + " " + sha 同义）
+    public var displayChongSha: String { "\(chong) \(sha)" }
+
+    /// SwiftUI 兼容别名（DayDetailView 用 chongSha）
+    public var chongSha: String { displayChongSha }
+
+    /// 纳音（黄历传统上五行与纳音不同，但离散库只存一个字段，这里做兼容别名）
+    public var naYin: String { wuXing }
+
+    /// 从 shenWei 字符串解析喜神方位，如 "喜神:东北 财神:西南" → "东北"
+    public var xiShenDirection: String {
+        Self.parseDirection(in: shenWei, tag: "喜神")
+    }
+
+    /// 从 shenWei 字符串解析财神方位
+    public var caiShenDirection: String {
+        Self.parseDirection(in: shenWei, tag: "财神")
+    }
+
+    /// 通用神位方位解析：从 "tag[:：]方位 ..." 中抽方位（遇到空白/结尾停止）
+    private static func parseDirection(in s: String, tag: String) -> String {
+        // 匹配 "tag:" 或 "tag：" 后的非空白字符
+        let pattern = NSRegularExpression.escapedPattern(for: tag) + "[:：]\\s*(\\S+)"
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return "" }
+        let range = NSRange(s.startIndex..<s.endIndex, in: s)
+        guard let m = re.firstMatch(in: s, range: range), m.numberOfRanges >= 2,
+              let r2 = Range(m.range(at: 1), in: s) else { return "" }
+        return String(s[r2])
     }
 }
 
