@@ -216,7 +216,7 @@ struct DayDetailView: View {
             Button {
                 showAdd = true
             } label: {
-                Label("新建\(EventType.schedule.displayTitle)", systemImage: "plus.circle.fill")
+                Label("新建\(EventType.schedule.uiLabel)", systemImage: "plus.circle.fill")
                     .font(AppTheme.Font.bodyBold).frame(maxWidth: .infinity)
                     .frame(minHeight: AppTheme.Touch.minTarget)
                     .background {

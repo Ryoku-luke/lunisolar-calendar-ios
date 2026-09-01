@@ -30,7 +30,7 @@ public final class AlternateIconManager: ObservableObject {
         case primary          = nil   // nil → 主图标 AppIcon
         case springFestival   = "SpringFestival"
 
-        public var displayTitle: String {
+        public var uiLabel: String {
             switch self {
             case .primary:        return "经典（撕历 + 朱砂印）"
             case .springFestival: return "春节限定（金福 + 红灯笼）"

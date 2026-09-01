@@ -8,7 +8,7 @@ import Foundation
 /// - 申请 `.event` 权限
 /// - 默认拉取"今日往前 90 天 → 往后 365 天"的事件（用户可在调用方覆盖 dateRange）
 /// - 重复事件 EKEvent 会被展开成具体实例（`events(matching:)` 已包含展开）
-public struct CalendarImportProvider: SystemImportProviding {
+public struct CalendarImportProvider: SystemImportProviding, @unchecked Sendable {
     public let source: SystemImportSource = .systemCalendar
 
     private let store: EKEventStore

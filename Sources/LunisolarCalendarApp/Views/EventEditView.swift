@@ -74,7 +74,7 @@ struct EventEditView: View {
             }
             .festiveWallpaper(accent: accent)
             .safeAreaInset(edge: .bottom, spacing: 0) { bottomActions }
-            .navigationTitle(isEditing ? "编辑\(type.displayTitle)" : "新建\(type.displayTitle)")
+            .navigationTitle(isEditing ? "编辑\(type.uiLabel)" : "新建\(type.uiLabel)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -93,7 +93,7 @@ struct EventEditView: View {
                 }
                 Button("取消", role: .cancel) {}
             } message: {
-                Text("确定要删除这个\(type.displayTitle)吗？删除后无法恢复。")
+                Text("确定要删除这个\(type.uiLabel)吗？删除后无法恢复。")
             }
         }
     }
@@ -105,7 +105,7 @@ struct EventEditView: View {
                 Button(role: .destructive) {
                     showDeleteConfirm = true
                 } label: {
-                    Label("删除此\(type.displayTitle)", systemImage: "trash.fill")
+                    Label("删除此\(type.uiLabel)", systemImage: "trash.fill")
                         .font(AppTheme.Font.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: AppTheme.Touch.minTarget)
@@ -127,7 +127,7 @@ struct EventEditView: View {
                 }.buttonStyle(.plain).pressableFeedback()
             }
             Button { save() } label: {
-                Label(isEditing ? "保存修改" : "添加\(type.displayTitle)", systemImage: "checkmark.circle.fill")
+                Label(isEditing ? "保存修改" : "添加\(type.uiLabel)", systemImage: "checkmark.circle.fill")
                     .font(AppTheme.Font.bodyBold).frame(maxWidth: .infinity)
                     .frame(minHeight: AppTheme.Touch.minTarget)
                     .background {
@@ -179,7 +179,7 @@ struct EventEditView: View {
                         Button { withAnimation(AppTheme.Motion.pressInOut) { type = t } } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: t.iconName).font(AppTheme.Font.caption.weight(.semibold))
-                                Text(t.displayTitle).font(AppTheme.Font.subheadline.weight(.semibold))
+                                Text(t.uiLabel).font(AppTheme.Font.subheadline.weight(.semibold))
                             }
                             .foregroundStyle(type == t ? .white : Color.label)
                             .padding(.horizontal, AppTheme.Spacing.md)
@@ -269,7 +269,7 @@ struct EventEditView: View {
             FlexibleGrid(horizontalSpacing: 6, verticalSpacing: 6) {
                 ForEach(repeatOptions) { rule in
                     Button { withAnimation(AppTheme.Motion.pressInOut) { repeatRule = rule } } label: {
-                        Text(rule.displayTitle)
+                        Text(rule.uiLabel)
                             .font(AppTheme.Font.subheadline.weight(.semibold))
                             .foregroundStyle(repeatRule == rule ? .white : Color.label)
                             .padding(.horizontal, AppTheme.Spacing.md)
@@ -305,7 +305,7 @@ struct EventEditView: View {
                                             p == .high ? "flame.fill" :
                                             p == .normal ? "flag.fill" : "flag")
                                 .font(AppTheme.Font.caption)
-                            Text(p.displayTitle).font(AppTheme.Font.subheadline.weight(.semibold))
+                            Text(p.uiLabel).font(AppTheme.Font.subheadline.weight(.semibold))
                         }
                         .foregroundStyle(priority == p ? .white : p.tintColor)
                         .padding(.horizontal, AppTheme.Spacing.md)
@@ -442,7 +442,7 @@ private struct _EditSectionCard<Header: View, Content: View>: View {
 }
 
 extension Priority {
-    var displayTitle: String {
+    var uiLabel: String {
         switch self {
         case .low:    return "低"
         case .normal: return "中"
