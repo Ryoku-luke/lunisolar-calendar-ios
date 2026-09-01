@@ -171,14 +171,14 @@ public enum DataPortability {
         for event in events {
             let row: [String] = [
                 escapeCSV(event.title),
-                event.type.displayTitle,
+                event.type.uiLabel,
                 dfmt.string(from: event.startDate),
                 dfmt.string(from: event.endDate),
                 event.isAllDay ? "是" : "否",
                 escapeCSV(event.location ?? ""),
                 escapeCSV(event.notes ?? ""),
-                event.repeatRule.displayTitle,
-                event.priority.displayTitle,
+                event.repeatRule.uiLabel,
+                event.priority.uiLabel,
                 event.isCompleted ? "是" : "否",
                 dfmt.string(from: event.createdAt)
             ]
