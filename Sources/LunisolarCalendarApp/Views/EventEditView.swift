@@ -418,15 +418,24 @@ private struct FlexibleGrid<Content: View>: View {
     var horizontalSpacing: CGFloat = 8
     var verticalSpacing: CGFloat = 8
     @ViewBuilder var content: () -> Content
+
+    // 流式布局简化实现：单行放不下时换行。
+    // 使用 FlowLayout (Layout 协议) + FallbackFlowLayout (iOS 16 以下)，
+    // FlexibleGrid 只是个壳，真正的布局在 FlowLayout/FallbackFlowLayout 内。
+    //
+    // Layout 协议要求容器直接持有多个子视图（不是 Group 或单一 View），
+    // 所以我们让 ForEach 的结果直接成为 FlowLayout 的 subviews。
+    #if canImport(SwiftUI)
     var body: some View {
         if #available(iOS 16.0, macOS 13.0, *) {
-            // 包 Group 让 Swift 明确它是个具体 View，FlowLayout 才能应用
-            Group { content() }
-                .layout(FlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing))
+            FlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing) {
+                content()
+            }
         } else {
             FallbackFlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing, content: content)
         }
     }
+    #endif
 }
 
 /// 编辑页通用分区卡：液态玻璃 + 顶部 section header + tint 浸染
