@@ -540,13 +540,6 @@ public final class EventStore {
 
     // MARK: - 内部辅助
 
-    /// 旧 helper（保留签名但已废弃；新代码一律走 updateInPlaceFast）。
-    @available(*, deprecated, renamed: "updateInPlaceFast")
-    private func updateInPlace(id: UUID, with new: CalendarEvent) {
-        guard let idx = indexOfEvent(id: id) else { return }
-        updateInPlaceFast(oldIndex: idx, with: new)
-    }
-
     /// 合并内路径：直接给定 oldIndex，根据 startDate 是否变化决定原地写 or 删+二分插。
     private func updateInPlaceFast(oldIndex idx: Int, with new: CalendarEvent) {
         var applied = new
