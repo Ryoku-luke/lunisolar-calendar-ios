@@ -146,12 +146,20 @@ public final class NotificationManager {
         let baseID = event.id.uuidString
         let rule = event.repeatRule
 
+        // reminderOffsetMinutes = 提前 N 分钟；nil/0 = 准时
+        let effectiveStart: Date = {
+            if let offset = event.reminderOffsetMinutes, offset > 0 {
+                return event.startDate.addingTimeInterval(-TimeInterval(offset) * 60)
+            }
+            return event.startDate
+        }()
+
         // 统一取 .gregorian 下的 hour/minute，避免 Calendar.current 跟随系统本地化日历
-        let timeComps = gregorian.dateComponents([.hour, .minute], from: event.startDate)
+        let timeComps = gregorian.dateComponents([.hour, .minute], from: effectiveStart)
 
         switch rule {
         case .never:
-            let interval = event.startDate.timeIntervalSinceNow
+            let interval = effectiveStart.timeIntervalSinceNow
             guard interval > 0 else { return [] }
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
             return [UNNotificationRequest(identifier: baseID, content: content, trigger: trigger)]
@@ -163,21 +171,25 @@ public final class NotificationManager {
             return [UNNotificationRequest(identifier: baseID, content: content, trigger: trigger)]
 
         case .weekly:
-            let comps = gregorian.dateComponents([.weekday, .hour, .minute], from: event.startDate)
+            let comps = gregorian.dateComponents([.weekday, .hour, .minute], from: effectiveStart)
             let trigger = UNCalendarNotificationTrigger(
                 dateMatching: comps, repeats: true
             )
             return [UNNotificationRequest(identifier: baseID, content: content, trigger: trigger)]
 
         case .monthly:
-            let comps = gregorian.dateComponents([.day, .hour, .minute], from: event.startDate)
+            let comps = gregorian.dateComponents([.day, .hour, .minute], from: effectiveStart)
             let trigger = UNCalendarNotificationTrigger(
                 dateMatching: comps, repeats: true
             )
             return [UNNotificationRequest(identifier: baseID, content: content, trigger: trigger)]
 
         case .yearly:
-            let comps = gregorian.dateComponents([.month, .day, .hour, .minute], from: event.startDate)
+            // month/day 取原始 startDate（提醒偏移只应改时分，不改日期）
+            let dateComps = gregorian.dateComponents([.month, .day], from: event.startDate)
+            var comps = gregorian.dateComponents([.hour, .minute], from: effectiveStart)
+            comps.month = dateComps.month
+            comps.day = dateComps.day
             let trigger = UNCalendarNotificationTrigger(
                 dateMatching: comps, repeats: true
             )
@@ -185,6 +197,7 @@ public final class NotificationManager {
 
         case .workday:
             // 周一到周五 = weekday 2,3,4,5,6（周日=1）
+            // timeComps 已从 effectiveStart 取，只改 weekday
             let workdays: Set<Int> = [2, 3, 4, 5, 6]
             var requests: [UNNotificationRequest] = []
             for weekday in workdays {
@@ -199,9 +212,12 @@ public final class NotificationManager {
 
         case .lunarAnnually:
             // iOS 原生不支持农历 trigger。
-            // 策略：计算"未来第一个匹配 startDate 农历月/日的公历日期"，排一次 timeInterval trigger。
-            // 下一年由 rescheduleAllReminders 续上（每次 App 启动/用户手动点重新调度时触发）。
-            guard let nextSolar = nextSolarDateForLunarAnnually(from: event.startDate) else { return [] }
+            // 策略：计算"未来第一个匹配 startDate 农历月/日的公历日期"，用 effectiveStart 的时分
+            // 排一次 timeInterval trigger。下一年由 rescheduleAllReminders 续上。
+            guard let nextSolar = nextSolarDateForLunarAnnually(
+                lunarSource: event.startDate,
+                timeSource: effectiveStart
+            ) else { return [] }
             let interval = nextSolar.timeIntervalSinceNow
             guard interval > 0 else { return [] }
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
@@ -223,12 +239,15 @@ public final class NotificationManager {
         }
     }
 
-    /// 计算未来第一个与 refDate 的农历月/日相同的公历日期，保留 refDate 的时分秒
-    private func nextSolarDateForLunarAnnually(from refDate: Date) -> Date? {
-        guard let lunar = ChineseCalendar.lunarDateSafe(from: refDate) else { return nil }
+    /// 计算未来第一个与 lunarSource 的农历月/日相同的公历日期，保留 timeSource 的时分秒
+    private func nextSolarDateForLunarAnnually(
+        lunarSource: Date,
+        timeSource: Date
+    ) -> Date? {
+        guard let lunar = ChineseCalendar.lunarDateSafe(from: lunarSource) else { return nil }
 
         let refComponents = gregorian.dateComponents(
-            [.hour, .minute, .second], from: refDate
+            [.hour, .minute, .second], from: timeSource
         )
 
         let now = Date()
