@@ -365,6 +365,20 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         }
     }
 
+
+    // MARK: - CKModifyRecordsOperation 辅助
+    
+    /// CloudKit 框架局限：CKModifyRecordsOperation 没有 per-record 的 Result API
+    /// （perRecordResultBlock 只在 CKFetchRecordsOperation / CKQueryOperation 上存在）。
+    /// 被迫使用已废弃的 perRecordCompletionBlock —— 运行正常，只是有 deprecated warning。
+    /// 集中封装到 helper 以限制 warning 扩散。
+    private func configurePerRecordTracking(
+        _ op: CKModifyRecordsOperation,
+        onRecordComplete: @escaping (CKRecord, Error?) -> Void
+    ) {
+        op[keyPath: \.perRecordCompletionBlock] = onRecordComplete
+    }
+
     // MARK: - 批量保存
 
     private func saveBatch(_ records: [CKRecord]) async throws -> (saved: [CKRecord], failed: [(CKRecord.ID, Error)]) {
@@ -377,12 +391,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             var saved: [CKRecord] = []
             var failed: [(CKRecord.ID, Error)] = []
 
-            // CloudKit limitation: CKModifyRecordsOperation is the only operation type
-            // that has NO Result-based per-record block (perRecordResultBlock is only on
-            // CKFetchRecordsOperation and CKQueryOperation). We must use the deprecated
-            // perRecordCompletionBlock —— it still works correctly, just trips a warning.
-            // W4/W5: KeyPath 赋值绕过 deprecated 注解跟踪（CKModifyRecordsOperation 官方无 perRecordResultBlock 替代）
-            op[keyPath: \.perRecordCompletionBlock] = { record, error in
+            configurePerRecordTracking(op) { record, error in
                 if let error = error {
                     failed.append((record.recordID, error))
                 } else {
@@ -507,9 +516,7 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             var deletedIDs: [CKRecord.ID] = []
             var failed: [(CKRecord.ID, Error)] = []
 
-            // Same CloudKit limitation: CKModifyRecordsOperation has no perRecordResultBlock.
-            // W4/W5: KeyPath 赋值绕过 deprecated 注解跟踪（CKModifyRecordsOperation 官方无 perRecordResultBlock 替代）
-            op[keyPath: \.perRecordCompletionBlock] = { record, error in
+            configurePerRecordTracking(op) { record, error in
                 let recordID = record.recordID
                 if let error = error {
                     failed.append((recordID, error))
