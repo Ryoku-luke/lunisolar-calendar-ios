@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- ============== App 基本信息 ============== -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh-Hans</string>
+    <key>CFBundleDisplayName</key>
+    <string>农历日历</string>
+    <key>CFBundleExecutable</key>
+    <string>LunisolarCalendarApp</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>农历日历</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.lifestyle</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+
+    <!-- ============== 启动屏 ============== -->
+    <key>UILaunchScreen</key>
+    <dict/>
+
+    <!-- ============== 支持方向 ============== -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+
+    <!-- ============== 隐私权限说明 ============== -->
+    <key>NSContactsUsageDescription</key>
+    <string>用于导入联系人生日，并按农历每年重复提醒。</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>用于从系统日历导入日程安排，方便迁移历史事件。</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>用于从系统日历导入日程安排，方便迁移历史事件。</string>
+
+    <!-- ============== App 图标（主 + 春节限定备用） ============== -->
+    <!-- iPhone -->
+    <key>CFBundleIcons</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconName</key>
+            <string>AppIcon</string>
+            <key>CFBundleIconFiles</key>
+            <array>
+                <string>AppIcon20x20</string>
+                <string>AppIcon29x29</string>
+                <string>AppIcon40x40</string>
+                <string>AppIcon60x60</string>
+            </array>
+        </dict>
+        <key>CFBundleAlternateIcons</key>
+        <dict>
+            <key>SpringFestival</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconSpringFestival</string>
+                <key>CFBundleIconFiles</key>
+                <array>
+                    <string>AppIconSpringFestival20x20</string>
+                    <string>AppIconSpringFestival29x29</string>
+                    <string>AppIconSpringFestival40x40</string>
+                    <string>AppIconSpringFestival60x60</string>
+                </array>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+        </dict>
+    </dict>
+
+    <!-- iPad -->
+    <key>CFBundleIcons~ipad</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconName</key>
+            <string>AppIcon</string>
+            <key>CFBundleIconFiles</key>
+            <array>
+                <string>AppIcon20x20</string>
+                <string>AppIcon29x29</string>
+                <string>AppIcon40x40</string>
+                <string>AppIcon76x76</string>
+                <string>AppIcon83.5x83.5</string>
+            </array>
+        </dict>
+        <key>CFBundleAlternateIcons</key>
+        <dict>
+            <key>SpringFestival</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconSpringFestival</string>
+                <key>CFBundleIconFiles</key>
+                <array>
+                    <string>AppIconSpringFestival20x20</string>
+                    <string>AppIconSpringFestival29x29</string>
+                    <string>AppIconSpringFestival40x40</string>
+                    <string>AppIconSpringFestival76x76</string>
+                    <string>AppIconSpringFestival83.5x83.5</string>
+                </array>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+        </dict>
+    </dict>
+</dict>
+</plist>
