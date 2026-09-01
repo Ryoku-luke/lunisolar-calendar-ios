@@ -10,9 +10,11 @@ struct CalendarMonthView: View {
     @State private var currentMonth: Date = Date().gregorianFirstDayOfMonth
     @Binding private var selectedDate: Date
     @State private var isPanelExpanded: Bool = false
+    #if canImport(UIKit)
     @State private var dragOffsetX: CGFloat = 0
     @State private var isDragging: Bool = false
     private let swipeThreshold: CGFloat = 28
+    #endif
     @Environment(EventStore.self) private var store
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
@@ -40,11 +42,13 @@ struct CalendarMonthView: View {
                             .padding(.top, 12).padding(.bottom, AppTheme.Spacing.sm)
                         calendarShell(containerWidth: geo.size.width)
                             .padding(.horizontal, AppTheme.Spacing.md)
+                            #if canImport(UIKit)
                             // 拖拽视差 + 轻微缩放，增强手势感
                             .offset(x: dragOffsetX * 0.25)
                             .scaleEffect(isDragging ? 0.992 : 1.0)
                             .animation(isDragging ? AppTheme.Motion.pressInOut
                                                   : AppTheme.Motion.screen, value: isDragging)
+                            #endif
                         if !isIPadSplit {
                             selectedDayCard
                                 .padding(.horizontal, AppTheme.Spacing.md)
@@ -204,6 +208,7 @@ struct CalendarMonthView: View {
             .contentShape(Circle())
     }
 
+    #if canImport(UIKit)
     private var swipeMonthGesture: some Gesture {
         DragGesture(minimumDistance: swipeThreshold, coordinateSpace: .local)
             .updating($dragOffsetX) { value, state, _ in
@@ -222,6 +227,7 @@ struct CalendarMonthView: View {
                 }
             }
     }
+    #endif
 
     private func calendarShell(containerWidth: CGFloat) -> some View {
         let slots = daysForMonth()
