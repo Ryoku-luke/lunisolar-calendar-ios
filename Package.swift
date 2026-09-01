@@ -15,6 +15,7 @@ let package = Package(
         .target(
             name: "LunisolarCalendarApp",
             path: "Sources/LunisolarCalendarApp",
+            exclude: ["Info.plist"],
             resources: [
                 .copy("Resources")
             ]
