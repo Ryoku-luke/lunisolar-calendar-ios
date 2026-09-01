@@ -25,6 +25,9 @@ public enum EventType: String, Codable, CaseIterable, Identifiable, Sendable {
         case .note:     return "note.text"
         }
     }
+
+    /// SwiftUI / Widget 显示用图标名（与 systemIcon 同义）
+    public var iconName: String { systemIcon }
 }
 
 // MARK: - 重复规则
@@ -41,6 +44,13 @@ public enum RepeatRule: String, Codable, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
     /// UI / 导出显示名；不与 Foundation String `.title` 语义扩展歧义
     public var uiLabel: String { rawValue }
+    /// 列表行内的短标签 —— .never 返回 nil（列表不显示"不重复"）
+    public var displayText: String? {
+        switch self {
+        case .never: return nil
+        default:     return uiLabel
+        }
+    }
 }
 
 // MARK: - 优先级
@@ -240,6 +250,9 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         fmt.dateFormat = "HH:mm"
         return "\(fmt.string(from: startDate)) - \(fmt.string(from: endDate))"
     }
+
+    /// SwiftUI / Widget 显示用时间（与 timeDisplay 同义，UI 层统一用 display 前缀）
+    public var displayTimeRange: String { timeDisplay }
 
     // MARK: - 重复规则文本（列表/详情页显示 + 编辑页锚点提示）
 
