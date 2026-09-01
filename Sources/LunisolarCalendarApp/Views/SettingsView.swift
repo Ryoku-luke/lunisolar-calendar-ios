@@ -131,7 +131,7 @@ struct SettingsView: View {
                 .frame(width: 56, height: 56)
                 .shadow(color: accent.opacity(0.35), radius: 8, x: 0, y: 4)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("农历日历")
+                    Text("清和日历")
                         .font(AppTheme.Font.title2.weight(.bold))
                         .foregroundStyle(Color.label)
                     Text("v1.0.0 · 1900 – 2100")
@@ -540,7 +540,7 @@ struct SettingsView: View {
     private var aboutCard: some View {
         SettingsCard(title: "关于", icon: "info.circle.fill", tint: Color.secondaryLabel) {
             VStack(spacing: AppTheme.Spacing.xs) {
-                StatRow(label: "应用名称", value: "农历日历")
+                StatRow(label: "应用名称", value: "清和日历")
                 divider
                 StatRow(label: "版本", value: "1.0.0")
                 divider
