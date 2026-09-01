@@ -30,7 +30,9 @@ struct CalendarMonthView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.systemGroupedBackground.ignoresSafeArea()
+                // 节日自适应柔和渐变背景（春节自动偏红、中秋偏金、平日系统灰）
+                festiveBackground
+                    .ignoresSafeArea()
                 GeometryReader { geo in
                     VStack(spacing: 0) {
                         monthHeader(containerWidth: geo.size.width)
@@ -38,6 +40,11 @@ struct CalendarMonthView: View {
                             .padding(.top, 12).padding(.bottom, AppTheme.Spacing.sm)
                         calendarShell(containerWidth: geo.size.width)
                             .padding(.horizontal, AppTheme.Spacing.md)
+                            // 拖拽视差 + 轻微缩放，增强手势感
+                            .offset(x: dragOffsetX * 0.25)
+                            .scaleEffect(isDragging ? 0.992 : 1.0)
+                            .animation(isDragging ? AppTheme.Motion.pressInOut
+                                                  : AppTheme.Motion.screen, value: isDragging)
                         if !isIPadSplit {
                             selectedDayCard
                                 .padding(.horizontal, AppTheme.Spacing.md)
@@ -55,13 +62,32 @@ struct CalendarMonthView: View {
                             Image(systemName: "plus")
                                 .font(.system(size: 26, weight: .bold, design: .rounded))
                                 .foregroundStyle(Color.white)
-                                .frame(width: 56, height: 56)
-                                .background(Circle().fill(
-                                    LinearGradient(colors: [Color.appTint, Color.appTint.opacity(0.8)],
-                                                   startPoint: .topLeading, endPoint: .bottomTrailing)))
-                                .shadow(color: Color.appTint.opacity(0.35), radius: 14, x: 0, y: 6)
-                                .overlay(Circle().stroke(Color.white.opacity(0.28), lineWidth: AppTheme.Stroke.hair))
+                                .frame(width: 60, height: 60)
+                                .background {
+                                    ZStack {
+                                        // iOS 26 液态玻璃浮动按钮：节日色自动切换
+                                        Circle()
+                                            .fill(LinearGradient(
+                                                colors: [accentColorForToday, accentColorForToday.opacity(0.80)],
+                                                startPoint: .topLeading, endPoint: .bottomTrailing
+                                            ))
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.24), lineWidth: AppTheme.Stroke.hair)
+                                    }
+                                }
+                                .shadow(color: accentColorForToday.opacity(0.32),
+                                        radius: 20, x: 0, y: 10)
+                                .overlay(alignment: .top) {
+                                    // 顶部高光
+                                    Circle()
+                                        .fill(LinearGradient(colors: [Color.white.opacity(0.30), .clear],
+                                                             startPoint: .top, endPoint: .bottom))
+                                        .frame(height: 28).allowsHitTesting(false)
+                                        .offset(y: 2).clipShape(Circle())
+                                }
                         }
+                        .buttonStyle(.plain)
+                        .pressableFeedback()
                         .padding(.trailing, AppTheme.Spacing.xl)
                         .padding(.bottom, AppTheme.Spacing.xl)
                     }}
@@ -74,7 +100,7 @@ struct CalendarMonthView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        withAnimation(AppTheme.Motion.screen) {
                             currentMonth = Date().gregorianFirstDayOfMonth; selectedDate = Date()
                         }
                     } label: {
@@ -82,11 +108,12 @@ struct CalendarMonthView: View {
                             .font(.subheadline.weight(.semibold))
                             .touchTarget(min: AppTheme.Touch.minTarget)
                     }
-                        .tint(Color.appTint)
+                        .tint(accentColorForToday)
+                        .pressableFeedback()
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        Button { withAnimation(AppTheme.Motion.screen) {
                             currentMonth = Date().gregorianFirstDayOfMonth; selectedDate = Date()
                         } } label: { Label("回到今天", systemImage: "location.circle") }
                         Divider()
@@ -97,9 +124,44 @@ struct CalendarMonthView: View {
                             .font(.title3).foregroundStyle(Color.secondaryLabel)
                             .touchTarget(min: AppTheme.Touch.minTarget)
                     }
+                    .pressableFeedback()
                 }
             }
-            .tint(Color.appTint)
+            .tint(accentColorForToday)
+        }
+    }
+
+    // MARK: - 节日自适应背景与强调色
+
+    /// 根据「选中日期的节日」决定今日强调色；无节日回落为系统 appTint
+    private var accentColorForToday: Color {
+        let selLunar = selectedDate.lunar
+        let fs = FestivalManager.festivals(on: selectedDate, lunar: selLunar)
+        if let f = fs.first { return Color(hex: f.accentHex) }
+        return Color.appTint
+    }
+
+    /// 全屏柔和渐变背景：节日强调色弱染色，平日保持 SystemGrouped
+    @ViewBuilder
+    private var festiveBackground: some View {
+        let accent = accentColorForToday
+        ZStack {
+            Color.systemGroupedBackground
+            LinearGradient(
+                colors: [accent.opacity(0.08), accent.opacity(0.02), Color.clear],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            // 两个模糊的色斑，增强 iOS 26 壁纸感
+            Circle()
+                .fill(accent.opacity(0.06))
+                .frame(width: 380, height: 380)
+                .blur(radius: 80)
+                .offset(x: -140, y: -160)
+            Circle()
+                .fill(accent.opacity(0.05))
+                .frame(width: 320, height: 320)
+                .blur(radius: 72)
+                .offset(x: 120, y: 340)
         }
     }
 
@@ -112,15 +174,17 @@ struct CalendarMonthView: View {
             Spacer()
             HStack(spacing: AppTheme.Spacing.sm) {
                 Button {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                    withAnimation(AppTheme.Motion.screen) {
                         currentMonth = currentMonth.gregorianAddingMonths(-1)
                     }
                 } label: { chevronButton("chevron.left") }
+                    .pressableFeedback()
                 Button {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                    withAnimation(AppTheme.Motion.screen) {
                         currentMonth = currentMonth.gregorianAddingMonths(1)
                     }
                 } label: { chevronButton("chevron.right") }
+                    .pressableFeedback()
             }
         }
     }
@@ -128,8 +192,13 @@ struct CalendarMonthView: View {
     private func chevronButton(_ name: String) -> some View {
         Image(systemName: name).font(.title2.weight(.semibold)).foregroundStyle(Color.secondaryLabel)
             .frame(width: AppTheme.Touch.minTarget, height: AppTheme.Touch.minTarget)
-            .background(Circle().fill(Color.secondarySystemGroupedBackground))
-            .overlay(Circle().stroke(Color.separator.opacity(0.25), lineWidth: AppTheme.Stroke.hair))
+            .background(
+                ZStack {
+                    Circle().fill(.ultraThinMaterial)
+                    Circle().stroke(Color.white.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
+                }
+            )
+            .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
             .contentShape(Circle())
     }
 
@@ -144,7 +213,7 @@ struct CalendarMonthView: View {
                 let dx = value.translation.width
                 let dy = value.translation.height
                 guard abs(dx) > swipeThreshold && abs(dx) > 1.5 * abs(dy) else { return }
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                withAnimation(AppTheme.Motion.screen) {
                     currentMonth = dx < 0
                         ? currentMonth.gregorianAddingMonths(1)
                         : currentMonth.gregorianAddingMonths(-1)
@@ -171,16 +240,21 @@ struct CalendarMonthView: View {
                 ForEach(slots) { slot in
                     let d = slot.date
                     let st = statsMap[d] ?? (0, nil)
+                    let lunarFor = lunarMap[d] ?? d.lunar
+                    let festivals = FestivalManager.festivals(on: d, lunar: lunarFor)
                     DayCellView(date: d, isCurrentMonth: slot.inCurrentMonth,
                                 isSelected: d.isSameDay(as: selectedDate),
                                 isToday: d.isToday,
-                                lunar: lunarMap[d] ?? d.lunar,
+                                lunar: lunarFor,
                                 huangli: huangliMap[d] ?? HuangliGenerator.generate(for: d),
-                                hasEvents: st.count > 0, eventPriority: st.prio, eventCount: st.count)
+                                hasEvents: st.count > 0, eventPriority: st.prio, eventCount: st.count,
+                                festivalTint: festivals.first.map { Color(hex: $0.accentHex) },
+                                cellAccent: (festivals.first.map { Color(hex: $0.accentHex) }
+                                                ?? (d.isSameDay(as: selectedDate) ? accentColorForToday : nil)))
                     .frame(minHeight: AppTheme.Touch.minCellHeight)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) { selectedDate = d }
+                        withAnimation(AppTheme.Motion.pressInOut) { selectedDate = d }
                     }
                 }
             }
@@ -188,8 +262,8 @@ struct CalendarMonthView: View {
             .padding(.bottom, AppTheme.Spacing.lg)
         }
         .padding(.top, AppTheme.Spacing.xs)
-        .modernCard(radius: AppTheme.Radius.xl, material: .thinMaterial,
-                    border: Color.separator.opacity(0.22), shadow: AppTheme.Shadow.card)
+        .liquidCard(radius: AppTheme.Radius.xxl, material: .regularMaterial,
+                     shadow: AppTheme.Shadow.card)
         .contentShape(Rectangle())
         .gesture(swipeMonthGesture)
     }
@@ -225,13 +299,18 @@ struct CalendarMonthView: View {
                 VStack(spacing: 2) {
                     Text("\(selectedDate.day)")
                         .font(AppTheme.Font.numeralXL)
-                        .foregroundStyle(selectedDate.isToday ? Color.systemRed : Color.label)
+                        .foregroundStyle(foregroundForDayNumber(accent: accent))
                     Text(selectedDate.weekdaySymbol)
                         .font(AppTheme.Font.caption).foregroundStyle(Color.secondaryLabel)
                 }
                 .frame(width: 92).padding(.vertical, AppTheme.Spacing.md)
-                .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                    .fill(selectedDate.isToday ? Color.todayCapsule : Color.secondarySystemGroupedBackground))
+                .background {
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .fill(selectedDate.isToday ? Color.todayCapsule : .regularMaterial)
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .stroke(accent.opacity(0.16), lineWidth: AppTheme.Stroke.hair)
+                }
+
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
                     Text(selLunar.displayString).font(AppTheme.Font.title3).foregroundStyle(Color.label)
                     if !todayFestivals.isEmpty {
@@ -260,8 +339,12 @@ struct CalendarMonthView: View {
                     jiBlock(huangli.ji, maxShown: 6)
                 }
                 .padding(AppTheme.Spacing.md)
-                .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                    .fill(Color.secondarySystemGroupedBackground))
+                .background {
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .fill(.thinMaterial)
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
+                }
             }
 
             VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
@@ -273,12 +356,29 @@ struct CalendarMonthView: View {
                     }
                 }
                 if todaysEvents.isEmpty {
-                    HStack(spacing: AppTheme.Spacing.xs) {
-                        Image(systemName: "cup.and.saucer").foregroundStyle(Color.tertiaryLabel)
-                        Text("这一天很空闲，去安排点美好的事吧")
-                            .font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
+                    // 空态插画：柔和色图标 + 渐变底框，引导点击
+                    HStack(spacing: AppTheme.Spacing.md) {
+                        ZStack {
+                            Circle()
+                                .fill(LinearGradient(colors: [accent.opacity(0.18), accent.opacity(0.06)],
+                                                     startPoint: .top, endPoint: .bottom))
+                                .frame(width: 48, height: 48)
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundStyle(accent)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("这一天很空闲").font(AppTheme.Font.bodyBold).foregroundStyle(Color.label)
+                            Text("去安排点美好的事吧 ✨").font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
+                        }
                         Spacer()
-                    }.padding(.vertical, AppTheme.Spacing.md)
+                    }
+                    .padding(AppTheme.Spacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .fill(.ultraThinMaterial))
+                    .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair))
                 } else {
                     let slice = isPanelExpanded ? todaysEvents : Array(todaysEvents.prefix(3))
                     VStack(spacing: AppTheme.Spacing.sm) {
@@ -288,11 +388,12 @@ struct CalendarMonthView: View {
                             } label: {
                                 EventRow(event: ev, compact: !isPanelExpanded).environment(store)
                             }.buttonStyle(.plain)
+                                .pressableFeedback()
                         }
                     }
                     if todaysEvents.count > 3 {
                         Button {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            withAnimation(AppTheme.Motion.screen) {
                                 isPanelExpanded.toggle()
                             }
                         } label: {
@@ -302,9 +403,11 @@ struct CalendarMonthView: View {
                                     .font(AppTheme.Font.caption.weight(.bold)).foregroundStyle(accent)
                                 Spacer()
                             }
-                            .padding(.vertical, AppTheme.Spacing.sm)
+                            .frame(minHeight: AppTheme.Touch.chipHeight)
                             .background(Capsule().fill(accent.opacity(0.10)))
+                            .contentShape(Capsule())
                         }.buttonStyle(.plain)
+                            .pressableFeedback()
                     }
                 }
             }
@@ -317,11 +420,17 @@ struct CalendarMonthView: View {
                         .font(AppTheme.Font.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: AppTheme.Touch.minTarget)
-                        .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .fill(Color.secondarySystemGroupedBackground))
+                        .background {
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                                .fill(.thinMaterial)
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                                .stroke(Color.separator.opacity(0.20), lineWidth: AppTheme.Stroke.hair)
+                        }
                         .foregroundStyle(Color.label)
                         .contentShape(Rectangle())
                 }
+                .pressableFeedback()
+
                 NavigationLink {
                     EventEditView(editing: nil, defaultDate: selectedDate).environment(store)
                 } label: {
@@ -329,18 +438,39 @@ struct CalendarMonthView: View {
                         .font(AppTheme.Font.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: AppTheme.Touch.minTarget)
-                        .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .fill(LinearGradient(colors: [accent, accent.opacity(0.82)],
-                                                 startPoint: .topLeading, endPoint: .bottomTrailing)))
+                        .background {
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                                .fill(LinearGradient(colors: [accent, accent.opacity(0.82)],
+                                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                                .stroke(Color.white.opacity(0.24), lineWidth: AppTheme.Stroke.hair)
+                        }
+                        .overlay(alignment: .top) {
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                                .fill(LinearGradient(colors: [Color.white.opacity(0.22), .clear],
+                                                     startPoint: .top, endPoint: .bottom))
+                                .frame(height: 22).allowsHitTesting(false)
+                                .offset(y: 2)
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
+                        }
                         .foregroundStyle(.white)
                         .shadow(color: accent.opacity(0.28), radius: 10, x: 0, y: 4)
                         .contentShape(Rectangle())
                 }
+                .pressableFeedback()
             }.buttonStyle(.plain)
         }
         .padding(AppTheme.Spacing.xl)
-        .modernCard(radius: 26, material: .thinMaterial,
-                    border: Color.separator.opacity(0.22), shadow: AppTheme.Shadow.raised)
+        .liquidCard(radius: 28, material: .regularMaterial,
+                     tint: accent, shadow: AppTheme.Shadow.raised, highlight: 0.14)
+    }
+
+    private func foregroundForDayNumber(accent: Color) -> Color {
+        if selectedDate.isToday { return Color.systemRed }
+        if !Calendar.current.isDate(selectedDate, equalTo: Date(), toGranularity: .month) {
+            return Color.tertiaryLabel
+        }
+        return Color.label
     }
 
     private func yiBlock(_ yi: [String], maxShown: Int) -> some View {

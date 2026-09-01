@@ -40,39 +40,42 @@ struct SettingsView: View {
 
     // iPad regular 模式下居中限宽
     private var isWide: Bool { hSizeClass == .regular }
+    /// 节日自适应强调色（与月/日视图同规则）
+    private var accent: Color {
+        let today = Date()
+        let fs = FestivalManager.festivals(on: today, lunar: today.lunar)
+        return fs.first.map { Color(hex: $0.accentHex) } ?? Color.appTint
+    }
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) {
-                Color.systemGroupedBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: AppTheme.Spacing.section) {
+                    heroHeader
+                        .padding(.top, AppTheme.Spacing.lg)
 
-                ScrollView {
-                    VStack(spacing: AppTheme.Spacing.section) {
-                        heroHeader
-                            .padding(.top, AppTheme.Spacing.lg)
+                    appearanceCard
+                    notificationCard
+                    dataManagementCard
+                    cloudSyncCard
+                    systemImportCard
+                    conflictPolicyCard
+                    dangerZoneCard
+                    statisticsCard
+                    aboutCard
 
-                        appearanceCard
-                        notificationCard
-                        dataManagementCard
-                        cloudSyncCard
-                        systemImportCard
-                        conflictPolicyCard
-                        dangerZoneCard
-                        statisticsCard
-                        aboutCard
-
-                        Color.clear.frame(height: AppTheme.Spacing.xxl)
-                    }
-                    .padding(.horizontal, isWide ? AppTheme.Spacing.xxl : AppTheme.Spacing.lg)
-                    .frame(maxWidth: isWide ? 760 : .infinity)
-                    .frame(maxWidth: .infinity)
+                    Color.clear.frame(height: AppTheme.Spacing.xxl)
                 }
+                .padding(.horizontal, isWide ? AppTheme.Spacing.xxl : AppTheme.Spacing.lg)
+                .frame(maxWidth: isWide ? 760 : .infinity)
+                .frame(maxWidth: .infinity)
             }
+            .festiveWallpaper(accent: accent)
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .tint(Color.appTint)
+            .tint(accent)
             .task {
                 notifStatus = await NotificationManager.shared.authorizationStatusAsync()
             }
@@ -102,20 +105,21 @@ struct SettingsView: View {
                 if let url = shareURL { ShareSheet(items: [url]) }
             }
             #endif
-            .animation(.easeInOut(duration: 0.22), value: toast)
+            .animation(AppTheme.Motion.toast, value: toast)
         }
     }
 
     // MARK: - Hero · 液态玻璃头
 
     private var heroHeader: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+        let accent = self.accent
+        return VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
             HStack(spacing: AppTheme.Spacing.md) {
                 ZStack {
                     RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [Color.appTint, Color.systemIndigo.opacity(0.85)],
+                                colors: [accent, Color.systemIndigo.opacity(0.85)],
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )
@@ -134,23 +138,21 @@ struct SettingsView: View {
                         .foregroundStyle(Color.secondaryLabel)
                 }
                 Spacer(minLength: 0)
-                ChipLabel(title: "\(store.events.count) 事件", systemImage: "list.bullet.rectangle", tint: Color.appTint)
+                ChipLabel(title: "\(store.events.count) 事件", systemImage: "list.bullet.rectangle", tint: accent)
             }
 
             HStack(spacing: AppTheme.Spacing.sm) {
-                HeroStat(label: "日程", value: storeCount(of: .schedule), tint: .appTint)
+                HeroStat(label: "日程", value: storeCount(of: .schedule), tint: accent)
                 HeroStat(label: "提醒", value: storeCount(of: .reminder), tint: .systemOrange)
                 HeroStat(label: "记事", value: storeCount(of: .note), tint: .systemIndigo)
             }
         }
         .padding(AppTheme.Spacing.xl)
-        .liquidGlassCard(
-            cornerRadius: AppTheme.Radius.xl,
-            borderColor: Color.appTint.opacity(0.22),
-            borderWidth: 0.8,
-            shadowOpacity: 0.10,
-            interactive: false
-        )
+        .liquidCard(radius: AppTheme.Radius.xl,
+                    material: .thinMaterial,
+                    tint: accent,
+                    shadow: AppTheme.Shadow.card,
+                    highlight: 0.10)
     }
 
     private func storeCount(of type: EventType) -> Int {
@@ -204,6 +206,7 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .pressableFeedback()
                 .disabled(notifStatus != .granted)
                 .opacity(notifStatus == .granted ? 1 : 0.45)
             }
@@ -332,6 +335,7 @@ struct SettingsView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .pressableFeedback()
                     .disabled(!co.isEnabled || isSyncing(co.status))
                     .opacity((!co.isEnabled || isSyncing(co.status)) ? 0.45 : 1)
                 } else {
@@ -484,8 +488,16 @@ struct SettingsView: View {
                         RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                             .stroke(Color.systemRed.opacity(0.25), lineWidth: AppTheme.Stroke.hair)
                     )
+                    .overlay(alignment: .top) {
+                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                            .fill(LinearGradient(colors: [Color.white.opacity(0.16), .clear],
+                                                 startPoint: .top, endPoint: .bottom))
+                            .frame(height: 22).allowsHitTesting(false).offset(y: 2)
+                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
+                    }
                 }
                 .buttonStyle(.plain)
+                .pressableFeedback()
                 .disabled(store.events.isEmpty)
                 .opacity(store.events.isEmpty ? 0.45 : 1)
             }
@@ -845,7 +857,7 @@ struct SettingsView: View {
 
 // MARK: - 子组件：设置卡 / Hero 统计 / 外观分段 / 冲突策略胶囊
 
-/// 通用「设置卡片」：带图标 + 标题 + 副标题 + 内容块
+/// 通用「设置卡片」：液态玻璃 + 节日 tint 高光（iOS 26 风格）
 private struct SettingsCard<Content: View>: View {
     let title: String
     let icon: String
@@ -856,10 +868,15 @@ private struct SettingsCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
             HStack(spacing: AppTheme.Spacing.sm) {
-                Image(systemName: icon)
-                    .font(AppTheme.Font.title3)
-                    .foregroundStyle(tint)
-                    .symbolRenderingMode(.hierarchical)
+                ZStack {
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                        .fill(tint.opacity(0.14))
+                    Image(systemName: icon)
+                        .font(AppTheme.Font.bodyBold)
+                        .foregroundStyle(tint)
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .frame(width: 32, height: 32)
                 Text(title)
                     .font(AppTheme.Font.title3)
                     .foregroundStyle(Color.label)
@@ -869,13 +886,17 @@ private struct SettingsCard<Content: View>: View {
                 Text(subtitle)
                     .font(AppTheme.Font.caption)
                     .foregroundStyle(Color.secondaryLabel)
-                    .padding(.leading, AppTheme.Spacing.md + 4)
+                    .padding(.leading, 40)
                     .padding(.top, -4)
             }
             content()
         }
         .padding(AppTheme.Spacing.lg)
-        .modernCard(radius: AppTheme.Radius.xl, material: .thinMaterial)
+        .liquidCard(radius: AppTheme.Radius.xl,
+                    material: .thinMaterial,
+                    tint: tint,
+                    shadow: AppTheme.Shadow.card,
+                    highlight: 0.08)
     }
 }
 
@@ -912,7 +933,7 @@ private struct AppearanceSegmented: View {
         HStack(spacing: AppTheme.Spacing.sm) {
             ForEach(AppAppearance.allCases) { mode in
                 Button {
-                    selection = mode
+                    withAnimation(AppTheme.Motion.pressInOut) { selection = mode }
                 } label: {
                     VStack(spacing: 6) {
                         Image(systemName: mode.iconName)
@@ -936,8 +957,10 @@ private struct AppearanceSegmented: View {
                             .stroke(selection == mode ? Color.appTint.opacity(0.45) : .clear,
                                     lineWidth: AppTheme.Stroke.hair)
                     )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .pressableFeedback()
             }
         }
     }
@@ -950,7 +973,9 @@ private struct PolicyChipPicker: View {
     var body: some View {
         HStack(spacing: AppTheme.Spacing.sm) {
             ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
-                Button { policy = p } label: {
+                Button {
+                    withAnimation(AppTheme.Motion.pressInOut) { policy = p }
+                } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(p.title)
                             .font(AppTheme.Font.subheadline.weight(.semibold))
@@ -973,8 +998,10 @@ private struct PolicyChipPicker: View {
                             .stroke(policy == p ? Color.appTint.opacity(0.5) : .clear,
                                     lineWidth: AppTheme.Stroke.hair)
                     )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .pressableFeedback()
             }
         }
     }
@@ -1036,6 +1063,7 @@ private struct DataActionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pressableFeedback()
     }
 }
 
