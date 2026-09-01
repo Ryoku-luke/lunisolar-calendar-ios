@@ -467,7 +467,7 @@ struct CalendarMonthView: View {
 
     private func foregroundForDayNumber(accent: Color) -> Color {
         if selectedDate.isToday { return Color.systemRed }
-        if !Calendar.current.isDate(selectedDate, equalTo: Date(), toGranularity: .month) {
+        if !Calendar(identifier: .gregorian).isDate(selectedDate, equalTo: Date(), toGranularity: .month) {
             return Color.tertiaryLabel
         }
         return Color.label
