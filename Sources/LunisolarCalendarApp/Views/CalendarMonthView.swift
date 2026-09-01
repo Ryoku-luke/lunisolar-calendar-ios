@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
+import LunarCore
 
 fileprivate final class _Box<T>: @unchecked Sendable { var value: T; init(_ v: T) { self.value = v } }
 fileprivate struct DaySlot: Identifiable, Hashable {

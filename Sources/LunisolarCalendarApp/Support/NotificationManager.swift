@@ -1,4 +1,5 @@
 import Foundation
+import LunarCore
 // N1 修复：Apple 平台下 AppLogger.app.error/warning/debug 最终落到 os.Logger。
 // OSLogMessage(_:) 的字符串插值由 module `os` 提供 OSLogInterpolation / appendLiteral /
 // appendInterpolation(_:privacy:attributes:)；缺 import 会级联报 6 条 "defining module 'os'"

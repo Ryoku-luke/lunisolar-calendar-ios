@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
+import LunarCore
 
 struct DayDetailView: View {
     let date: Date

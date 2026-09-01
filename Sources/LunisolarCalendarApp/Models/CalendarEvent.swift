@@ -1,4 +1,5 @@
 import Foundation
+import LunarCore
 
 // MARK: - 日程/记事 类型
 

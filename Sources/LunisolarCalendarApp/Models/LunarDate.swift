@@ -8,16 +8,22 @@ enum LunarDataProvider {
     static let lunarInfo: [UInt32] = loadLunarInfo()
 
     private static func loadLunarInfo() -> [UInt32] {
-        // 1. 尝试从 Bundle 加载 JSON
-        if let url = Bundle.resources.url(forResource: "lunar_calendar", withExtension: "json"),
-           let data = try? Data(contentsOf: url),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let hexStrings = json["data"] as? [String] {
-            let values = hexStrings.compactMap {
-                let hex = $0.hasPrefix("0x") ? String($0.dropFirst(2)) : $0
-                return UInt32(hex, radix: 16)
+        // 1. 尝试从 Bundle 加载 JSON（LunisolarCalendarApp 会用自己的资源 bundle；
+        //    gen_huangli_db CLI 没有 bundle，会 fallback 到内置数据）
+        // gen_huangli_db CLI 只有 Bundle.main，也找不到 JSON → 自动 fallback 到内置数据
+        // LunisolarCalendarApp 会通过 Bundle.resources (App 里提供) 找资源 → 实际在 Bundle+Resources.swift 里 override 了
+        let candidateBundles: [Bundle] = [.main]
+        for bundle in candidateBundles {
+            if let url = bundle.url(forResource: "lunar_calendar", withExtension: "json"),
+               let data = try? Data(contentsOf: url),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let hexStrings = json["data"] as? [String] {
+                let values = hexStrings.compactMap {
+                    let hex = $0.hasPrefix("0x") ? String($0.dropFirst(2)) : $0
+                    return UInt32(hex, radix: 16)
+                }
+                if values.count == 201 { return values }
             }
-            if values.count == 201 { return values }
         }
         // 2. Fallback：内置数据（保证即使 JSON 加载失败也能工作）
         return fallbackLunarInfo
@@ -56,6 +62,13 @@ public struct LunarDate: Equatable, Hashable, Sendable {
     public let month: Int
     public let day: Int
     public let isLeapMonth: Bool
+
+    public init(year: Int, month: Int, day: Int, isLeapMonth: Bool) {
+        self.year = year
+        self.month = month
+        self.day = day
+        self.isLeapMonth = isLeapMonth
+    }
 
     public var yearGanZhi: String { ChineseCalendar.ganZhiOfYear(year) }
     public var yearAnimal: String { ChineseCalendar.zodiacOfYear(year) }
