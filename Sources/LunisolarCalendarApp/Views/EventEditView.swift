@@ -75,7 +75,9 @@ struct EventEditView: View {
             .festiveWallpaper(accent: accent)
             .safeAreaInset(edge: .bottom, spacing: 0) { bottomActions }
             .navigationTitle(isEditing ? "编辑\(type.uiLabel)" : "新建\(type.uiLabel)")
+            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {

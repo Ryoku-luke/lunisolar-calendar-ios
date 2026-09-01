@@ -94,7 +94,9 @@ struct CalendarMonthView: View {
                 }
             }
             .navigationTitle("日历")
+            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.large)
+            #endif
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {

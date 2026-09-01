@@ -31,7 +31,9 @@ struct DayDetailView: View {
                 }
             }
             .navigationTitle(date.weekdaySymbol)
+            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .tint(accent)
