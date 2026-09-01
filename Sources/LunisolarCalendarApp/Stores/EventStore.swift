@@ -757,9 +757,11 @@ public final class EventStore {
             )
         )
 
-        var comps2 = cal.dateComponents([.year,.month,.day], from: today.addingDays(1))
+        // 公历 +1 天，避免 Calendar.current 被用户非公历设置污染
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today) ?? today
+        var comps2 = cal.dateComponents([.year,.month,.day], from: tomorrow)
         comps2.hour = 9; comps2.minute = 0
-        let s2 = cal.date(from: comps2) ?? today.addingDays(1)
+        let s2 = cal.date(from: comps2) ?? tomorrow
         built.append(
             CalendarEvent(
                 title: "给妈妈打电话",
