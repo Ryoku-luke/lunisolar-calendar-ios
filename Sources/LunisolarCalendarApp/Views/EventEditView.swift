@@ -40,8 +40,8 @@ struct EventEditView: View {
             _notes = State(initialValue: ev.notes ?? "")
             _priority = State(initialValue: ev.priority)
             _repeatRule = State(initialValue: ev.repeatRule)
-            _startDate = State(initialValue: ev.start)
-            _endDate = State(initialValue: ev.end)
+            _startDate = State(initialValue: ev.startDate)
+            _endDate = State(initialValue: ev.endDate)
             _isAllDay = State(initialValue: ev.isAllDay)
             _reminderEnabled = State(initialValue: ev.reminderOffsetMinutes != nil)
             _reminderMinutesBefore = State(initialValue: ev.reminderOffsetMinutes ?? 10)
@@ -88,7 +88,7 @@ struct EventEditView: View {
             .tint(accent)
             .alert("确认删除", isPresented: $showDeleteConfirm) {
                 Button("删除", role: .destructive) {
-                    if let ev = original { store.delete(eventID: ev.id) }
+                    if let ev = original { store.delete(ev) }
                     dismiss()
                 }
                 Button("取消", role: .cancel) {}
@@ -390,15 +390,15 @@ struct EventEditView: View {
             var copy = ev
             copy.title = trimmed; copy.type = type; copy.notes = notes.isEmpty ? nil : notes
             copy.priority = priority; copy.repeatRule = repeatRule
-            copy.start = startDate; copy.end = end; copy.isAllDay = isAllDay
+            copy.startDate = startDate; copy.endDate = end; copy.isAllDay = isAllDay
             copy.reminderOffsetMinutes = reminderOffset; copy.isCompleted = isCompleted
             copy.updatedAt = now
             store.update(copy)
         } else {
-            let ev = CalendarEvent(title: trimmed, type: type, start: startDate, end: end,
+            let ev = CalendarEvent(title: trimmed, type: type, startDate: startDate, endDate: end,
                 isAllDay: isAllDay, repeatRule: repeatRule, priority: priority,
-                notes: notes.isEmpty ? nil : notes, reminderOffsetMinutes: reminderOffset,
-                createdAt: now, updatedAt: now)
+                notes: notes.isEmpty ? nil : notes,
+                reminderOffsetMinutes: reminderOffset)
             store.add(ev)
         }
         Task { await NotificationManager.shared.rescheduleAllReminders(in: store) }
@@ -417,7 +417,13 @@ private struct FlexibleGrid<Content: View>: View {
     var verticalSpacing: CGFloat = 8
     @ViewBuilder var content: () -> Content
     var body: some View {
-        FlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing, content: content)
+        if #available(iOS 16.0, macOS 13.0, *) {
+            // FlowLayout 是 Layout 协议，不是 View —— 用 .layout modifier 应用
+            Group { content() }
+                .layout(FlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing))
+        } else {
+            FallbackFlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing, content: content)
+        }
     }
 }
 
@@ -438,17 +444,6 @@ private struct _EditSectionCard<Header: View, Content: View>: View {
                     tint: tint,
                     shadow: AppTheme.Shadow.card,
                     highlight: 0.09)
-    }
-}
-
-extension Priority {
-    var uiLabel: String {
-        switch self {
-        case .low:    return "低"
-        case .normal: return "中"
-        case .high:   return "高"
-        case .urgent: return "紧急"
-        }
     }
 }
 

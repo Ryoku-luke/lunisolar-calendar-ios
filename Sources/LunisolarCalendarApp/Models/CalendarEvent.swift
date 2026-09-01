@@ -83,6 +83,8 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
     public var repeatRule: RepeatRule
     public var priority: Priority
     public var isCompleted: Bool
+    /// 提前提醒分钟数（nil = 无提醒；0 = 准时；正数 = 提前 N 分钟）
+    public var reminderOffsetMinutes: Int?
     /// 通知是否已触发（防止重复弹窗）
     public var isNotified: Bool
     public var createdAt: Date
@@ -91,7 +93,7 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
     /// CodingKeys：显式排除缓存字段
     private enum CodingKeys: String, CodingKey {
         case id, title, type, startDate, endDate, isAllDay, location, notes
-        case repeatRule, priority, isCompleted, isNotified, createdAt, updatedAt
+        case repeatRule, priority, isCompleted, reminderOffsetMinutes, isNotified, createdAt, updatedAt
     }
 
     /// 缓存 startDate 的农历转换结果（用引用类型绕过 struct 不可变性，同一事件永远不变）
@@ -119,6 +121,7 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         try c.encode(repeatRule, forKey: .repeatRule)
         try c.encode(priority, forKey: .priority)
         try c.encode(isCompleted, forKey: .isCompleted)
+        try c.encode(reminderOffsetMinutes, forKey: .reminderOffsetMinutes)
         try c.encode(isNotified, forKey: .isNotified)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(updatedAt, forKey: .updatedAt)
@@ -137,6 +140,7 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         repeatRule     = try c.decode(RepeatRule.self, forKey: .repeatRule)
         priority       = try c.decode(Priority.self, forKey: .priority)
         isCompleted    = try c.decode(Bool.self, forKey: .isCompleted)
+        reminderOffsetMinutes = try c.decodeIfPresent(Int.self, forKey: .reminderOffsetMinutes)
         isNotified     = try c.decode(Bool.self, forKey: .isNotified)
         createdAt      = try c.decode(Date.self, forKey: .createdAt)
         updatedAt      = try c.decode(Date.self, forKey: .updatedAt)
@@ -161,7 +165,8 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         notes: String? = nil,
         repeatRule: RepeatRule = .never,
         priority: Priority = .normal,
-        isCompleted: Bool = false
+        isCompleted: Bool = false,
+        reminderOffsetMinutes: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -181,6 +186,7 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         self.repeatRule = repeatRule
         self.priority = priority
         self.isCompleted = isCompleted
+        self.reminderOffsetMinutes = reminderOffsetMinutes
         self.isNotified = false
         self.createdAt = Date()
         self.updatedAt = Date()
@@ -322,6 +328,7 @@ extension CalendarEvent: Equatable, Hashable {
         lhs.repeatRule == rhs.repeatRule &&
         lhs.priority == rhs.priority &&
         lhs.isCompleted == rhs.isCompleted &&
+        lhs.reminderOffsetMinutes == rhs.reminderOffsetMinutes &&
         lhs.isNotified == rhs.isNotified &&
         lhs.createdAt == rhs.createdAt &&
         lhs.updatedAt == rhs.updatedAt
