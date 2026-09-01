@@ -74,9 +74,9 @@ struct SettingsView: View {
             .navigationTitle("设置")
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.large)
-            #endif
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+            #endif
             .tint(accent)
             .task {
                 notifStatus = await NotificationManager.shared.authorizationStatusAsync()
@@ -774,9 +774,11 @@ struct SettingsView: View {
     }
 
     private func openSystemSettings() {
+        #if canImport(UIKit)
         if let url = URL(string: UIApplication.openSettingsURLString) {
             openURL(url)
         }
+        #endif
     }
 
     // MARK: - iCloud 同步辅助
@@ -1031,9 +1033,31 @@ private struct DataActionRow: View {
     var busy: Bool = false
     var accessory: Accessory = .chevron
     var action: () -> Void = {}
-    @ViewBuilder var secondary: (() -> some View) = { EmptyView() }
+    /// 用 AnyView 做类型擦除：stored property 不能加 @ViewBuilder，
+    /// 也不能存 `() -> some View`（some View 不能用在 stored property）
+    let secondaryView: AnyView
 
     enum Accessory { case chevron, menu, none }
+
+    init(
+        icon: String,
+        title: String,
+        subtitle: String = "",
+        tint: Color,
+        busy: Bool = false,
+        accessory: Accessory = .chevron,
+        action: @escaping () -> Void,
+        @ViewBuilder secondary: () -> any View = { EmptyView() }
+    ) {
+        self.icon = icon
+        self.title = title
+        self.subtitle = subtitle
+        self.tint = tint
+        self.busy = busy
+        self.accessory = accessory
+        self.action = action
+        self.secondaryView = AnyView(secondary())
+    }
 
     var body: some View {
         Button(action: action) {
@@ -1062,7 +1086,7 @@ private struct DataActionRow: View {
                 if busy {
                     ProgressView().scaleEffect(0.7)
                 } else {
-                    secondary()
+                    secondaryView
                     switch accessory {
                     case .chevron:
                         Image(systemName: "chevron.right")

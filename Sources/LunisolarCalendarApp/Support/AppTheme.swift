@@ -76,6 +76,22 @@ public enum AppTheme {
 }
 
 extension Color {
+    /// Foundation 语义色的 public 别名 —— 用来规避某些 Xcode 版本把
+    /// Color.separator / Color.themeQuaternaryFill 视为 internal 的问题
+    public static var themeSeparator: Color {
+        #if canImport(UIKit)
+        return Color(UIColor.separator)
+        #else
+        return Color.black.opacity(0.12)
+        #endif
+    }
+    public static var themeQuaternaryFill: Color {
+        #if canImport(UIKit)
+        return Color(UIColor.quaternarySystemFill)
+        #else
+        return Color.black.opacity(0.06)
+        #endif
+    }
     public static var appBackground: some ShapeStyle {
         LinearGradient(
             colors: [Color.systemGroupedBackground, Color.systemGroupedBackground],
@@ -85,7 +101,7 @@ extension Color {
     public static var appTintSoft: Color { Color.appTint.opacity(0.12) }
     public static var festiveRedSoft: Color { Color.festiveRed.opacity(0.12) }
     public static var todayCapsule: Color { Color.systemRed.opacity(0.10) }
-    public static var hairSeparator: Color { Color.separator.opacity(0.35) }
+    public static var hairSeparator: Color { Color.themeSeparator.opacity(0.35) }
 }
 
 extension View {
@@ -96,7 +112,7 @@ extension View {
     public func modernCard(
         radius: CGFloat = AppTheme.Radius.xl,
         material: Material = .thinMaterial,
-        border: Color = Color.separator.opacity(0.28),
+        border: Color = Color.themeSeparator.opacity(0.28),
         shadow: (color: Color, radius: CGFloat, x: CGFloat, y: CGFloat) = AppTheme.Shadow.card
     ) -> some View {
         self.background(
@@ -140,13 +156,13 @@ extension View {
             }
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(Color.separator.opacity(0.20), lineWidth: AppTheme.Stroke.hair)
+                    .stroke(Color.themeSeparator.opacity(0.20), lineWidth: AppTheme.Stroke.hair)
             )
             .shadow(color: shadow.color, radius: shadow.radius, x: shadow.x, y: shadow.y)
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
     }
     public func capsuleTag(
-        fill: Color = Color.quaternarySystemFill,
+        fill: Color = Color.themeQuaternaryFill,
         border: Color = .clear,
         hPad: CGFloat = 10,
         vPad: CGFloat = 4
