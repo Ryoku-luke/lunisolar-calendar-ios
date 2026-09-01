@@ -115,6 +115,13 @@ struct EventEditView: View {
                             RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                                 .stroke(Color.systemRed.opacity(0.30), lineWidth: AppTheme.Stroke.hair)
                         )
+                        .overlay(alignment: .top) {
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                                .fill(LinearGradient(colors: [Color.white.opacity(0.18), .clear],
+                                                     startPoint: .top, endPoint: .bottom))
+                                .frame(height: 22).allowsHitTesting(false).offset(y: 2)
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
+                        }
                         .foregroundStyle(Color.systemRed)
                         .contentShape(Rectangle())
                 }.buttonStyle(.plain).pressableFeedback()
@@ -163,13 +170,15 @@ struct EventEditView: View {
             tint: accent
         ) {
             VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-                TextField("\n请输入标题", text: $title, axis: .vertical)
-                    .font(AppTheme.Font.title2).lineLimit(1...3)
+                TextField("请输入标题", text: $title, axis: .vertical)
+                    .font(AppTheme.Font.title2.weight(.semibold))
+                    .lineLimit(1...3)
+                    .frame(minHeight: 36)
                 FlexibleGrid(horizontalSpacing: AppTheme.Spacing.sm, verticalSpacing: AppTheme.Spacing.sm) {
                     ForEach(EventType.allCases) { t in
                         Button { withAnimation(AppTheme.Motion.pressInOut) { type = t } } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: t.iconName).font(AppTheme.Font.caption)
+                                Image(systemName: t.iconName).font(AppTheme.Font.caption.weight(.semibold))
                                 Text(t.displayTitle).font(AppTheme.Font.subheadline.weight(.semibold))
                             }
                             .foregroundStyle(type == t ? .white : Color.label)
@@ -178,7 +187,7 @@ struct EventEditView: View {
                             .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
                                 .fill(type == t ? t.tintColor : Color.quaternarySystemFill))
                             .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                                .stroke(type == t ? t.tintColor.opacity(0.45) : .clear,
+                                .stroke(type == t ? t.tintColor.opacity(0.5) : .clear,
                                         lineWidth: AppTheme.Stroke.hair))
                             .contentShape(Rectangle())
                         }.buttonStyle(.plain).pressableFeedback()
@@ -215,13 +224,21 @@ struct EventEditView: View {
                     }.environment(\.calendar, gregorian).datePickerStyle(.compact)
                 }
                 if type != .note {
-                    Divider().opacity(0.0)
                     Toggle(isOn: $reminderEnabled) {
                         Label("开启提醒", systemImage: "bell.badge.fill").font(AppTheme.Font.bodyBold)
                     }.tint(Color.systemOrange)
                     if reminderEnabled {
-                        HStack(spacing: AppTheme.Spacing.md) {
-                            Image(systemName: "timer").foregroundStyle(Color.systemOrange)
+                        HStack(alignment: .center, spacing: AppTheme.Spacing.md) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous)
+                                    .fill(Color.systemOrange.opacity(0.14))
+                                Image(systemName: "timer")
+                                    .font(AppTheme.Font.caption.weight(.semibold))
+                                    .foregroundStyle(Color.systemOrange)
+                            }
+                            .frame(width: 24, height: 24)
+                            Text("提前").font(AppTheme.Font.body)
+                            Spacer()
                             Picker("提前", selection: $reminderMinutesBefore) {
                                 Text("准时").tag(0); Text("5 分钟").tag(5)
                                 Text("10 分钟").tag(10); Text("15 分钟").tag(15)
@@ -229,6 +246,15 @@ struct EventEditView: View {
                                 Text("1 天").tag(1440)
                             }.pickerStyle(.menu).tint(Color.systemOrange)
                         }
+                        .padding(AppTheme.Spacing.md)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                                .fill(Color.quaternarySystemFill)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                                .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
+                        )
                     }
                 }
             }
@@ -301,8 +327,18 @@ struct EventEditView: View {
             header: sectionHeader("备注", icon: "note.text", tint: Color.systemTeal),
             tint: Color.systemTeal
         ) {
-            TextField("\n备注内容（可选）", text: $notes, axis: .vertical)
+            TextField("备注内容（可选）", text: $notes, axis: .vertical)
                 .font(AppTheme.Font.body).lineLimit(3...8)
+                .frame(minHeight: 96, alignment: .top)
+                .padding(AppTheme.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                        .fill(Color.quaternarySystemFill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                        .stroke(Color.separator.opacity(0.20), lineWidth: AppTheme.Stroke.hair)
+                )
         }
     }
 

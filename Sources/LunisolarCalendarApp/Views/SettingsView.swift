@@ -119,19 +119,20 @@ struct SettingsView: View {
                     RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [accent, Color.systemIndigo.opacity(0.85)],
+                                colors: [accent, Color.systemIndigo.opacity(0.88)],
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )
-                    Image(systemName: "calendar")
-                        .font(.system(size: 28, weight: .semibold))
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(.white)
-                        .symbolRenderingMode(.hierarchical)
+                        .symbolRenderingMode(.palette)
                 }
                 .frame(width: 56, height: 56)
+                .shadow(color: accent.opacity(0.35), radius: 8, x: 0, y: 4)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("农历日历")
-                        .font(AppTheme.Font.title2)
+                        .font(AppTheme.Font.title2.weight(.bold))
                         .foregroundStyle(Color.label)
                     Text("v1.0.0 · 1900 – 2100")
                         .font(AppTheme.Font.caption)
@@ -151,8 +152,8 @@ struct SettingsView: View {
         .liquidCard(radius: AppTheme.Radius.xl,
                     material: .thinMaterial,
                     tint: accent,
-                    shadow: AppTheme.Shadow.card,
-                    highlight: 0.10)
+                    shadow: AppTheme.Shadow.raised,
+                    highlight: 0.14)
     }
 
     private func storeCount(of type: EventType) -> Int {
@@ -186,11 +187,11 @@ struct SettingsView: View {
                     Button { openSystemSettings() } label: {
                         Label("前往系统设置开启", systemImage: "arrow.up.right.square")
                             .font(AppTheme.Font.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.appTint)
+                            .foregroundStyle(accent)
                     }
+                    .buttonStyle(.plain)
+                    .pressableFeedback()
                 }
-
-                Divider().opacity(0.0)
 
                 Button {
                     Task { await NotificationManager.shared.rescheduleAllReminders(in: store) }
@@ -204,13 +205,14 @@ struct SettingsView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.tertiaryLabel)
                     }
+                    .contentShape(Rectangle())
+                    .frame(minHeight: AppTheme.Touch.minTarget, alignment: .leading)
                 }
                 .buttonStyle(.plain)
                 .pressableFeedback()
                 .disabled(notifStatus != .granted)
                 .opacity(notifStatus == .granted ? 1 : 0.45)
             }
-            .padding(AppTheme.Spacing.lg)
         }
     }
 
@@ -246,7 +248,10 @@ struct SettingsView: View {
                     subtitle: ".ics 日历 / .json 全量备份",
                     tint: Color(red: 0.25, green: 0.55, blue: 0.95),
                     accessory: .menu
-                ) { showConflictPolicy = true } secondary: {
+                ) {
+                    importingFileType = .ics
+                    showConflictPolicy = true
+                } secondary: {
                     Menu {
                         Button {
                             importingFileType = .ics
@@ -263,7 +268,8 @@ struct SettingsView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .font(AppTheme.Font.title3)
-                            .foregroundStyle(Color.appTint)
+                            .foregroundStyle(accent)
+                            .touchTarget(min: AppTheme.Touch.minTarget)
                     }
                 }
             }
@@ -307,12 +313,17 @@ struct SettingsView: View {
                             RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
                                 .fill(Color.quaternarySystemFill)
                         )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                                .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
+                        )
                     }
 
                     Button {
                         Task { @MainActor in
                             do {
                                 _ = try await co.syncBidirectional()
+                                toast = .init(kind: .success, text: "同步完成")
                             } catch {
                                 AppLogger.sync.error("立即同步失败：\(error)")
                                 toast = .init(kind: .error, text: "同步失败：\(syncErrorBrief(error))")
@@ -333,6 +344,7 @@ struct SettingsView: View {
                             }
                         }
                         .contentShape(Rectangle())
+                        .frame(minHeight: AppTheme.Touch.minTarget, alignment: .leading)
                     }
                     .buttonStyle(.plain)
                     .pressableFeedback()
@@ -376,7 +388,6 @@ struct SettingsView: View {
                 }
                 #endif
             }
-            .padding(AppTheme.Spacing.lg)
         }
     }
 
@@ -409,9 +420,14 @@ struct SettingsView: View {
                 if importingSystemSource == .contacts || !store.events.isEmpty {
                     divider
                     HStack(spacing: AppTheme.Spacing.md) {
-                        Image(systemName: "moon.stars.fill")
-                            .font(AppTheme.Font.bodyBold)
-                            .foregroundStyle(Color.systemIndigo)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                                .fill(Color.systemIndigo.opacity(0.14))
+                            Image(systemName: "moon.stars.fill")
+                                .font(AppTheme.Font.caption.weight(.semibold))
+                                .foregroundStyle(Color.systemIndigo)
+                        }
+                        .frame(width: 32, height: 32)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("联系人生日按农历每年")
                                 .font(AppTheme.Font.body)
@@ -424,8 +440,8 @@ struct SettingsView: View {
                             .labelsHidden()
                             .tint(Color.systemIndigo)
                     }
-                    .padding(.horizontal, AppTheme.Spacing.lg)
-                    .padding(.vertical, AppTheme.Spacing.md)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, AppTheme.Spacing.sm)
                 }
 
                 if isImportingSystem {
@@ -454,7 +470,6 @@ struct SettingsView: View {
                     .foregroundStyle(Color.secondaryLabel)
                     .padding(.horizontal, 4)
             }
-            .padding(AppTheme.Spacing.lg)
         }
     }
 
@@ -462,46 +477,44 @@ struct SettingsView: View {
 
     private var dangerZoneCard: some View {
         SettingsCard(title: "危险操作", icon: "exclamationmark.triangle.fill", tint: Color.systemRed, subtitle: "清空后无法恢复，请先在上方导出 .json 备份") {
-            VStack(spacing: AppTheme.Spacing.md) {
-                Button(role: .destructive) {
-                    showClearConfirm = true
-                } label: {
-                    HStack {
-                        Label("清空全部事件", systemImage: "trash.fill")
-                            .font(AppTheme.Font.bodyBold)
-                        Spacer()
-                        Text("\(store.events.count) 条")
-                            .font(AppTheme.Font.caption.weight(.semibold))
-                            .foregroundStyle(Color.tertiaryLabel)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.tertiaryLabel)
-                    }
-                    .padding(.vertical, AppTheme.Spacing.sm)
-                    .padding(.horizontal, AppTheme.Spacing.lg)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .fill(Color.systemRed.opacity(0.08))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .stroke(Color.systemRed.opacity(0.25), lineWidth: AppTheme.Stroke.hair)
-                    )
-                    .overlay(alignment: .top) {
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .fill(LinearGradient(colors: [Color.white.opacity(0.16), .clear],
-                                                 startPoint: .top, endPoint: .bottom))
-                            .frame(height: 22).allowsHitTesting(false).offset(y: 2)
-                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
-                    }
+            Button(role: .destructive) {
+                showClearConfirm = true
+            } label: {
+                HStack {
+                    Label("清空全部事件", systemImage: "trash.fill")
+                        .font(AppTheme.Font.bodyBold)
+                    Spacer()
+                    Text("\(store.events.count) 条")
+                        .font(AppTheme.Font.caption.weight(.semibold))
+                        .foregroundStyle(Color.tertiaryLabel)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.tertiaryLabel)
                 }
-                .buttonStyle(.plain)
-                .pressableFeedback()
-                .disabled(store.events.isEmpty)
-                .opacity(store.events.isEmpty ? 0.45 : 1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: AppTheme.Touch.minTarget)
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .fill(Color.systemRed.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .stroke(Color.systemRed.opacity(0.25), lineWidth: AppTheme.Stroke.hair)
+                )
+                .overlay(alignment: .top) {
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .fill(LinearGradient(colors: [Color.white.opacity(0.16), .clear],
+                                             startPoint: .top, endPoint: .bottom))
+                        .frame(height: 22).allowsHitTesting(false).offset(y: 2)
+                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
+                }
+                .contentShape(Rectangle())
             }
-            .padding(AppTheme.Spacing.lg)
+            .buttonStyle(.plain)
+            .pressableFeedback()
+            .disabled(store.events.isEmpty)
+            .opacity(store.events.isEmpty ? 0.45 : 1)
         }
     }
 
@@ -542,7 +555,7 @@ struct SettingsView: View {
     private var divider: some View {
         Color.separator.opacity(0.28)
             .frame(height: AppTheme.Stroke.hair)
-            .padding(.leading, 52)
+            .padding(.leading, 48)
     }
 
     private func infoMiniRow(label: String, value: String) -> some View {
