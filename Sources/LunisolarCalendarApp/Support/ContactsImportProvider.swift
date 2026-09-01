@@ -116,7 +116,10 @@ public struct ContactsImportProvider: SystemImportProviding {
         guard let month = dateComponents.month, month > 0,
               let day = dateComponents.day, day > 0 else { return nil }
         let cal = Calendar(identifier: .gregorian)
-        let year = (dateComponents.year ?? 0) > 0 ? dateComponents.year! : 1900
+        // BUG-P1-1 修复：禁止用「year ?? 0 > 0 ? year! : 1900」强制解包。
+        // year 是 DateComponents 上的懒取计算属性（可能跨线程/进程从 Contacts DB 取），
+        // 先读可选再解包与"再次解包"之间不保真，极端情况下会 crash。
+        let year = dateComponents.year.map { $0 > 0 ? $0 : nil } ?? 1900
         guard let s = cal.date(from: DateComponents(year: year,
                                                     month: month,
                                                     day: day,

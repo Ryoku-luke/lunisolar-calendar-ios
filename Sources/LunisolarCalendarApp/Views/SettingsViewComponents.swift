@@ -58,30 +58,28 @@ struct ToastBannerView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: iconName)
-                .font(.system(size: 16, weight: .semibold))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(bgAccent, .white.opacity(0.1))
+            ZStack {
+                Circle()
+                    .fill(bgAccent.opacity(0.18))
+                Image(systemName: iconName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(bgAccent)
+            }
+            .frame(width: 32, height: 32)
             Text(message.text)
-                .font(.subheadline.weight(.medium))
+                .font(AppTheme.Font.subheadline.weight(.semibold))
                 .foregroundStyle(Color.label)
                 .lineLimit(3)
             Spacer(minLength: 8)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        // iOS 26 液态玻璃：Toast 使用 glassEffect 替代 Material.thickMaterial
-        // N6-2 修复：liquidGlassCard 当前签名为
-        //   func liquidGlassCard(cornerRadius: borderColor: borderWidth: shadowOpacity: interactive:)
-        // 不含 tint（tint 是 liquidGlassCapsule 的参数，曾误用）；删掉 tint 参数即可。
-        // 若后续给 liquidGlassCard 加 tint 并在 iOS 26 分支里用它调制 glassEffect 颜色，
-        // 把 tint: bgAccent 加回来即可。
-        .liquidGlassCard(
-            cornerRadius: 16,
-            borderColor: bgAccent.opacity(0.7),
-            borderWidth: 1.0,
-            shadowOpacity: 0.14
-        )
+        .padding(.horizontal, AppTheme.Spacing.lg)
+        .padding(.vertical, AppTheme.Spacing.md)
+        .liquidCard(radius: AppTheme.Radius.lg,
+                    material: .thickMaterial,
+                    tint: bgAccent,
+                    shadow: AppTheme.Shadow.floating,
+                    highlight: 0.16)
     }
 
     private var iconName: String {
