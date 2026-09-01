@@ -33,10 +33,8 @@ struct DayDetailView: View {
             .navigationTitle(date.weekdaySymbol)
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .tint(accent)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showAdd = true } label: {
@@ -47,6 +45,8 @@ struct DayDetailView: View {
                     .pressableFeedback()
                 }
             }
+            #endif
+            .tint(accent)
             .sheet(isPresented: $showAdd) {
                 EventEditView(editing: nil, defaultDate: date).environment(store)
             }
@@ -70,7 +70,7 @@ struct DayDetailView: View {
                 .frame(width: 110).padding(.vertical, AppTheme.Spacing.lg)
                 .background {
                     RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous)
-                        .fill(date.isToday ? Color.todayCapsule : .regularMaterial)
+                        .fill(date.isToday ? Color.todayCapsule : Color.themeQuaternaryFill)
                     RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous)
                         .stroke(accent.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
                 }

@@ -96,7 +96,6 @@ struct CalendarMonthView: View {
             .navigationTitle("日历")
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.large)
-            #endif
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
@@ -129,6 +128,7 @@ struct CalendarMonthView: View {
                     .pressableFeedback()
                 }
             }
+            #endif
             .tint(accentColorForToday)
         }
     }
@@ -267,7 +267,9 @@ struct CalendarMonthView: View {
         .liquidCard(radius: AppTheme.Radius.xxl, material: .regularMaterial,
                      shadow: AppTheme.Shadow.card)
         .contentShape(Rectangle())
+        #if canImport(UIKit)
         .gesture(swipeMonthGesture)
+        #endif
     }
 
     private func daysForMonth() -> [DaySlot] {
@@ -308,7 +310,7 @@ struct CalendarMonthView: View {
                 .frame(width: 92).padding(.vertical, AppTheme.Spacing.md)
                 .background {
                     RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                        .fill(selectedDate.isToday ? Color.todayCapsule : .regularMaterial)
+                        .fill(selectedDate.isToday ? Color.todayCapsule : Color.themeQuaternaryFill)
                     RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                         .stroke(accent.opacity(0.16), lineWidth: AppTheme.Stroke.hair)
                 }

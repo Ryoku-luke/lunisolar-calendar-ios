@@ -77,7 +77,6 @@ struct EventEditView: View {
             .navigationTitle(isEditing ? "编辑\(type.uiLabel)" : "新建\(type.uiLabel)")
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
@@ -87,6 +86,7 @@ struct EventEditView: View {
                         .touchTarget(min: AppTheme.Touch.minTarget)
                 }
             }
+            #endif
             .tint(accent)
             .alert("确认删除", isPresented: $showDeleteConfirm) {
                 Button("删除", role: .destructive) {

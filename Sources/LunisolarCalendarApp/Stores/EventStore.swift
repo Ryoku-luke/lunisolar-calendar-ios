@@ -29,7 +29,7 @@ public final class EventStore {
 
     /// 查询缓存：按日期首日缓存 occurs(on:) 结果，避免月视图 42 格 × N 事件全量遍历
     private var eventCache: [Date: [CalendarEvent]] = [:]
-    private var statsCache: [Date: (has: Bool, priority: Priority?)] = [:]
+    private var statsCache: [Date: (count: Int, priority: Priority?)] = [:]
 
     // MARK: P6 二级索引（O(1) by-id 定位）
     // events 数组永远按 startDate 升序；此字典维护 id → 下标，
@@ -404,19 +404,19 @@ public final class EventStore {
     }
 
     public func hasEvents(on date: Date) -> Bool {
-        eventStats(on: date).has
+        eventStats(on: date).count > 0
     }
 
-    /// 单次遍历同时返回是否有事件和最高优先级，避免 calendarGrid 里调两次
-    public func eventStats(on date: Date) -> (has: Bool, priority: Priority?) {
+    /// 单次遍历同时返回事件数量和最高优先级，避免 calendarGrid 里调两次
+    public func eventStats(on date: Date) -> (count: Int, priority: Priority?) {
         let cal = Calendar(identifier: .gregorian)
         let key = cal.startOfDay(for: date)
         if let cached = statsCache[key] { return cached }
-        var has = false
+        var count = 0
         var best: Priority? = nil
         for ev in events {
             if ev.occurs(on: date) {
-                has = true
+                count += 1
                 switch (best, ev.priority) {
                 case (nil, let p):          best = p
                 case (.some(let cur), let p) where p > cur: best = p
@@ -424,7 +424,7 @@ public final class EventStore {
                 }
             }
         }
-        let result = (has, best)
+        let result = (count, best)
         statsCache[key] = result
         return result
     }
