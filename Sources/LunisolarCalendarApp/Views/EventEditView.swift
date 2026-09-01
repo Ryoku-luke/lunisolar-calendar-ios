@@ -217,7 +217,7 @@ struct EventEditView: View {
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]) {
                         Label("结束", systemImage: "clock.badge.checkmark").font(AppTheme.Font.body)
                     }.environment(\.calendar, gregorian).datePickerStyle(.compact)
-                        .onChange(of: startDate, initial: false) { newVal in
+                        .onChange(of: startDate, initial: false) { _, newVal in
                             if endDate < newVal { endDate = newVal }
                         }
                 } else {
@@ -420,8 +420,8 @@ private struct FlexibleGrid<Content: View>: View {
     @ViewBuilder var content: () -> Content
     var body: some View {
         if #available(iOS 16.0, macOS 13.0, *) {
-            // FlowLayout 是 Layout 协议，直接对 content()（ViewBuilder 产出的 View）应用
-            content()
+            // 包 Group 让 Swift 明确它是个具体 View，FlowLayout 才能应用
+            Group { content() }
                 .layout(FlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing))
         } else {
             FallbackFlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing, content: content)
