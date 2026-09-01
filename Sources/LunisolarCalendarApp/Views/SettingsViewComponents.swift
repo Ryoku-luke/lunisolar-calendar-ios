@@ -143,7 +143,9 @@ struct ConflictPolicyPicker: View {
         }
         .formStyle(.grouped)
         .navigationTitle("导入冲突策略")
-        .navigationBarTitleDisplayMode(.inline)
+        #if canImport(UIKit)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
     }
 
     private func info(label: String, value: String) -> some View {

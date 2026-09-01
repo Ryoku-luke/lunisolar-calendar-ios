@@ -72,7 +72,9 @@ struct SettingsView: View {
             }
             .festiveWallpaper(accent: accent)
             .navigationTitle("设置")
+            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.large)
+            #endif
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .tint(accent)
