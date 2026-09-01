@@ -42,7 +42,7 @@ struct EventRow: View {
                           tint: event.priority.tintColor,
                           font: AppTheme.Font.caption2)
                 if !compact, event.type == .reminder || event.type == .schedule {
-                    Button { store.toggleCompleted(for: event.id) } label: {
+                    Button { store.toggleCompleted(event) } label: {
                         Image(systemName: event.isCompleted ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: AppTheme.Touch.checkboxSize, weight: .semibold))
                             .foregroundStyle(
