@@ -121,6 +121,24 @@ struct DayDetailView: View {
                     .contentShape(Rectangle())
                 }
             }
+            // 节假日 / 调休 / 节气标记
+            let holidayInfo = HolidayProvider.info(for: date)
+            let termName = SolarTermProvider.termOn(date)
+            if holidayInfo.type != .normal || termName != nil {
+                HStack(spacing: AppTheme.Spacing.xs) {
+                    if holidayInfo.type == .holiday {
+                        ChipLabel(title: "休 \(holidayInfo.name)", systemImage: "sun.max.fill",
+                                  tint: Color.systemGreen, font: AppTheme.Font.caption)
+                    } else if holidayInfo.type == .workday {
+                        ChipLabel(title: "班 \(holidayInfo.name)", systemImage: "briefcase.fill",
+                                  tint: Color.systemOrange, font: AppTheme.Font.caption)
+                    }
+                    if let term = termName {
+                        ChipLabel(title: term, systemImage: "leaf.fill",
+                                  tint: Color.systemTeal, font: AppTheme.Font.caption)
+                    }
+                }
+            }
         }
         .padding(AppTheme.Spacing.xl)
         .liquidCard(radius: AppTheme.Radius.xxl, material: .regularMaterial,

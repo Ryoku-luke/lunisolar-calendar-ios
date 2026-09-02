@@ -35,6 +35,8 @@ struct DayCellView: View {
     /// 节日强调色（优先）；选中态下与外层节日强调色联动
     var festivalTint: Color? = nil
     var cellAccent: Color? = nil
+    /// 法定假日/调休标记
+    var holidayType: HolidayType = .normal
     @Environment(\.horizontalSizeClass) private var hSizeClass
     private var isRegular: Bool { hSizeClass == .regular }
     private var numeralFont: Font { isRegular ? AppTheme.Font.numeralL : AppTheme.Font.numeralM }
@@ -83,8 +85,25 @@ struct DayCellView: View {
                         Capsule().fill(eventPriority?.tintColor ?? Color.appTint)
                             .frame(width: isRegular ? 12 : 9, height: isRegular ? 5 : 4)
                     }
+                    if holidayType != .normal {
+                        Text(holidayType == .holiday ? "休" : "班")
+                            .font(.system(size: isRegular ? 9 : 8, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: isRegular ? 14 : 12, height: isRegular ? 14 : 12)
+                            .background(
+                                Circle().fill(holidayType == .holiday ? Color.systemGreen : Color.systemOrange)
+                            )
+                    }
                 }
                 .frame(height: isRegular ? 6 : 5)
+            } else if holidayType != .normal {
+                Text(holidayType == .holiday ? "休" : "班")
+                    .font(.system(size: isRegular ? 9 : 8, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: isRegular ? 14 : 12, height: isRegular ? 14 : 12)
+                    .background(
+                        Circle().fill(holidayType == .holiday ? Color.systemGreen : Color.systemOrange)
+                    )
             } else {
                 Color.clear.frame(height: isRegular ? 6 : 5)
             }

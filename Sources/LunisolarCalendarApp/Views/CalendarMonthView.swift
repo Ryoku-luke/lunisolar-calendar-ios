@@ -11,6 +11,7 @@ struct CalendarMonthView: View {
     @State private var currentMonth: Date = Date().gregorianFirstDayOfMonth
     @Binding private var selectedDate: Date
     @State private var isPanelExpanded: Bool = false
+    @State private var showDateJump = false
     #if canImport(UIKit)
     @State private var dragOffsetX: CGFloat = 0
     @State private var isDragging: Bool = false
@@ -41,6 +42,9 @@ struct CalendarMonthView: View {
                         monthHeader(containerWidth: geo.size.width)
                             .padding(.horizontal, AppTheme.Spacing.xl)
                             .padding(.top, 12).padding(.bottom, AppTheme.Spacing.sm)
+                        solarTermBar
+                            .padding(.horizontal, AppTheme.Spacing.xl)
+                            .padding(.bottom, AppTheme.Spacing.xs)
                         calendarShell(containerWidth: geo.size.width)
                             .padding(.horizontal, AppTheme.Spacing.md)
                             #if canImport(UIKit)
@@ -122,7 +126,9 @@ struct CalendarMonthView: View {
                         Button { withAnimation(AppTheme.Motion.screen) {
                             currentMonth = Date().gregorianFirstDayOfMonth; selectedDate = Date()
                         } } label: { Label("回到今天", systemImage: "location.circle") }
+                        Button { showDateJump = true } label: { Label("跳转到日期", systemImage: "calendar.badge.clock") }
                         Divider()
+                        NavigationLink { CountdownView() } label: { Label("倒数日", systemImage: "hourglass") }
                         NavigationLink { SettingsView().environment(store) }
                             label: { Label("设置", systemImage: "gearshape") }
                     } label: {
@@ -135,6 +141,15 @@ struct CalendarMonthView: View {
             }
             #endif
             .tint(accentColorForToday)
+            .sheet(isPresented: $showDateJump) {
+                DateJumpView(targetDate: Binding(
+                    get: { selectedDate },
+                    set: { newDate in
+                        selectedDate = newDate
+                        currentMonth = newDate.gregorianFirstDayOfMonth
+                    }
+                ))
+            }
         }
     }
 
@@ -193,6 +208,36 @@ struct CalendarMonthView: View {
                 } label: { chevronButton("chevron.right") }
                     .pressableFeedback()
             }
+        }
+    }
+
+    /// 节气倒计时条：显示下一个节气及剩余天数
+    @ViewBuilder
+    private var solarTermBar: some View {
+        if let next = SolarTermProvider.nextTerm(from: Date()) {
+            HStack(spacing: 6) {
+                Image(systemName: "leaf")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondaryLabel)
+                Text("下一个节气")
+                    .font(.caption)
+                    .foregroundStyle(Color.tertiaryLabel)
+                Text(next.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(accentColorForToday)
+                if next.daysRemaining > 0 {
+                    Text("还有 \(next.daysRemaining) 天")
+                        .font(.caption)
+                        .foregroundStyle(Color.secondaryLabel)
+                } else if next.daysRemaining == 0 {
+                    Text("今天")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.festiveRed)
+                }
+            }
+            .padding(.horizontal, AppTheme.Spacing.lg)
+            .padding(.vertical, AppTheme.Spacing.xs)
+            .background(Capsule().fill(.ultraThinMaterial))
         }
     }
 
@@ -259,7 +304,8 @@ struct CalendarMonthView: View {
                                 hasEvents: st.count > 0, eventPriority: st.prio, eventCount: st.count,
                                 festivalTint: festivals.first.map { Color(hex: $0.accentHex) },
                                 cellAccent: (festivals.first.map { Color(hex: $0.accentHex) }
-                                                ?? (d.isSameDay(as: selectedDate) ? accentColorForToday : nil)))
+                                                ?? (d.isSameDay(as: selectedDate) ? accentColorForToday : nil)),
+                                holidayType: HolidayProvider.info(for: d).type)
                     .frame(minHeight: AppTheme.Touch.minCellHeight)
                     .contentShape(Rectangle())
                     .onTapGesture {
