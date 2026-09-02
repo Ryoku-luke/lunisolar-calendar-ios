@@ -16,6 +16,7 @@ import os
 struct LunisolarCalendarApp: App {
 
     @State private var store = EventStore.shared
+    @State private var countdownStore = CountdownStore.shared
     /// 持有同步协调器强引用（EventStore.syncCoordinator 为 weak，需要这里保活）
     @State private var syncCoordinator: EventSyncCoordinator?
     /// 外观偏好：跟随系统 / 浅色 / 深色
@@ -29,6 +30,7 @@ struct LunisolarCalendarApp: App {
         WindowGroup {
             AdaptiveRootView()
                 .environment(store)
+                .environment(countdownStore)
                 .preferredColorScheme(appearance.colorScheme)
                 .tint(Color.appTint)
                 .task {
