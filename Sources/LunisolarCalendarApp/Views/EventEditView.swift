@@ -388,6 +388,7 @@ struct EventEditView: View {
         if end < startDate { end = startDate }
         let reminderOffset: Int? = reminderEnabled ? reminderMinutesBefore : nil
         let now = Date()
+        let resultingEvent: CalendarEvent
         if let ev = original {
             var copy = ev
             copy.title = trimmed; copy.type = type; copy.notes = notes.isEmpty ? nil : notes
@@ -396,14 +397,21 @@ struct EventEditView: View {
             copy.reminderOffsetMinutes = reminderOffset; copy.isCompleted = isCompleted
             copy.updatedAt = now
             store.update(copy)
+            resultingEvent = copy
         } else {
             let ev = CalendarEvent(title: trimmed, type: type, startDate: startDate, endDate: end,
                 isAllDay: isAllDay, notes: notes.isEmpty ? nil : notes,
                 repeatRule: repeatRule, priority: priority,
                 reminderOffsetMinutes: reminderOffset)
             store.add(ev)
+            resultingEvent = ev
         }
-        Task { await NotificationManager.shared.rescheduleAllReminders(in: store) }
+        // 只刷新当前事件的通知：避免 O(N) 全量 cancelAll+reschedule 导致
+        // badge 短暂闪烁、大事件库下保存卡顿、不必要的 UN 系统调用
+        Task { @MainActor in
+            NotificationManager.shared.cancelNotification(for: resultingEvent)
+            await NotificationManager.shared.scheduleNotification(for: resultingEvent)
+        }
         dismiss()
     }
 
