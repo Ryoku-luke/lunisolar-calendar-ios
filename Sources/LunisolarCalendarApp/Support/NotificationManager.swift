@@ -240,7 +240,10 @@ public final class NotificationManager {
         }
     }
 
-    /// 计算未来第一个与 lunarSource 的农历月/日相同的公历日期，保留 timeSource 的时分秒
+    /// 计算未来第一个与 lunarSource 的农历月/日相同的公历日期，保留 timeSource 的时分秒。
+    /// ⚠️ 语义必须与 CalendarEvent.occurs(on:) 的 lunarAnnually 分支保持一致：
+    /// - 闰月源事件：目标年「有闰同月」→ 用闰月匹配；目标年「无闰同月」→ 回退普通同月同日匹配。
+    /// - 普通月源事件：只匹配普通同月同日（不蹭闰月）。
     private func nextSolarDateForLunarAnnually(
         lunarSource: Date,
         timeSource: Date
@@ -255,9 +258,20 @@ public final class NotificationManager {
         // 从 refDate 所在农历年份往后搜最多 16 年（覆盖 minYear..maxYear=2100）
         let upperBound = min(ChineseCalendar.maxYear, lunar.year + 16)
         for year in lunar.year...upperBound {
+            // 按 occurs 语义决定是否用闰月：
+            // - 源是闰月 + 今年有相同闰月 → 闰月匹配
+            // - 源是闰月 + 今年无相同闰月 → 回退普通月匹配
+            // - 源是普通月 → 普通月匹配
+            let targetYearLeapMonth = ChineseCalendar.leapMonth(of: year)
+            let useLeap: Bool
+            if lunar.isLeapMonth {
+                useLeap = (targetYearLeapMonth == lunar.month)
+            } else {
+                useLeap = false
+            }
             guard let solar = ChineseCalendar.solarDate(
                 fromLunar: year, month: lunar.month,
-                day: lunar.day, isLeap: lunar.isLeapMonth
+                day: lunar.day, isLeap: useLeap
             ) else { continue }
 
             if let finalDate = gregorian.date(

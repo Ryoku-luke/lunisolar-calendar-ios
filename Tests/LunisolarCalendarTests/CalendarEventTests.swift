@@ -202,4 +202,59 @@ final class CalendarEventTests: XCTestCase {
         XCTAssertFalse(ev2101.repeatRuleLabel.isEmpty)
         XCTAssertFalse(ev2101.occurs(on: Date()))
     }
+
+    // MARK: P1 回归：闰月生日在有相同闰月的年只过闰月，不过普通月（防双生日回归）
+    //
+    // 旧代码 bug：lunarAnnually 分支里 if sl.isLeapMonth { return true } —— 无条件 true，
+    // 导致闰六月源事件在"有闰六月的年"里同时命中『六月廿九』（普通月）+『闰六月廿九』，
+    // 用户过两次生日。修复后：有闰同月 → 只匹配闰月；无闰同月 → 回退普通月。
+    func testLunarAnnuallyLeapSource_NoDoubleBirthdayInLeapYear() {
+        let cal = Calendar(identifier: .gregorian)
+
+        // 锚点：2025 闰六月 → 需先在 2025 年内找一个闰六月的公历日期作为起点
+        // 2025 的 leapMonth 查表应为 6（DataProvider 定义）
+        let startYear = 2025
+        let leap = ChineseCalendar.leapMonth(of: startYear)
+        XCTAssertEqual(leap, 6, "测试前提：2025 年应是闰六月，如数据库更新需换锚点年")
+
+        // 取 2025 闰六月 十五日作为事件起始日
+        guard let startSolar = ChineseCalendar.solarDate(
+            fromLunar: startYear, month: 6, day: 15, isLeap: true
+        ) else {
+            XCTFail("无法构造 2025 闰六月十五"); return
+        }
+        let ev = CalendarEvent(title: "闰六月生日（母亲）", startDate: startSolar, repeatRule: .lunarAnnually)
+
+        // 在 2025 年（有相同闰六月）：
+        // 1) 普通六月十五日 → 不应匹配（避免双生日！）
+        guard let plainSolar = ChineseCalendar.solarDate(
+            fromLunar: startYear, month: 6, day: 15, isLeap: false
+        ) else { XCTFail("无法构造 2025 普通六月十五"); return }
+        let plainLunar = ChineseCalendar.lunarDateSafe(from: plainSolar)
+        XCTAssertEqual(plainLunar?.month, 6)
+        XCTAssertEqual(plainLunar?.day, 15)
+        XCTAssertEqual(plainLunar?.isLeapMonth, false)
+        XCTAssertFalse(ev.occurs(on: plainSolar),
+            "有闰同月的年里，闰月源事件不应匹配普通同月（防双生日旧bug回归）")
+
+        // 2) 闰六月十五日 → 应匹配
+        let leapLunar = ChineseCalendar.lunarDateSafe(from: startSolar)
+        XCTAssertEqual(leapLunar?.isLeapMonth, true, "起锚日应为闰六月十五")
+        XCTAssertTrue(ev.occurs(on: startSolar), "闰六月源事件在闰六月当日 应匹配")
+
+        // 在无闰六月的邻近年（2026）：普通六月十五应回退命中（用户总不能不过生日）
+        let targetYear = 2026
+        let leap26 = ChineseCalendar.leapMonth(of: targetYear)
+        XCTAssertNotEqual(leap26, 6, "测试前提：2026 年应不再闰六月")
+        guard let fallback26 = ChineseCalendar.solarDate(
+            fromLunar: targetYear, month: 6, day: 15, isLeap: false
+        ) else { XCTFail("无法构造 2026 普通六月十五"); return }
+        let fb26Lunar = ChineseCalendar.lunarDateSafe(from: fallback26)
+        XCTAssertEqual(fb26Lunar?.month, 6)
+        XCTAssertEqual(fb26Lunar?.day, 15)
+        XCTAssertEqual(fb26Lunar?.isLeapMonth, false)
+        // occurs 需要 target >= start，2026 在 2025 之后，OK
+        XCTAssertTrue(ev.occurs(on: fallback26),
+            "无闰同月的年里，闰月源事件应回退命中普通同月同日")
+    }
 }
