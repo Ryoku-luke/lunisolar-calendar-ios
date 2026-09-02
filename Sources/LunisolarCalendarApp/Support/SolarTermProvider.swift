@@ -33,7 +33,7 @@ public enum SolarTermProvider: Sendable {
         }
     }
 
-    // 内置 2025–2028 节气时刻表（来源：紫金山天文台）
+    // 内置 2025–2028 节气时刻表（来源：紫金山天文台），已按 year+index 升序
     private static let entries: [TermEntry] = [
         // 2025
         .init(year: 2025, index: 0,  month: 1,  day: 5,  hour: 11, minute: 23),
@@ -137,14 +137,18 @@ public enum SolarTermProvider: Sendable {
         .init(year: 2028, index: 23, month: 12, day: 21, hour: 6,  minute: 25),
     ]
 
+    /// 按发生时间排好序的节气表（避免 nextTerm 每次 O(N log N) 重排）。
+    /// entries 源数据本身是「年 × 年内节气序号 0-23」升序写入，Date 也单调递增，但
+    /// 保险起见仍做一次排序并缓存，保证后续线性扫描的正确性。
+    private static let sortedEntries: [TermEntry] = entries.sorted { $0.date < $1.date }
+
     // MARK: - 查询
 
     /// 距离 from 最近的未过去节气。
     public static func nextTerm(from date: Date) -> (name: String, date: Date, daysRemaining: Int)? {
         let cal = Calendar(identifier: .gregorian)
         let now = cal.startOfDay(for: date)
-        let sorted = entries.sorted { $0.date < $1.date }
-        for entry in sorted where entry.date >= now {
+        for entry in sortedEntries where entry.date >= now {
             let days = cal.dateComponents([.day], from: now, to: cal.startOfDay(for: entry.date)).day ?? 0
             return (entry.name, entry.date, days)
         }
