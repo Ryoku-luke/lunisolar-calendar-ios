@@ -1,4 +1,5 @@
 import XCTest
+import LunarCore
 @testable import LunisolarCalendarApp
 
 // MARK: - 农历转换回归测试（17个真值点）
