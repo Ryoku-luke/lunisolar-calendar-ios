@@ -396,6 +396,9 @@ struct EventEditView: View {
             copy.startDate = startDate; copy.endDate = end; copy.isAllDay = isAllDay
             copy.reminderOffsetMinutes = reminderOffset; copy.isCompleted = isCompleted
             copy.updatedAt = now
+            // 用户任何编辑都重置 isNotified（避免：一次性提醒 markNotified=true→用户改了日期→
+            // scheduleNotification 由于 isNotified=true 直接 return，新的提醒永远不会被挂上）
+            copy.isNotified = false
             store.update(copy)
             resultingEvent = copy
         } else {
