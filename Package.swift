@@ -51,7 +51,7 @@ let package = Package(
         // MARK: - 测试
         .testTarget(
             name: "LunisolarCalendarTests",
-            dependencies: ["LunisolarCalendarApp"],
+            dependencies: ["LunisolarCalendarApp", "LunarCore"],
             path: "Tests/LunisolarCalendarTests"
         )
     ]

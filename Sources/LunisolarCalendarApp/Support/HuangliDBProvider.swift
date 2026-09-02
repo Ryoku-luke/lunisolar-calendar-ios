@@ -1,5 +1,5 @@
 import Foundation
-@_exported import LunarCore
+import LunarCore
 
 // MARK: - 离散黄历条目模型 (compact JSON keys)
 
