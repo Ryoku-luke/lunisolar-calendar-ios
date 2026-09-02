@@ -122,7 +122,7 @@ struct ConflictPolicyPicker: View {
                             Spacer()
                             if policy == p {
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(Color(hex: "#C41A1A"))
+                                    .foregroundStyle(Color.festiveRed)
                             }
                         }
                         .contentShape(Rectangle())

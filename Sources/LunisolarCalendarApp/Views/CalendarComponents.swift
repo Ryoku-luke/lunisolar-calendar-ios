@@ -93,6 +93,9 @@ struct DayCellView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .opacity(isCurrentMonth ? 1 : 0.32)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(date.day)日 \(lunar.shortDisplayString)\(hasEvents ? " \(eventCount)项日程" : "")\(isToday ? " 今天" : "")")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
     private var foregroundForDay: Color {
         if isSelected { return .white }
