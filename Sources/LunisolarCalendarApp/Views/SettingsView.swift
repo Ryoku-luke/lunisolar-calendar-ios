@@ -221,7 +221,7 @@ struct SettingsView: View {
     // MARK: - 3. 数据管理
 
     private var dataManagementCard: some View {
-        SettingsCard(title: "数据管理", icon: "externaldrive.badge.checkmark", tint: Color(hex: "#C41A1A"), subtitle: "备份 · 导出 · 导入 / 恢复，.json 保留全部字段") {
+        SettingsCard(title: "数据管理", icon: "externaldrive.badge.checkmark", tint: Color.festiveRed, subtitle: "备份 · 导出 · 导入 / 恢复，.json 保留全部字段") {
             VStack(spacing: 2) {
                 DataActionRow(
                     icon: "square.and.arrow.up",
@@ -241,7 +241,7 @@ struct SettingsView: View {
                     icon: "externaldrive.badge.checkmark",
                     title: "全量备份为 .json",
                     subtitle: "含农历重复 / 通知状态 / 创建时间",
-                    tint: Color(hex: "#C41A1A")
+                    tint: Color.festiveRed
                 ) { exportAsJSONBackup() }
                 divider
                 DataActionRow(

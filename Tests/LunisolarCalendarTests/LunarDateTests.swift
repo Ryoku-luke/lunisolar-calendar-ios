@@ -100,4 +100,49 @@ final class LunarDateTests: XCTestCase {
             XCTAssertFalse(l.isLeapMonth, "[\(c.tag)] 正月不能是闰月")
         }
     }
+
+    // MARK: - Date 扩展公历一致性测试
+
+    /// 验证 Date 扩展属性始终返回公历值，不受系统日历设置影响。
+    func testDateExtensionsUseGregorian() {
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 1
+        let date = cal.date(from: dc)!
+
+        // year/month/day 必须返回公历值
+        XCTAssertEqual(date.year, 2026, "year 应返回公历年")
+        XCTAssertEqual(date.month, 9, "month 应返回公历月")
+        XCTAssertEqual(date.day, 1, "day 应返回公历日")
+        // 2026-09-01 是周二 → weekday=3（1=周日）
+        XCTAssertEqual(date.weekday, 3, "weekday 应返回公历星期")
+
+        // firstDayOfMonth 应返回 2026-09-01
+        let first = date.firstDayOfMonth
+        XCTAssertEqual(first.year, 2026)
+        XCTAssertEqual(first.month, 9)
+        XCTAssertEqual(first.day, 1)
+
+        // daysInMonth：2026年9月有30天
+        XCTAssertEqual(date.daysInMonth, 30, "9月应有30天")
+
+        // addingDays / addingMonths
+        let nextDay = date.addingDays(1)
+        XCTAssertEqual(nextDay.day, 2, "addingDays(1) 应为9月2日")
+        let nextMonth = date.addingMonths(1)
+        XCTAssertEqual(nextMonth.month, 10, "addingMonths(1) 应为10月")
+
+        // isSameMonth / isSameDay
+        XCTAssertTrue(date.isSameMonth(as: date.addingDays(15)), "同月")
+        XCTAssertFalse(date.isSameDay(as: date.addingDays(1)), "不同日")
+
+        // startOfDay 应截断到 00:00:00
+        let midnight = date.startOfDay
+        let comps = cal.dateComponents([.hour, .minute, .second], from: midnight)
+        XCTAssertEqual(comps.hour, 0, "startOfDay 应为00:00:00")
+        XCTAssertEqual(comps.minute, 0)
+        XCTAssertEqual(comps.second, 0)
+
+        // weekdaySymbol 不应为空
+        XCTAssertFalse(date.weekdaySymbol.isEmpty, "weekdaySymbol 不应为空")
+    }
 }

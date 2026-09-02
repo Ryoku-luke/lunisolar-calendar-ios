@@ -53,6 +53,7 @@ struct EventRow: View {
                                    alignment: .trailing)
                             .contentShape(Rectangle())
                     }.buttonStyle(.plain)
+                    .accessibilityLabel(event.isCompleted ? "标记为未完成" : "标记为完成")
                 }
             }
         }
@@ -63,6 +64,9 @@ struct EventRow: View {
         .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
             .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair))
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(event.title) \(event.displayTimeRange)\(event.isCompleted ? " 已完成" : "")")
+        .accessibilityHint(event.type == .reminder || event.type == .schedule ? "轻点完成按钮切换完成状态" : "")
     }
 }
 #endif
