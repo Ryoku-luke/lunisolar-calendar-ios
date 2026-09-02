@@ -358,14 +358,14 @@ public enum DataPortability {
         if upper.contains("FREQ=MONTHLY") { return .monthly }
         if upper.contains("FREQ=YEARLY") { return .yearly }
         if upper.contains("FREQ=WEEKLY") {
-            // 含 BYDAY=MO,TU,WE,TH,FR（且没其他）→ 工作日
+            // 含 BYDAY=MO,TU,WE,TH,FR（且**正好**是这 5 个，不多不少）→ 工作日
+            // 注意：不能用 isSubset——「周一三五」也是工作日子集，但语义上不是「每个工作日」
             if let byDay = upper.split(separator: ";").first(where: { $0.hasPrefix("BYDAY=") }) {
-                let days = String(byDay).dropFirst("BYDAY=".count)
+                let daysStr = String(byDay).dropFirst("BYDAY=".count)
+                let parts = Set(daysStr.split(separator: ",").map(String.init))
                 let workdaySet: Set<String> = ["MO","TU","WE","TH","FR"]
-                let parts = Set(days.split(separator: ",").map(String.init))
-                if !parts.isEmpty && parts.isSubset(of: workdaySet) {
-                    return .workday
-                }
+                // 精确相等才是 workday；BYDAY 不包含（整个 BYDAY 缺省 = 每周按起始日）也算 weekly
+                if parts == workdaySet { return .workday }
             }
             return .weekly
         }

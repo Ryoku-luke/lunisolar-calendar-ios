@@ -1,6 +1,7 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
 import UIKit
+import LunarCore
 
 // MARK: - 备用图标管理器 · AlternateIconManager
 ///
@@ -65,14 +66,12 @@ public final class AlternateIconManager: ObservableObject {
     // MARK: - 自动根据日期启用/停用
     /// 若今天落在「春节窗口」（正月初一前 7 天 ~ 正月初六），自动切换到春节图标；
     /// 否则确保回到主图标（仅在与 current 不一致时才触发系统弹窗）。
-    public func applyTodayIfNeeded(
-        calendar: Calendar = Calendar(identifier: .chinese),
-        graceBeforeDays: Int = 7
-    ) {
+    ///
+    /// ⚠️ 春节窗口判定统一走 LunarCore（本 App 自己的农历数据库），避免 Apple `.chinese` Calendar
+    /// 与我们的农历查表有±1天偏差导致「月视图显示正月初一但图标没切/切早了」的不一致。
+    public func applyTodayIfNeeded(graceBeforeDays: Int = 7) {
         let today = Date()
-        let expected: Icon = isWithinSpringWindow(today,
-                                                  calendar: calendar,
-                                                  graceBeforeDays: graceBeforeDays)
+        let expected: Icon = isWithinSpringWindow(today, graceBeforeDays: graceBeforeDays)
             ? .springFestival
             : .primary
         Task { await setIcon(expected) }
@@ -81,37 +80,39 @@ public final class AlternateIconManager: ObservableObject {
     /// 判断给定日期是否处于「春节窗口」
     /// 规则：
     ///   - 农历正月初一 为春节正日；
-    ///   - 窗口 = (正月初一 - graceBeforeDays) ~ (正月初六 23:59:59)
-    func isWithinSpringWindow(_ date: Date,
-                              calendar: Calendar,
-                              graceBeforeDays: Int) -> Bool {
-        var gregorian: Calendar { Calendar(identifier: .gregorian) }
-        let comps = calendar.dateComponents([.year, .month, .day], from: date)
-        guard let year = comps.year,
-              let month = comps.month,
-              let day = comps.day else { return false }
+    ///   - 窗口 = (春节正日公历 - graceBeforeDays) ~ (正月初六 23:59:59 公历)。
+    ///   - 因为今天可能处于上一个春节和下一个春节之间，需检查「今年」和「明年」两个候选年。
+    func isWithinSpringWindow(_ date: Date, graceBeforeDays: Int) -> Bool {
+        let cal = Calendar(identifier: .gregorian)
+        let today = cal.startOfDay(for: date)
 
-        // 今年正月初一
-        var firstDayComps = DateComponents(calendar: calendar,
-                                            year: year, month: 1, day: 1)
-        guard let firstDay = calendar.date(from: firstDayComps) else { return false }
-        let firstDayGregorian = gregorian.startOfDay(for: firstDay)
+        // 当前公历年对应的正月初一 及 明年对应的正月初一
+        // 注意：today 可能处于公历1-2月，但该年正月初一可能是下一个月（2月份），
+        // 或已过了今年正月，明年正月在 1-2 月的窗口内（例如春节前 7 天已是公历跨年）。
+        let thisGY = cal.component(.year, from: today)
+        let candidates: [Int] = [thisGY, thisGY + 1]
 
-        // 正月初六
-        var sixthDayComps = DateComponents()
-        sixthDayComps.day = 5
-        guard let sixthDay = calendar.date(byAdding: sixthDayComps, to: firstDay) else {
-            return false
+        for gy in candidates {
+            // 求：农历 gy 年 正月初一 的公历日期
+            // 先假设正月初一在农历 gy 年，但 农历 gy 年可能从公历 gy 的 1-2 月才开始，
+            // 所以需要求「农历 gy 年正月初一」对应的公历日期。
+            guard let springDay = ChineseCalendar.solarDate(
+                fromLunar: gy, month: 1, day: 1, isLeap: false
+            ) else { continue }
+            let springGregorian = cal.startOfDay(for: springDay)
+            // 正月初六：正月初一 + 5 天 = 第 6 天
+            guard let sixthDay = cal.date(byAdding: .day, value: 5, to: springGregorian) else {
+                continue
+            }
+            let sixthDayEnd = cal.date(bySettingHour: 23, minute: 59, second: 59, of: sixthDay)
+                ?? sixthDay
+            guard let windowStart = cal.date(byAdding: .day, value: -graceBeforeDays, to: springGregorian)
+                else { continue }
+            if today >= windowStart && today <= sixthDayEnd {
+                return true
+            }
         }
-        let sixthDayEnd = gregorian.date(bySettingHour: 23, minute: 59, second: 59,
-                                         of: sixthDay) ?? sixthDay
-
-        // 窗口左边界 = 正月初一（公历）再往前 grace 天
-        guard let windowStart = gregorian.date(byAdding: .day, value: -graceBeforeDays,
-                                               to: firstDayGregorian) else { return false }
-
-        let now = date
-        return now >= windowStart && now <= sixthDayEnd
+        return false
     }
 }
 #endif
