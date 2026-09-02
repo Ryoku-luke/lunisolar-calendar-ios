@@ -655,6 +655,8 @@ struct SettingsView: View {
             shareURL = url
             showShareSheet = true
             toast = .init(kind: .success, text: "已生成 .ics 日历备份（\(store.events.count) 条）")
+        } else {
+            toast = .init(kind: .error, text: "导出失败：临时文件写入失败，请检查可用空间")
         }
     }
 
@@ -668,6 +670,8 @@ struct SettingsView: View {
             shareURL = url
             showShareSheet = true
             toast = .init(kind: .success, text: "已生成 .csv 表格（\(store.events.count) 条）")
+        } else {
+            toast = .init(kind: .error, text: "导出失败：临时文件写入失败，请检查可用空间")
         }
     }
 
@@ -681,17 +685,25 @@ struct SettingsView: View {
             shareURL = url
             showShareSheet = true
             toast = .init(kind: .success, text: "已生成全量 JSON 备份（\(store.events.count) 条）")
+        } else {
+            toast = .init(kind: .error, text: "导出失败：临时文件写入失败，请检查可用空间")
         }
     }
 
     private func handleImportResult(_ result: Result<URL, Error>, fileType: ImportedFileType) {
         switch result {
         case .success(let url):
-            guard url.startAccessingSecurityScopedResource() else { return }
+            guard url.startAccessingSecurityScopedResource() else {
+                toast = .init(kind: .error, text: "导入失败：无权限读取该文件，请重新选择")
+                importedResult = .init(invalid: 1)
+                showImportResult = true
+                return
+            }
             defer { url.stopAccessingSecurityScopedResource() }
             guard let content = try? String(contentsOf: url, encoding: .utf8) else {
                 importedResult = .init(invalid: 1)
                 showImportResult = true
+                toast = .init(kind: .error, text: "导入失败：文件无法读取或编码不支持（请使用 UTF-8 文本）")
                 return
             }
             let incoming: [CalendarEvent]
