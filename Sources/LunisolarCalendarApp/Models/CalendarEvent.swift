@@ -237,8 +237,13 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
             guard let tl = targetLunar, let sl = startLunarCached else { return false }
             guard target >= start else { return false }
             guard tl.month == sl.month && tl.day == sl.day else { return false }
+            // 闰月事件逻辑：
+            // - 源事件来自闰月：目标年"有闰同月"时只匹配闰月（避免普通月也命中导致每年两次生日）；
+            //   目标年"没有闰同月"时回退为匹配普通同月同日（总不能不过生日）。
+            // - 源事件来自普通月：只匹配普通同月同日（不蹭闰月）。
             if sl.isLeapMonth {
-                return true
+                let targetHasLeap = ChineseCalendar.leapMonth(of: tl.year) == sl.month
+                return targetHasLeap ? tl.isLeapMonth : !tl.isLeapMonth
             } else {
                 return !tl.isLeapMonth
             }

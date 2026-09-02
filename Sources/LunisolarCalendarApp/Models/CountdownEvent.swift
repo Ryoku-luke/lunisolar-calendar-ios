@@ -94,11 +94,21 @@ public final class CountdownStore {
 
     private let fileURL: URL
 
+    /// P5 防抖写入：合并 0.5s 内连续 CRUD 的磁盘写入
+    private var pendingSaveWorkItem: DispatchWorkItem?
+    private let saveDebounceInterval: TimeInterval = 0.5
+
     @MainActor
     private init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         fileURL = docs.appendingPathComponent("countdowns.json")
+        // 确保父目录存在（iOS 首次安装、沙盒重置等场景下 Documents 可能为空或不存在）
+        try? FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
         load()
     }
 
@@ -130,16 +140,38 @@ public final class CountdownStore {
             let data = try Data(contentsOf: fileURL)
             events = try JSONDecoder().decode([CountdownEvent].self, from: data)
         } catch {
-            AppLogger.app.error("倒数日数据加载失败: \(error.localizedDescription)")
+            // 损坏隔离：同 EventStore 的策略，避免下一次 saveNow 原子写默默覆盖掉用户手编辑/导入的数据
+            let backup = fileURL.deletingLastPathComponent()
+                .appendingPathComponent("\(fileURL.lastPathComponent).corrupt.\(Int64(Date().timeIntervalSince1970 * 1000))")
+            try? FileManager.default.copyItem(at: fileURL, to: backup)
+            AppLogger.app.error("倒数日数据加载失败: \(error.localizedDescription)，已隔离备份到 \(backup.lastPathComponent)")
+            events = []
         }
     }
 
     private func save() {
+        pendingSaveWorkItem?.cancel()
+        let wi = DispatchWorkItem { [weak self] in
+            self?.saveNow()
+        }
+        pendingSaveWorkItem = wi
+        DispatchQueue.main.asyncAfter(deadline: .now() + saveDebounceInterval, execute: wi)
+    }
+
+    private func saveNow() {
+        pendingSaveWorkItem?.cancel()
+        pendingSaveWorkItem = nil
         do {
             let data = try JSONEncoder().encode(events)
             try data.write(to: fileURL, options: .atomic)
         } catch {
             AppLogger.app.error("倒数日数据保存失败: \(error.localizedDescription)")
         }
+    }
+
+    /// 测试用：强制把挂起的防抖落盘立即执行
+    @MainActor
+    public func _testFlushSave() {
+        saveNow()
     }
 }
