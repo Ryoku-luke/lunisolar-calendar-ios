@@ -288,6 +288,7 @@ public final class EventStore {
     }
 
     /// 删除事件：O(1) by-id 定位，O(1) 字典平移
+    /// ⚠️ 同步取消 pending 通知：否则用户删除的 reminder 到点仍会弹出（P1 级别体验问题）。
     public func delete(_ event: CalendarEvent, skipSync: Bool = false) {
         guard let idx = indexOfEvent(id: event.id) else { return }
         events.remove(at: idx)
@@ -297,6 +298,8 @@ public final class EventStore {
         save()
         dirtyEventIDs.remove(event.id.uuidString)
         deletedEventIDs.insert(event.id.uuidString)
+        // 被删除事件的 pending 本地通知必须立即取消（UNUserNotificationCenter 是跨 App 重启持久的）
+        NotificationManager.shared.cancelNotification(for: event)
         if !skipSync {
             enqueuePush()
         }
@@ -304,11 +307,16 @@ public final class EventStore {
 
     public func toggleCompleted(_ event: CalendarEvent, skipSync: Bool = false) {
         guard let idx = indexOfEvent(id: event.id) else { return }
+        let wasNotCompleted = !events[idx].isCompleted
         events[idx].isCompleted.toggle()
         events[idx].updatedAt = Date()
         invalidateCache()
         save()
         dirtyEventIDs.insert(events[idx].id.uuidString)
+        // 刚被标记为「已完成」的 reminder，要移除其 pending 通知（完成的事不再提醒）
+        if wasNotCompleted && events[idx].isCompleted {
+            NotificationManager.shared.cancelNotification(for: events[idx])
+        }
         if !skipSync {
             enqueuePush()
         }

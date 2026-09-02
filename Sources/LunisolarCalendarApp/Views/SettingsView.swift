@@ -325,6 +325,8 @@ struct SettingsView: View {
                         Task { @MainActor in
                             do {
                                 _ = try await co.syncBidirectional()
+                                // 双向同步可能从 iCloud 拉回了新的 reminder 事件，需要重新排本地通知
+                                await NotificationManager.shared.rescheduleAllReminders(in: store)
                                 toast = .init(kind: .success, text: "同步完成")
                             } catch {
                                 AppLogger.sync.error("立即同步失败：\(error)")
@@ -714,7 +716,12 @@ struct SettingsView: View {
             let r = store.merge(incoming, policy: conflictPolicy, skipSync: true)
             importedResult = r
             showImportResult = true
+            // 新增/更新的事件如果是 reminder，需要被挂到 UNUserNotificationCenter。
+            // 由于本 merge 是 O(N) 数据导入，用 rescheduleAllReminders（内部 cancelAll+重排）一次性刷新全局
             if r.added + r.updated > 0 {
+                Task { @MainActor in
+                    await NotificationManager.shared.rescheduleAllReminders(in: store)
+                }
                 toast = .init(kind: .success,
                               text: "导入完成：新增 \(r.added) · 更新 \(r.updated)")
             } else {
@@ -776,7 +783,11 @@ struct SettingsView: View {
         let r = store.merge(events, policy: conflictPolicy, skipSync: true)
         importedResult = r
         showImportResult = false
+        // 系统导入成功后重排所有 pending 通知，把新增 reminder 挂到 UNUserNotificationCenter
         if r.added + r.updated > 0 {
+            Task { @MainActor in
+                await NotificationManager.shared.rescheduleAllReminders(in: store)
+            }
             toast = .init(kind: .success,
                           text: "\(source.displayName) 导入：新增 \(r.added) · 更新 \(r.updated)")
         } else {
@@ -810,6 +821,8 @@ struct SettingsView: View {
             store.syncCoordinator = coordinator
             UserDefaults.standard.set(true, forKey: "Lunisolar.sync.enabled")
             _ = try await coordinator.syncBidirectional()
+            // 首次双向同步后：远端可能有新 reminder，需要排本地通知
+            await NotificationManager.shared.rescheduleAllReminders(in: store)
             toast = .init(kind: .success, text: "iCloud 同步已开启")
         } catch {
             AppLogger.sync.error("首次开启 iCloud 同步失败：\(error)")
@@ -826,6 +839,8 @@ struct SettingsView: View {
             Task { @MainActor in
                 do {
                     _ = try await co.syncBidirectional()
+                    // 开启同步后首次双向同步：远端新 reminder 需要排本地通知
+                    await NotificationManager.shared.rescheduleAllReminders(in: store)
                 } catch {
                     AppLogger.sync.warning("开启同步后首次同步失败：\(error)")
                 }

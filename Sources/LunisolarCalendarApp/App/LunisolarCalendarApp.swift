@@ -34,6 +34,14 @@ struct LunisolarCalendarApp: App {
                 .preferredColorScheme(appearance.colorScheme)
                 .tint(Color.appTint)
                 .task {
+                    // ⚠️ 启动即重排所有本地提醒：
+                    // - 重新安装后 UNUserNotificationCenter 为全新空态，没有任何 pending request
+                    // - iOS 系统升级/还原后也可能清掉原有 requests
+                    // - 导入/合并非通知调度的冷路径（iCloud pull）需要启动时补位
+                    // 放在独立的 task 里（不和 CloudKit setup 串行，避免受 entitlement 阻塞）
+                    await NotificationManager.shared.rescheduleAllReminders(in: store)
+                }
+                .task {
                     await setupCloudSyncIfNeeded()
                 }
         }
