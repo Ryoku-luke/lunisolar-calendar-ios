@@ -29,17 +29,23 @@ public struct SyncResult: Equatable, Hashable, Sendable {
     public let pulled: Int
     public let conflictsResolved: Int
     public let errors: [SyncError]
+    /// push 时 per-record 失败的记录 ID（部分失败场景下 EventStore 要据此保留这些事件的脏标记重推，
+    /// 成功的记录才从 dirty/deleted 里移除，避免"部分成功→脏标记全清→失败事件永久丢失推送"）。
+    /// pull / 无 push 时返回空集合。
+    public let failedRecordIDs: Set<String>
     public let startedAt: Date
     public let finishedAt: Date
 
     public init(direction: SyncDirection, pushed: Int, pulled: Int,
                 conflictsResolved: Int, errors: [SyncError],
+                failedRecordIDs: Set<String> = [],
                 startedAt: Date, finishedAt: Date) {
         self.direction = direction
         self.pushed = pushed
         self.pulled = pulled
         self.conflictsResolved = conflictsResolved
         self.errors = errors
+        self.failedRecordIDs = failedRecordIDs
         self.startedAt = startedAt
         self.finishedAt = finishedAt
     }
