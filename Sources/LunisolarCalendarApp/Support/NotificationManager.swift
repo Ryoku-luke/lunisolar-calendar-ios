@@ -67,9 +67,17 @@ public final class NotificationManager {
     ///    时 UNCalendarNotificationTrigger 的 month/day 分量语义错乱（参考 BUG #30/#32）。
     public func scheduleNotification(for event: CalendarEvent) async {
         #if canImport(UserNotifications)
-        guard event.type == .reminder, event.startDate > Date() else { return }
+        guard event.type == .reminder else { return }
 
         let rule = event.repeatRule
+        // 单次提醒必须在未来（过去的一次性提醒不可能再响）
+        // 重复提醒（每日/每周/工作日/每月/每年/农历每年）允许 startDate 在过去——只要未来还有匹配
+        // 日期（UNCalendar repeats 自动负责，农历每年由 nextSolarDateForLunarAnnually 负责）。
+        // P1 修复：旧版本 `event.startDate > Date()` 一刀切把所有 startDate 在过去的
+        // 重复性提醒（生日、打卡、农历生日这些都是从过去某个日期开始）永久挡在门外，
+        // 今天待办里能看到该事件的 occurs=true 但从不响通知，属于典型"看得见不会响"。
+        if rule == .never && !(event.startDate > Date()) { return }
+
         // 单次提醒已经触发过就跳过（防重复弹窗）
         if rule == .never && event.isNotified { return }
 
@@ -186,11 +194,14 @@ public final class NotificationManager {
             return [UNNotificationRequest(identifier: baseID, content: content, trigger: trigger)]
 
         case .yearly:
-            // month/day 取原始 startDate（提醒偏移只应改时分，不改日期）
-            let dateComps = gregorian.dateComponents([.month, .day], from: event.startDate)
-            var comps = gregorian.dateComponents([.hour, .minute], from: effectiveStart)
-            comps.month = dateComps.month
-            comps.day = dateComps.day
+            // P2 修复：yearly 规则的 reminderOffsetMinutes 应当完整应用到 month/day/hour/minute
+            //  （之前取 startDate 的 month/day，只取 effectiveStart 的 hour/minute，
+            //   对"婚礼前 1 天提醒"—— start=3/15, -1440min → effectiveStart=3/14
+            //   结果 trigger 仍然绑定 3/15 每年在婚礼当天才响！）。
+            //   正确行为：同 weekly/monthly/daily 一样，整组 components 从 effectiveStart 取。
+            let comps = gregorian.dateComponents(
+                [.month, .day, .hour, .minute], from: effectiveStart
+            )
             let trigger = UNCalendarNotificationTrigger(
                 dateMatching: comps, repeats: true
             )

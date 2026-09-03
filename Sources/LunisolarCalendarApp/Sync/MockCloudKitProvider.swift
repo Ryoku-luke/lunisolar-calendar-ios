@@ -122,10 +122,27 @@ public final class MockCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         guard !simulateQuotaExceeded else { throw SyncError.quotaExceeded }
 
         var written = 0
-        let errors: [String: SyncError] = [:]
+        var errors: [String: SyncError] = [:]
         for r in records {
-            let changed = await store.upsert(r)
-            if changed { written += 1 }
+            // P2 修复：push 前显式判断 LWW（与 store.upsert 规则一致）。
+            // 如果云端已有版本更新的记录 → 以 per-record 形式返回 .conflict 错误，
+            // 不再让 upsert 内部"静默拒绝但返回 written 不计数"吞掉：之前的版本会导致
+            // coordinator 以为推送成功（errors 为空）进而把本地 versionMap 提升到
+            // 一个比 server 实际还低的值 → 本地/server 版本脱钩直到下次 pull。
+            if let existing = await store.get(r.id) {
+                let wins = (r.version > existing.version) ||
+                           (r.version == existing.version && r.updatedAtMs >= existing.updatedAtMs)
+                guard wins else {
+                    errors[r.id] = .conflict(
+                        "LWW: server v=\(existing.version) > incoming v=\(r.version)"
+                    )
+                    continue
+                }
+            }
+            // 接受：写入云端（内容是否真的不同由 upsert 内部 return，但 written 计数只要
+            // LWW 通过就 +1，与用户『我推了 N 条全部成功』的直觉一致）
+            _ = await store.upsert(r)
+            written += 1
         }
         if let maxMs = records.map(\.updatedAtMs).max(), maxMs > lastSyncMs {
             lastSyncMs = maxMs
