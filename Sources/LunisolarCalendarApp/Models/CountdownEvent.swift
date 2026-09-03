@@ -57,21 +57,36 @@ public struct CountdownEvent: Identifiable, Codable, Equatable, Hashable, Sendab
         return "已过 \(-days) 天"
     }
 
-    /// 纪念日的下次周年日期
+    /// 纪念日的下次周年日期（非闰年 2/29 会落到 2/28，避免闰日生日跳过 2-3 年）
     public func nextAnniversary(from today: Date) -> Date? {
         guard kind == .anniversary else { return nil }
         let cal = Calendar(identifier: .gregorian)
         let nowComps = cal.dateComponents([.year, .month, .day], from: today)
         let origComps = cal.dateComponents([.month, .day], from: date)
-        var nextComps = DateComponents()
-        nextComps.month = origComps.month
-        nextComps.day = origComps.day
-        nextComps.year = nowComps.year
-        if let next = cal.date(from: nextComps), next >= cal.startOfDay(for: today) {
-            return next
+        let yearNow = nowComps.year ?? 2026
+
+        func resolve(year: Int) -> Date? {
+            var c = DateComponents()
+            c.month = origComps.month
+            c.day   = origComps.day
+            c.year  = year
+            if let d = cal.date(from: c) { return d }
+            // 闰日 2/29 在非闰年返回 nil → 退到 2/28
+            if origComps.month == 2 && origComps.day == 29 {
+                var fallback = DateComponents()
+                fallback.month = 2
+                fallback.day   = 28
+                fallback.year  = year
+                return cal.date(from: fallback)
+            }
+            return nil
         }
-        nextComps.year = (nowComps.year ?? 2026) + 1
-        return cal.date(from: nextComps)
+
+        if let thisYear = resolve(year: yearNow),
+           thisYear >= cal.startOfDay(for: today) {
+            return thisYear
+        }
+        return resolve(year: yearNow + 1)
     }
 }
 
@@ -95,8 +110,11 @@ public final class CountdownStore {
     private let fileURL: URL
 
     /// P5 防抖写入：合并 0.5s 内连续 CRUD 的磁盘写入
-    private var pendingSaveWorkItem: DispatchWorkItem?
-    private let saveDebounceInterval: TimeInterval = 0.5
+    /// - 使用 Swift Concurrency Task（而非 DispatchWorkItem）保证 @MainActor 隔离，
+    ///   符合 Swift 6 严格并发模式；避免 DispatchQueue.main 闭包
+    ///   非 actor 隔离却访问 events 导致的编译警告/数据风险。
+    private var pendingSaveTask: Task<Void, Never>?
+    private let saveDebounceNs: UInt64 = 500_000_000  // 0.5s
 
     @MainActor
     private init() {
@@ -150,17 +168,19 @@ public final class CountdownStore {
     }
 
     private func save() {
-        pendingSaveWorkItem?.cancel()
-        let wi = DispatchWorkItem { [weak self] in
+        pendingSaveTask?.cancel()
+        let ns = saveDebounceNs
+        pendingSaveTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: ns) }
+            catch { return }  // CancellationError 等 → 静默退出（新的 save 已接手）
+            guard !Task.isCancelled else { return }
             self?.saveNow()
         }
-        pendingSaveWorkItem = wi
-        DispatchQueue.main.asyncAfter(deadline: .now() + saveDebounceInterval, execute: wi)
     }
 
     private func saveNow() {
-        pendingSaveWorkItem?.cancel()
-        pendingSaveWorkItem = nil
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
         do {
             let data = try JSONEncoder().encode(events)
             try data.write(to: fileURL, options: .atomic)
@@ -172,6 +192,8 @@ public final class CountdownStore {
     /// 测试用：强制把挂起的防抖落盘立即执行
     @MainActor
     public func _testFlushSave() {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
         saveNow()
     }
 }
