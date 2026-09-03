@@ -231,6 +231,8 @@ public enum DataPortability {
                 var notes: String? = nil
                 var rawUID: String? = nil
                 var parsedRRULE: RepeatRule? = nil
+                var parsedPriority: Priority = .normal
+                var parsedIsCompleted = false
                 var hasStart = false
                 var hasEnd = false
 
@@ -263,6 +265,21 @@ public enum DataPortability {
                         notes = unescapeICS(value)
                     } else if key.hasPrefix("RRULE") {
                         parsedRRULE = parseRRULE(value)
+                    } else if key.hasPrefix("PRIORITY") {
+                        // RFC 5545: 1 = 最高优先级，5/undefined = 普通，9 = 最低
+                        if let p = Int(value) {
+                            switch p {
+                            case 1:          parsedPriority = .urgent
+                            case 2, 3, 4:    parsedPriority = .high
+                            case 5, 6:       parsedPriority = .normal
+                            case 7, 8, 9:    parsedPriority = .low
+                            default:         parsedPriority = .normal
+                            }
+                        }
+                    } else if key.hasPrefix("STATUS") {
+                        // COMPLETED / CANCELLED 都视为已完成，不再重复触发提醒
+                        let v = value.uppercased()
+                        parsedIsCompleted = (v == "COMPLETED" || v == "CANCELLED")
                     }
                     idx += 1
                 }
@@ -287,8 +304,11 @@ public enum DataPortability {
                         isAllDay: isAllDay,
                         location: location,
                         notes: notes,
-                        repeatRule: parsedRRULE ?? .never
+                        repeatRule: parsedRRULE ?? .never,
+                        priority: parsedPriority
                     )
+                    // STATUS:COMPLETED/CANCELLED → 导入后仍保持已完成，避免重挂提醒
+                    if parsedIsCompleted { event.isCompleted = true }
                     // 把外部的 UID 记到 notes 末尾，便于排查（不覆盖原 notes）
                     if let uid = rawUID, !uid.isEmpty {
                         let suffix = "\n\n[ICS-UID]\(uid)"
