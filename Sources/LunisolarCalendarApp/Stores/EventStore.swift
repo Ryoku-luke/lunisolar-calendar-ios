@@ -119,9 +119,12 @@ public final class EventStore {
     private var pushQueue: [() async -> Void] = []
     private var isPushing = false
 
-    /// P5 性能：save debounce work item，合并 0.5s 内的多次 CRUD 的磁盘写入
-    private var pendingSaveWorkItem: DispatchWorkItem?
-    private let saveDebounceInterval: TimeInterval = 0.5
+    /// P5 性能：save debounce Task，合并 0.5s 内多次 CRUD 的磁盘写入。
+    /// - 使用 Swift Concurrency Task（@MainActor）替换 DispatchWorkItem，
+    ///   与 CountdownStore 模式一致，满足 Swift 6 strict concurrency
+    ///   （events/idToIndex/dirtyEventIDs 都是 MainActor 隔离属性）。
+    private var pendingSaveTask: Task<Void, Never>?
+    private let saveDebounceNs: UInt64 = 500_000_000  // 0.5s
 
     private let saveURL: URL
     /// dirtyEventIDs 持久化路径（与 saveURL 同目录，P4 修复）
@@ -369,16 +372,25 @@ public final class EventStore {
             // 无协调器时保留 dirty 标记，等用户重新启用 iCloud 同步后再推送
             return
         }
-        // 收集脏事件
-        let dirtyEvents = events.filter { dirtyEventIDs.contains($0.id.uuidString) }
-        let deletedIDs = deletedEventIDs
+        // 收集 dirty events / deleted IDs 快照
+        let dirtySnap = dirtyEventIDs
+        let deletedSnap = deletedEventIDs
+        let dirtyEvents: [CalendarEvent] = dirtySnap.compactMap { idStr in
+            guard let uuid = UUID(uuidString: idStr),
+                  let idx = idToIndex[uuid] else { return nil }
+            return events[idx]
+        }.sorted { $0.startDate < $1.startDate }
         do {
-            _ = try await co.push(events: dirtyEvents, deletedIDs: deletedIDs)
-            // 推送成功后清空已推送的 ID
-            dirtyEventIDs.removeAll()
-            deletedEventIDs.removeAll()
+            let result = try await co.push(events: dirtyEvents, deletedIDs: deletedSnap)
+            // P2 修复：只移除推送**真正成功**的事件；失败的保留 dirty/deleted 标记以便下次重推。
+            // 之前无论成功失败一律 removeAll，导致部分失败时失败记录的 dirty 标记永久丢失 →
+            // 多设备数据发散（用户 iPhone 看到改了，iPad 永远收不到）。
+            let failed = result.failedRecordIDs
+            dirtyEventIDs.formIntersection(failed)
+            deletedEventIDs.formIntersection(failed)
+            // 如果 coordinator 为了兼容外部全 clear 路径也调过 clearDirtyFlags，不重复计算。
         } catch {
-            // 推送失败：保留 dirty 标记，下次重试
+            // 整体性失败（网络/不可用）：保留全部 dirty 标记，下次重试
             AppLogger.sync.warning("推送云端失败: \(error)，将在下次同步时重试")
         }
     }
@@ -387,10 +399,19 @@ public final class EventStore {
     /// NOTE：重复声明会与上方 P6 优化版冲突；保留空壳以免外部链接符号变化。此处移除旧实现，
     /// 统一以文件顶部"O(1) 字典路径"版本为准。
 
-    /// 清空脏标记（推送成功后由协调器调用）
+    /// 清空脏标记（推送成功后由协调器调用，仅当全部成功时使用）
     public func clearDirtyFlags() {
         dirtyEventIDs.removeAll()
         deletedEventIDs.removeAll()
+    }
+
+    /// 部分失败后：仅保留 failedIDs 中的脏标记，其余（成功的）移除。
+    /// 返回值 = 剩余的 (dirty 数, deleted 数)，用于调试/UI 提示"还有 N 条待重试"。
+    @discardableResult
+    public func retainDirtyFlags(onlyFailed failedIDs: Set<String>) -> (dirtyLeft: Int, deletedLeft: Int) {
+        dirtyEventIDs.formIntersection(failedIDs)
+        deletedEventIDs.formIntersection(failedIDs)
+        return (dirtyEventIDs.count, deletedEventIDs.count)
     }
 
 
@@ -621,18 +642,20 @@ public final class EventStore {
 
     private func save() {
         // P5 性能：防抖写入。单条 CRUD 连续操作（如批量完成事件）合并为 0.5s 一次磁盘写入。
-        pendingSaveWorkItem?.cancel()
-        let wi = DispatchWorkItem { [weak self] in
+        pendingSaveTask?.cancel()
+        let ns = saveDebounceNs
+        pendingSaveTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: ns) }
+            catch { return }   // 被 cancel：新 save 已接手，静默退出
+            guard !Task.isCancelled else { return }
             self?.saveNow()
         }
-        pendingSaveWorkItem = wi
-        DispatchQueue.main.asyncAfter(deadline: .now() + saveDebounceInterval, execute: wi)
     }
 
     /// 立即写盘（不防抖），用于 merge/clearAll/load/init 等需要立即落盘的事务性场景
     private func saveNow() {
-        pendingSaveWorkItem?.cancel()
-        pendingSaveWorkItem = nil
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
         do {
             let data = try JSONEncoder().encode(events)
             try data.write(to: saveURL, options: .atomic)
@@ -643,10 +666,12 @@ public final class EventStore {
         }
     }
 
-    // MARK: 测试辅助：立即触发一次防抖落盘（Linux XCTest 下 DispatchQueue.main.asyncAfter 不保证执行）
+    // MARK: 测试辅助：立即触发一次防抖落盘（Linux XCTest 下 Task.sleep 需要 flush）
     /// 强制把挂起的防抖保存立即执行；仅用于单元测试，生产代码请勿直接调用。
     @MainActor
     public func _testFlushSave() {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
         saveNow()
     }
 

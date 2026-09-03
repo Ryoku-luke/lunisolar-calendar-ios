@@ -177,8 +177,10 @@ public final class EventSyncCoordinator: @unchecked Sendable {
         }
 
         let end = Date()
+        let failedIDs = Set(perRecordErrors.keys)
         let r = SyncResult(direction: .push, pushed: written, pulled: 0,
                            conflictsResolved: 0, errors: errors,
+                           failedRecordIDs: failedIDs,
                            startedAt: start, finishedAt: end)
         if errors.isEmpty {
             status = .succeeded(r)
@@ -238,15 +240,20 @@ public final class EventSyncCoordinator: @unchecked Sendable {
                         eventStore.delete(l, skipSync: true)
                     }
                 } else if let ev = remoteEvent {
-                    // 写入本地；若已存在 update，否则 add
+                    // P3 修复：写入本地时**保留远端事件的 updatedAt 语义**，不再
+                    //   强制 overwrite 为 Date()。否则设备 A 去年编辑了某事件、
+                    //   设备 B 刚启用同步拉下来一看"上次更新：刚刚"——明显误导用户，
+                    //   更严重的是 merge(keepLatest) 在后续 round-trip 会因为
+                    //   伪造的 updatedAt=now 被误判为"本地更新版本"而拒绝真正新的远端。
+                    // 如果远端 payload 本身的 updatedAt 就是 nil/epoch 再兜底到 now。
+                    var toSave = ev
+                    if toSave.updatedAt.timeIntervalSince1970 <= 0 {
+                        toSave.updatedAt = Date()
+                    }
                     if localExisting != nil {
-                        var updated = ev
-                        updated.updatedAt = Date()
-                        eventStore.update(updated, skipSync: true)
+                        eventStore.update(toSave, skipSync: true)
                     } else {
-                        var inserted = ev
-                        inserted.updatedAt = Date()
-                        eventStore.add(inserted, skipSync: true)
+                        eventStore.add(toSave, skipSync: true)
                     }
                 }
                 versionMap[remoteRec.id] = remoteRec.version
@@ -291,9 +298,10 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             do {
                 let r1 = try await push(events: dirtyEvents, deletedIDs: deletedIDs)
                 pushed += r1.pushed; allErrors.append(contentsOf: r1.errors)
-                if allErrors.isEmpty {
-                    eventStore.clearDirtyFlags()
-                }
+                // P2 修复：部分失败时只保留失败 ID 的 dirty 标记，成功的从集合中移除
+                //   —— 之前 allErrors.isEmpty 才 clearDirtyFlags，导致 2 条成功 1 条失败
+                //     时 2 条成功的也还在 dirty 里被重复推送（版本号膨胀）。
+                eventStore.retainDirtyFlags(onlyFailed: r1.failedRecordIDs)
             } catch {
                 allErrors.append(mapError(error))
             }
