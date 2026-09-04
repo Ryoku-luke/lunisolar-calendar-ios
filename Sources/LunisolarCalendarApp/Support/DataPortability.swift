@@ -131,12 +131,17 @@ public enum DataPortability {
                 lines.append("DESCRIPTION:\(escapeICS(notes))")
             }
 
+            // P3 修复（对称映射）：RFC 5545 PRIORITY 1=最高 5=普通 9=最低。
+            //   旧映射 .normal/.low 都给 9，导入侧 "7,8,9"→.low，
+            //   round-trip 会把 .normal 降级为 .low（数据损失）。
+            //   新映射与 importICS 解析侧严格对称：
+            //     urgent(1)→1   high(2-4)→3   normal(5,6)→5   low(7-9)→7
             let priorityVal: String
             switch event.priority {
             case .urgent: priorityVal = "1"
-            case .high:   priorityVal = "5"
-            case .normal: priorityVal = "9"
-            case .low:    priorityVal = "9"
+            case .high:   priorityVal = "3"
+            case .normal: priorityVal = "5"
+            case .low:    priorityVal = "7"
             }
             lines.append("PRIORITY:\(priorityVal)")
             lines.append("STATUS:\(event.isCompleted ? "COMPLETED" : "CONFIRMED")")
@@ -340,7 +345,12 @@ public enum DataPortability {
     // MARK: - ICS 转义
 
     private static func escapeICS(_ text: String) -> String {
+        // P3 修复：RFC 5545 §3.3.11 TEXT 转义要求 \r\n / \r / \n 全部转成字面 \n。
+        //   旧实现只转 \n，遇到 \r\n 或单独 \r 时 round-trip 会出现多余的 \n 或残余 \r。
+        //   顺序：先归一化行尾再走标准转义链，避免 \\\\ 占位被 \n 处理误吞。
         text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: ";", with: "\\;")
             .replacingOccurrences(of: ",", with: "\\,")

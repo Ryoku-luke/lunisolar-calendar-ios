@@ -144,7 +144,12 @@ public enum HuangliDBProvider {
         guard let r = c.root else {
             return "离散黄历库未加载（将走算法兜底）"
         }
-        return "离散黄历库 v\(r.version)：\(r.range[0]) ~ \(r.range[1])，共 \(r.count) 条"
+        // P3 修复：JSON 被外部篡改/损坏时 r.range.count 可能 < 2，
+        //   旧代码直接 r.range[1] 会触发 Swift Array index out of range precondition
+        //   → 整个 SettingsView 进程崩溃。改用 first/last 安全访问。
+        let start = r.range.first ?? "未知"
+        let end = r.range.count >= 2 ? r.range.last! : start
+        return "离散黄历库 v\(r.version)：\(start) ~ \(end)，共 \(r.count) 条"
     }
 }
 

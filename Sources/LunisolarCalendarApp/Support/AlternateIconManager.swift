@@ -42,6 +42,17 @@ public final class AlternateIconManager: ObservableObject {
     @Published public private(set) var current: Icon = .primary
 
     private init() {
+        syncFromSystem()
+    }
+
+    // MARK: - 系统状态校准
+    /// 从 `UIApplication.shared.alternateIconName` 反向读取当前真实图标，校准 `current`。
+    /// P3 修复：旧实现只在 init 时读一次。若用户在 iOS 设置 → App 切了备用图标、
+    ///   或系统弹窗后用户取消、或外部进程触发 setAlternateIconName，
+    ///   `current` 不会同步，下次 applyTodayIfNeeded 会以为 current==expected 跳过切换，
+    ///   导致图标停留错误状态（最常见：春节窗口外仍停在春节图标）。
+    ///   修复：applyTodayIfNeeded 与 setIcon 入口先 syncFromSystem，再判等。
+    private func syncFromSystem() {
         if let raw = UIApplication.shared.alternateIconName,
            let match = Icon(rawValue: raw) {
             current = match
@@ -53,6 +64,8 @@ public final class AlternateIconManager: ObservableObject {
     // MARK: - 核心切换
     @discardableResult
     public func setIcon(_ icon: Icon) async -> Result<Void, Error> {
+        // 切换前先校准 current，避免外部已改但 self.current 仍为旧值导致 skip
+        syncFromSystem()
         guard current != icon else { return .success(()) }
         do {
             try await UIApplication.shared.setAlternateIconName(icon.rawValue)
