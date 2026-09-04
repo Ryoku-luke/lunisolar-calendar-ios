@@ -108,19 +108,20 @@ extension Color {
                 : UIColor(red: 0.88, green: 0.72, blue: 0.35, alpha: 1.0)
         })
     }
-    /// 主题蓝：浅色模式偏暖蓝；深色模式提亮饱和度
+    /// 主题强调色：现代暖调靛蓝（比纯系统蓝更有辨识度，且与节日红/金不冲突）
+    /// 浅色模式：柔和的蓝紫调，高级感；深色模式：提亮饱和度保持活力
     static var appTint: Color {
         Color(UIColor { tc in
             tc.userInterfaceStyle == .dark
-                ? UIColor(red: 0.20, green: 0.55, blue: 0.97, alpha: 1.0)
-                : UIColor(red: 0.07, green: 0.45, blue: 0.93, alpha: 1.0)
+                ? UIColor(red: 0.34, green: 0.52, blue: 0.98, alpha: 1.0)
+                : UIColor(red: 0.24, green: 0.39, blue: 0.87, alpha: 1.0)
         })
     }
     #else
     // macOS / Linux fallback（固定色值）
     static var festiveRed: Color { Color(red: 0.77, green: 0.10, blue: 0.10) }
     static var festiveGold: Color { Color(red: 0.88, green: 0.72, blue: 0.35) }
-    static var appTint: Color { Color(red: 0.07, green: 0.45, blue: 0.93) }
+    static var appTint: Color { Color(red: 0.24, green: 0.39, blue: 0.87) }
     #endif
 }
 

@@ -23,6 +23,7 @@ struct EventRow: View {
                         Image(systemName: event.type.iconName)
                             .font(compact ? AppTheme.Font.caption2 : AppTheme.Font.caption)
                             .foregroundStyle(event.type.tintColor)
+                            .symbolRenderingMode(.hierarchical)
                         Text(event.displayTimeRange)
                             .font(compact ? AppTheme.Font.caption2 : AppTheme.Font.caption)
                             .foregroundStyle(Color.secondaryLabel).lineLimit(1)
