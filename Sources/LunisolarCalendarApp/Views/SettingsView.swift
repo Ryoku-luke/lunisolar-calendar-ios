@@ -195,6 +195,29 @@ struct SettingsView: View {
                     .pressableFeedback()
                 }
 
+                if notifStatus == .notDetermined {
+                    // P3 UX：首次启动用户没申请过通知权限时，denied 分支（前往系统设置）
+                    // 不生效，下方"重排所有提醒"也因为 != granted 灰掉。用户卡在『啥也点不了』。
+                    // 新增显式按钮：直接调 NM.requestAuthorization 弹出系统权限弹窗。
+                    Button {
+                        Task { @MainActor in
+                            let ok = await NotificationManager.shared.requestAuthorization()
+                            notifStatus = await NotificationManager.shared.authorizationStatusAsync()
+                            toast = ToastMessage(
+                                kind: ok ? .success : .warning,
+                                text: ok ? "通知权限已开启，可重新调度提醒"
+                                     : "未开启通知权限，提醒将不会送达"
+                            )
+                        }
+                    } label: {
+                        Label("申请通知权限", systemImage: "bell.badge")
+                            .font(AppTheme.Font.subheadline.weight(.semibold))
+                            .foregroundStyle(accent)
+                    }
+                    .buttonStyle(.plain)
+                    .pressableFeedback()
+                }
+
                 Button {
                     Task { await NotificationManager.shared.rescheduleAllReminders(in: store) }
                 } label: {
@@ -212,6 +235,9 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.plain)
                 .pressableFeedback()
+                // 允许在 .notDetermined 时按下（按钮文案本来就是"重新调度"，没权限时
+                // 点下去啥也不会做，UX 不好；因此保留 granted-only 禁用，让用户先点上方
+                // 新增的"申请通知权限"完成授权）。
                 .disabled(notifStatus != .granted)
                 .opacity(notifStatus == .granted ? 1 : 0.45)
             }

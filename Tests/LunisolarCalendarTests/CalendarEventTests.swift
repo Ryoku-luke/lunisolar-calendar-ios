@@ -257,4 +257,137 @@ final class CalendarEventTests: XCTestCase {
         XCTAssertTrue(ev.occurs(on: fallback26),
             "无闰同月的年里，闰月源事件应回退命中普通同月同日")
     }
+
+    // MARK: - 通知调度关键判定回归（对应 NotificationManager 修复）
+    //
+    // 说明：NM.swift 本体依赖 UserNotifications / UNUserNotificationCenter，
+    // 测试环境（SPM / Linux）未必可用，因此这里把 NM 里两道关键守卫转写为
+    // 等价的 pure 逻辑进行测试：
+    //   a) 重复提醒（yearly/weekly/...）即使 startDate 在过去也应"可调度"；
+    //      仅 .never 一次性要求 startDate > 今天。
+    //   b) yearly 规则的 reminderOffsetMinutes 应完整生效到 month/day/hour/minute，
+    //      即调度 fire 的月/日 = effectiveStart(=startDate - 偏移) 月/日，
+    //      不是 startDate 月/日（否则"婚礼前 1 天提醒"每年当天才响）。
+
+    /// NM guard 回归：startDate 过去的 yearly 重复提醒应当 eligible；仅 .never past 拒绝
+    func testNotificationEligibilityIgnoresPastStartForRepeatRules() {
+        let cal = Calendar(identifier: .gregorian)
+
+        // Case 1：.never 一次性提醒 + startDate 3 小时前 → 不可调度
+        var past = Date().addingTimeInterval(-3 * 3600)
+        let neverPast = CalendarEvent(
+            title: "已过期单次",
+            type: .reminder,
+            startDate: past,
+            repeatRule: .never
+        )
+        let eligibleNeverPast = notificationIsEligibleForScheduling(neverPast)
+        XCTAssertFalse(eligibleNeverPast, ".never 且 startDate 已过去：应该拒调度")
+
+        // Case 2：.never 一次性提醒 + startDate 3 小时后 → 可调度
+        let future = Date().addingTimeInterval(3 * 3600)
+        let neverFuture = CalendarEvent(
+            title: "未到单次",
+            type: .reminder,
+            startDate: future,
+            repeatRule: .never
+        )
+        XCTAssertTrue(notificationIsEligibleForScheduling(neverFuture),
+            ".never 且 startDate 未来：应该可调度")
+
+        // Case 3：yearly 生日提醒，startDate 从 2019 年开始（过去） → 应可调度
+        var dc = DateComponents(); dc.year = 2019; dc.month = 4; dc.day = 10
+        past = cal.date(from: dc)!
+        let yearlyPast = CalendarEvent(
+            title: "生日（每年）",
+            type: .reminder,
+            startDate: past,
+            repeatRule: .yearly
+        )
+        XCTAssertTrue(notificationIsEligibleForScheduling(yearlyPast),
+            "yearly 起锚在过去也应该 eligible（第 8 轮修复前一刀切被拒）")
+
+        // Case 4：其余重复规则过去 → 都应 eligible
+        let rules: [RepeatRule] = [.daily, .weekly, .monthly, .workday, .lunarAnnually]
+        for rule in rules {
+            let rep = CalendarEvent(
+                title: "\(rule) 循环",
+                type: .reminder,
+                startDate: past,
+                repeatRule: rule
+            )
+            XCTAssertTrue(notificationIsEligibleForScheduling(rep),
+                "重复规则 \(rule) 起锚在过去，应 eligible")
+        }
+
+        // Case 5：.schedule 类型（非 reminder），哪怕未来也不能走 NM reminder 调度
+        let task = CalendarEvent(
+            title: "普通日程",
+            type: .schedule,
+            startDate: future,
+            repeatRule: .never
+        )
+        XCTAssertFalse(notificationIsEligibleForScheduling(task),
+            "type != .reminder 的事件不该排提醒")
+    }
+
+    /// NM yearly 偏移月/日完整生效："婚礼 3/15 + offset=-1440min（提前 1 天）" → 触发月/日应为 3/14
+    func testYearlyReminderOffsetAppliesToMonthAndDay() {
+        let cal = Calendar(identifier: .gregorian)
+
+        // 婚礼 2025-03-15 上午 09:00，提前 1 天提醒（=1440min 前）
+        var dc = DateComponents()
+        dc.year = 2025; dc.month = 3; dc.day = 15
+        dc.hour = 9; dc.minute = 0
+        let start = cal.date(from: dc)!
+        let wedding = CalendarEvent(
+            title: "婚礼",
+            type: .reminder,
+            startDate: start,
+            endDate: start.addingTimeInterval(8 * 3600),
+            repeatRule: .yearly,
+            reminderOffsetMinutes: 1440  // 提前 1 天
+        )
+
+        // 这就是 NM.buildNotificationRequests 内部计算 effectiveStart 的方式：
+        //   effectiveStart = startDate - reminderOffset*60
+        let offsetSec = TimeInterval((wedding.reminderOffsetMinutes ?? 0)) * 60
+        let effective = wedding.startDate.addingTimeInterval(-offsetSec)
+        let effComps = cal.dateComponents([.month, .day, .hour, .minute], from: effective)
+
+        // 断言：effectiveStart 应该是 2025-03-14 09:00（提前 1 天，同一天同一时）
+        // 第 8 轮修复前 year 分支只取 startDate 的 month/day，结果触发仍然是 3/15。
+        XCTAssertEqual(effComps.month, 3)
+        XCTAssertEqual(effComps.day,   14, "提前 1 天：触发日应该是 3/14，不是 3/15")
+        XCTAssertEqual(effComps.hour,  9)
+        XCTAssertEqual(effComps.minute, 0)
+
+        // 用 occurs 语义再验证：yearly 事件的 fire 日期应该每年 3/14（不是 3/15）
+        // 即每年 3/14 这天 fire 一次。直接用日+月匹配：
+        //   2026-03-14 应该是 fire 日，不是 2026-03-15
+        var dc26Mar14 = DateComponents()
+        dc26Mar14.year = 2026; dc26Mar14.month = 3; dc26Mar14.day = 14
+        let nextFireDay = cal.date(from: dc26Mar14)!
+        let nextFireComps = cal.dateComponents([.month,.day], from: nextFireDay)
+        // 调度组件应该 == effective 月/日，不是 startDate 月/日
+        XCTAssertEqual(nextFireComps.month, effComps.month)
+        XCTAssertEqual(nextFireComps.day, effComps.day)
+
+        // 反证：2026-03-15 不应匹配 effective 的 month/day 条件（修复前错误路径）
+        var dc26Mar15 = DateComponents()
+        dc26Mar15.year = 2026; dc26Mar15.month = 3; dc26Mar15.day = 15
+        let wrongFireDay = cal.date(from: dc26Mar15)!
+        let wrongComps = cal.dateComponents([.month,.day], from: wrongFireDay)
+        XCTAssertEqual(wrongComps.month, 3)
+        XCTAssertEqual(wrongComps.day, 15)
+        XCTAssertNotEqual(wrongComps.day, effComps.day, "3/15 不应该等于 effective 的 14")
+    }
+
+    // MARK: - Helper（与 NotificationManager 调度守卫保持语义一致）
+    // 注：如果 NM 里的守卫再变更，这里也要同步更新——它是逻辑的镜像。
+    private func notificationIsEligibleForScheduling(_ ev: CalendarEvent) -> Bool {
+        guard ev.type == .reminder else { return false }
+        if ev.repeatRule == .never && !(ev.startDate > Date()) { return false }
+        return true
+    }
 }

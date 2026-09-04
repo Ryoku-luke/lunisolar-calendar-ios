@@ -196,4 +196,15 @@ public final class CountdownStore {
         pendingSaveTask = nil
         saveNow()
     }
+
+    /// 用户点击『保存』并立即 dismiss 时，手动把 pending 的防抖落盘立刻执行，
+    /// 避免 0.5s 内 App 进后台/用户双击 Home 杀进程导致数据丢失（P2：iOS 后台
+    /// 不会无限等待 Task.sleep，保存窗口被系统调度挂起 0.5s 内的 add/update/delete
+    /// 有概率来不及落盘就被终止）。
+    @MainActor
+    public func flushPendingSave() {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
+        saveNow()
+    }
 }
