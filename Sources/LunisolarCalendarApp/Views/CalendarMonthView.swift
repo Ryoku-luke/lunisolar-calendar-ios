@@ -134,6 +134,7 @@ struct CalendarMonthView: View {
                     } label: {
                         Image(systemName: "slider.horizontal.3")
                             .font(.title3).foregroundStyle(Color.secondaryLabel)
+                            .symbolRenderingMode(.hierarchical)
                             .touchTarget(min: AppTheme.Touch.minTarget)
                     }
                     .pressableFeedback()

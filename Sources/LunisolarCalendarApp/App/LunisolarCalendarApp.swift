@@ -103,12 +103,18 @@ struct AdaptiveRootView: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
     var body: some View {
-        if hSizeClass == .regular {
-            // iPad：双栏布局
-            iPadRootView()
-        } else {
-            // iPhone：单栏布局
-            CalendarMonthView()
+        Group {
+            if hSizeClass == .regular {
+                // iPad：双栏布局
+                iPadRootView()
+            } else {
+                // iPhone：单栏布局
+                CalendarMonthView()
+            }
+        }
+        .onAppear {
+            // 启动时根据日期自动切换主/春节图标（仅在窗口内切换，否则回主图标）
+            AlternateIconManager.shared.applyTodayIfNeeded()
         }
     }
 }
