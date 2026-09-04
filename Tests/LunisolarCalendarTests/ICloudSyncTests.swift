@@ -147,6 +147,11 @@ final class ICloudSyncTests: XCTestCase {
     }
 
     // MARK: 4. 增量同步：sinceMs 只拉取新变更
+    //
+    // 注（P2 修复后语义变化）：push 不再推进 lastSyncMs（否则会因本地 updatedAt
+    // 时间戳比云端其它设备记录更新而"跳过"拉取那些记录）。水位线统一由
+    // pullAndMerge 基于云端 records 的 updatedAtMs max 推进。所以本测试在
+    // push 第一批后必须 pull 一次才能拿到稳定的 snapshot 水位线。
 
     @MainActor
     func testIncrementalPull() async throws {
@@ -154,25 +159,51 @@ final class ICloudSyncTests: XCTestCase {
         let batchA = sampleEvents(count: 2, prefix: "第一批-增量")
         let r1 = try await coordinator.push(events: batchA)
         XCTAssertEqual(r1.pushed, 2)
-        let snapshot1LastMs = coordinator.lastSyncMs
 
-        // 再推送第二批（updatedAtMs 必须更大）
+        // 必须 pull 一次，让 lastSyncMs 推进到 batchA 的云端记录 max updatedAtMs
+        // （push 不推进水位线，是 P2 修复的核心）
+        let pullA = try await coordinator.pullAndMerge()
+        XCTAssertEqual(pullA.pulled, 0, "本地已有 batchA 且版本相同，LWW 不应重复合并")
+        let snapshot1LastMs = coordinator.lastSyncMs
+        XCTAssertGreaterThan(snapshot1LastMs, 0, "pull 后水位线必须推进")
+
+        // 模拟另一台设备注入第二批（updatedAtMs 更大，且是新 id）
         var batchB = sampleEvents(count: 3, prefix: "第二批-增量")
         for i in batchB.indices {
-            batchB[i].updatedAt = Date().addingTimeInterval(60)  // +1 分钟
+            let rec = try SyncRecord.eventRecord(
+                for: batchB[i], version: 1, originDevice: "OtherDevice"
+            )
+            // 强制 updatedAtMs 晚于 snapshot（模拟"在 snapshot 之后才写入云端"）
+            let newerMs = snapshot1LastMs + 60_000
+            let forced = SyncRecord(
+                id: rec.id, kind: .event,
+                version: 1, originDevice: "OtherDevice",
+                updatedAtMs: newerMs, isDeleted: false,
+                payloadJSON: rec.payloadJSON
+            )
+            await mockProvider.injectServerRecord(forced)
         }
-        let r2 = try await coordinator.push(events: batchB)
-        XCTAssertEqual(r2.pushed, 3)
 
-        // 用 snapshot1LastMs 做增量 pull，返回的只应该是第二批 3 条
-        let recs = try await mockProvider.pull(sinceMs: snapshot1LastMs)
-        // 去重：按 id 只算不重复
-        let ids = Set(recs.map { $0.id })
-        XCTAssertEqual(ids.count, 3, "增量同步应该只返回新增的 3 条")
-        XCTAssertTrue(
-            recs.allSatisfy { $0.updatedAtMs > snapshot1LastMs },
-            "增量记录全部更新时间晚于 snapshot1"
-        )
+        // 再 pull，返回的应该只包含第二批 3 条（batchA 已被水位线过滤）
+        let pullB = try await coordinator.pullAndMerge()
+        XCTAssertEqual(pullB.pulled, 3, "增量同步应该只返回新增的 3 条")
+    }
+
+    // MARK: 4b. P2 回归：push 成功后 lastSyncMs 不应被本地时间戳推进
+    //
+    // 背景：旧逻辑 push 成功后把 lastSyncMs 推进到本地记录 updatedAtMs 的 max。
+    // 这会导致设备 A 用本地较新的时间戳"跳过"拉取设备 B 在更早时间推送、
+    // 但本地时钟后到的更新 → 多设备数据发散。修复：push 不推进水位线。
+
+    @MainActor
+    func testPushDoesNotAdvanceLastSyncMs() async throws {
+        XCTAssertEqual(coordinator.lastSyncMs, 0, "初始水位线为 0")
+        let events = sampleEvents(count: 2, prefix: "P2-水位线")
+        let r = try await coordinator.push(events: events)
+        XCTAssertEqual(r.pushed, 2)
+        // 关键断言：push 后水位线仍为 0（只有 pull 才推进）
+        XCTAssertEqual(coordinator.lastSyncMs, 0,
+                       "P2 修复：push 成功后 lastSyncMs 不应被本地 updatedAt 推进")
     }
 
     // MARK: 5. 先离线本地改一堆 → 再上线 syncBidirectional → 云端和本地合并正确

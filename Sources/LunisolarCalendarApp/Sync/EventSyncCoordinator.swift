@@ -165,16 +165,19 @@ public final class EventSyncCoordinator: @unchecked Sendable {
         var errors: [SyncError] = []
         for (_, e) in perRecordErrors { errors.append(e) }
 
-        // push 成功后推进 lastSyncMs（避免下次 pull 把自己刚推上去的记录再拉回来）
-        // 只看"成功写入"的那些记录：perRecordErrors 里没有 error 的 id
-        let successUpdatedMs = records.compactMap { r -> Int64? in
-            if perRecordErrors[r.id] != nil { return nil }
-            return r.updatedAtMs
-        }
-        if let maxMs = successUpdatedMs.max(), maxMs > lastSyncMs {
-            lastSyncMs = maxMs
-            // lastSyncMs 的 setter 已持久化到 lo/hi 两个 key，无需再写
-        }
+        // 本轮修复（P2）：原本 push 成功后会把 lastSyncMs 推进到本地记录 updatedAtMs 的 max，
+        //   意图是"避免下次 pull 把自己刚推上去的记录再拉回来"。
+        //   但本地事件的 updatedAt 是**本地写入时间**，不是云端服务器时间。
+        //   场景：设备 A 与设备 B 上一轮同步在 T0。
+        //   1) 设备 B 在 T_B (T0<T_B<T1) 修改事件 E_B 并推到云；
+        //   2) 设备 A 在 T1 (T1>T_B) 修改事件 E_A 并推到云，旧逻辑把 A 的 lastSyncMs 推到 T1；
+        //   3) 设备 A 下次 pull(sinceMs: T1) → 服务端按 serverTime > T1 过滤 →
+        //      E_B 的 updatedAtMs=T_B < T1 → 被跳过 → **A 永远拉不到 B 的这次更新**。
+        //   修复：push 完全不推进 lastSyncMs，统一由 pullAndMerge 基于远端 records 的
+        //         updatedAtMs max 推进（lines 265 附近）。
+        //   代价：下次 pull 会把自己刚 push 的记录也拉回来，但 pullAndMerge 的 LWW
+        //         `remoteRec.version > localVersion` 检查会因 versionMap[id] 已 advance 而丢弃，
+        //         不会重复合并/重复通知，对用户无感知。
 
         let end = Date()
         let failedIDs = Set(perRecordErrors.keys)

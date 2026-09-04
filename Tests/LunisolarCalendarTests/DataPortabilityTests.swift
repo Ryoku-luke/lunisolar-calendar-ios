@@ -114,4 +114,71 @@ final class DataPortabilityTests: XCTestCase {
         XCTAssertEqual(a?.priority, .urgent)
         XCTAssertEqual(a?.title, "A-v2")
     }
+
+    // MARK: P3 回归：ICS PRIORITY 对称映射
+    //
+    // 旧实现 exportICS 把 .normal/.low 都写成 9，而 importICS 把 7-9 都解析成 .low，
+    // round-trip 后 .normal 会被降级为 .low（数据损失）。新映射必须严格对称：
+    //   urgent→1  high→3  normal→5  low→7
+
+    func testICSPriorityRoundTripSymmetric() {
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 1; dc.hour = 10
+        let start = cal.date(from: dc)!
+
+        for prio in Priority.allCases {
+            var ev = CalendarEvent(
+                id: UUID(),
+                title: "优先级测试-\(prio.uiLabel)",
+                type: .schedule,
+                startDate: start,
+                endDate: start.addingTimeInterval(3600),
+                priority: prio
+            )
+            let ics = DataPortability.exportICS(from: [ev])
+            let parsed = DataPortability.importICS(ics)
+            XCTAssertEqual(parsed.count, 1)
+            XCTAssertEqual(parsed[0].priority, prio,
+                           "ICS round-trip 优先级不对称：\(prio) → \(parsed[0].priority)")
+        }
+    }
+
+    // MARK: P3 回归：ICS TEXT 转义对 \r\n / \r 的处理
+    //
+    // 旧 escapeICS 只转 \n，标题/备注里带 \r\n 或单独 \r 时：
+    //   - \r\n 会被转成 \r\n（\r 原样），折叠行解析后可能出现残余 \r；
+    //   - round-trip 后字符串出现多余换行或不可见 \r。
+    // RFC 5545 §3.3.11 要求所有行尾归一为字面 \n。
+
+    func testICSTextEscapeNormalizesCRLFAndCR() {
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 1; dc.hour = 10
+        let start = cal.date(from: dc)!
+
+        // 标题含 \r\n，备注含单独 \r
+        var ev = CalendarEvent(
+            id: UUID(),
+            title: "第一行\r\n第二行",
+            type: .note,
+            startDate: start,
+            endDate: start.addingTimeInterval(3600),
+            notes: "备注A\r备注B\r\n备注C"
+        )
+        let ics = DataPortability.exportICS(from: [ev])
+        // 注意：ICS 行分隔符本身是 \r\n（RFC 5545），所以整个 ics 字符串含 \r 是正常的。
+        // 真正的不变量是：SUMMARY/DESCRIPTION 的值中不能含未转义的 \r。
+        // 这里通过 round-trip 后解析结果不含 \r 来间接保证 escapeICS 已归一化行尾。
+
+        let parsed = DataPortability.importICS(ics)
+        XCTAssertEqual(parsed.count, 1)
+        // round-trip 后标题与备注中不应残留 \r
+        XCTAssertFalse(parsed[0].title.contains("\r"),
+                       "标题 round-trip 后不应含残留 \\r，实际：\(parsed[0].title)")
+        XCTAssertFalse((parsed[0].notes ?? "").contains("\r"),
+                       "备注 round-trip 后不应含残留 \\r")
+        // \r\n 应还原为单个 \n
+        XCTAssertEqual(parsed[0].title, "第一行\n第二行")
+    }
 }
