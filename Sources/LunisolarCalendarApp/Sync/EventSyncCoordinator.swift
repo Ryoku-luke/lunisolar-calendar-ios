@@ -165,20 +165,25 @@ public final class EventSyncCoordinator: @unchecked Sendable {
         var errors: [SyncError] = []
         for (_, e) in perRecordErrors { errors.append(e) }
 
-        // push 成功后推进 lastSyncMs（避免下次 pull 把自己刚推上去的记录再拉回来）
-        // 只看"成功写入"的那些记录：perRecordErrors 里没有 error 的 id
-        let successUpdatedMs = records.compactMap { r -> Int64? in
-            if perRecordErrors[r.id] != nil { return nil }
-            return r.updatedAtMs
-        }
-        if let maxMs = successUpdatedMs.max(), maxMs > lastSyncMs {
-            lastSyncMs = maxMs
-            // lastSyncMs 的 setter 已持久化到 lo/hi 两个 key，无需再写
-        }
+        // 本轮修复（P2）：原本 push 成功后会把 lastSyncMs 推进到本地记录 updatedAtMs 的 max，
+        //   意图是"避免下次 pull 把自己刚推上去的记录再拉回来"。
+        //   但本地事件的 updatedAt 是**本地写入时间**，不是云端服务器时间。
+        //   场景：设备 A 与设备 B 上一轮同步在 T0。
+        //   1) 设备 B 在 T_B (T0<T_B<T1) 修改事件 E_B 并推到云；
+        //   2) 设备 A 在 T1 (T1>T_B) 修改事件 E_A 并推到云，旧逻辑把 A 的 lastSyncMs 推到 T1；
+        //   3) 设备 A 下次 pull(sinceMs: T1) → 服务端按 serverTime > T1 过滤 →
+        //      E_B 的 updatedAtMs=T_B < T1 → 被跳过 → **A 永远拉不到 B 的这次更新**。
+        //   修复：push 完全不推进 lastSyncMs，统一由 pullAndMerge 基于远端 records 的
+        //         updatedAtMs max 推进（lines 265 附近）。
+        //   代价：下次 pull 会把自己刚 push 的记录也拉回来，但 pullAndMerge 的 LWW
+        //         `remoteRec.version > localVersion` 检查会因 versionMap[id] 已 advance 而丢弃，
+        //         不会重复合并/重复通知，对用户无感知。
 
         let end = Date()
+        let failedIDs = Set(perRecordErrors.keys)
         let r = SyncResult(direction: .push, pushed: written, pulled: 0,
                            conflictsResolved: 0, errors: errors,
+                           failedRecordIDs: failedIDs,
                            startedAt: start, finishedAt: end)
         if errors.isEmpty {
             status = .succeeded(r)
@@ -238,15 +243,20 @@ public final class EventSyncCoordinator: @unchecked Sendable {
                         eventStore.delete(l, skipSync: true)
                     }
                 } else if let ev = remoteEvent {
-                    // 写入本地；若已存在 update，否则 add
+                    // P3 修复：写入本地时**保留远端事件的 updatedAt 语义**，不再
+                    //   强制 overwrite 为 Date()。否则设备 A 去年编辑了某事件、
+                    //   设备 B 刚启用同步拉下来一看"上次更新：刚刚"——明显误导用户，
+                    //   更严重的是 merge(keepLatest) 在后续 round-trip 会因为
+                    //   伪造的 updatedAt=now 被误判为"本地更新版本"而拒绝真正新的远端。
+                    // 如果远端 payload 本身的 updatedAt 就是 nil/epoch 再兜底到 now。
+                    var toSave = ev
+                    if toSave.updatedAt.timeIntervalSince1970 <= 0 {
+                        toSave.updatedAt = Date()
+                    }
                     if localExisting != nil {
-                        var updated = ev
-                        updated.updatedAt = Date()
-                        eventStore.update(updated, skipSync: true)
+                        eventStore.update(toSave, skipSync: true)
                     } else {
-                        var inserted = ev
-                        inserted.updatedAt = Date()
-                        eventStore.add(inserted, skipSync: true)
+                        eventStore.add(toSave, skipSync: true)
                     }
                 }
                 versionMap[remoteRec.id] = remoteRec.version
@@ -291,9 +301,10 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             do {
                 let r1 = try await push(events: dirtyEvents, deletedIDs: deletedIDs)
                 pushed += r1.pushed; allErrors.append(contentsOf: r1.errors)
-                if allErrors.isEmpty {
-                    eventStore.clearDirtyFlags()
-                }
+                // P2 修复：部分失败时只保留失败 ID 的 dirty 标记，成功的从集合中移除
+                //   —— 之前 allErrors.isEmpty 才 clearDirtyFlags，导致 2 条成功 1 条失败
+                //     时 2 条成功的也还在 dirty 里被重复推送（版本号膨胀）。
+                eventStore.retainDirtyFlags(onlyFailed: r1.failedRecordIDs)
             } catch {
                 allErrors.append(mapError(error))
             }

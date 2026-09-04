@@ -27,6 +27,7 @@ public enum AppTheme {
         public static let md: CGFloat = 12
         public static let lg: CGFloat = 16
         public static let xl: CGFloat = 22
+        public static let xxl: CGFloat = 28
         public static let pill: CGFloat = 999
     }
     public enum Shadow {
@@ -36,6 +37,9 @@ public enum AppTheme {
         public static let raised = (color: Color.black.opacity(0.10),
                                     radius: CGFloat(20),
                                     x: CGFloat(0), y: CGFloat(8))
+        public static let floating = (color: Color.black.opacity(0.16),
+                                      radius: CGFloat(24),
+                                      x: CGFloat(0), y: CGFloat(12))
     }
     public enum Stroke {
         public static let hair: CGFloat = 0.5
@@ -55,9 +59,39 @@ public enum AppTheme {
         public static let numeralM = SwiftUI.Font.system(size: 16, weight: .semibold, design: .rounded)
         public static let numeralXL = SwiftUI.Font.system(size: 56, weight: .bold, design: .rounded)
     }
+    public enum Motion {
+        /// 卡片按压弹簧（轻触 → 下沉 → 弹回）
+        public static let pressInOut = SwiftUI.Animation.spring(response: 0.22,
+                                                                 dampingFraction: 0.72,
+                                                                 blendDuration: 0.15)
+        /// 月切换/面板展开
+        public static let screen = SwiftUI.Animation.spring(response: 0.34,
+                                                            dampingFraction: 0.86,
+                                                            blendDuration: 0.1)
+        /// Toast/Snackbar 滑入
+        public static let toast = SwiftUI.Animation.spring(response: 0.3,
+                                                          dampingFraction: 0.82,
+                                                          blendDuration: 0.08)
+    }
 }
 
 extension Color {
+    /// Foundation 语义色的 public 别名 —— 用来规避某些 Xcode 版本把
+    /// Color.separator / Color.themeQuaternaryFill 视为 internal 的问题
+    public static var themeSeparator: Color {
+        #if canImport(UIKit)
+        return Color(UIColor.separator)
+        #else
+        return Color.black.opacity(0.12)
+        #endif
+    }
+    public static var themeQuaternaryFill: Color {
+        #if canImport(UIKit)
+        return Color(UIColor.quaternarySystemFill)
+        #else
+        return Color.black.opacity(0.06)
+        #endif
+    }
     public static var appBackground: some ShapeStyle {
         LinearGradient(
             colors: [Color.systemGroupedBackground, Color.systemGroupedBackground],
@@ -67,7 +101,7 @@ extension Color {
     public static var appTintSoft: Color { Color.appTint.opacity(0.12) }
     public static var festiveRedSoft: Color { Color.festiveRed.opacity(0.12) }
     public static var todayCapsule: Color { Color.systemRed.opacity(0.10) }
-    public static var hairSeparator: Color { Color.separator.opacity(0.35) }
+    public static var hairSeparator: Color { Color.themeSeparator.opacity(0.35) }
 }
 
 extension View {
@@ -78,7 +112,7 @@ extension View {
     public func modernCard(
         radius: CGFloat = AppTheme.Radius.xl,
         material: Material = .thinMaterial,
-        border: Color = Color.separator.opacity(0.28),
+        border: Color = Color.themeSeparator.opacity(0.28),
         shadow: (color: Color, radius: CGFloat, x: CGFloat, y: CGFloat) = AppTheme.Shadow.card
     ) -> some View {
         self.background(
@@ -90,8 +124,45 @@ extension View {
         )
         .shadow(color: shadow.color, radius: shadow.radius, x: shadow.x, y: shadow.y)
     }
+    /// iOS 26 液态玻璃卡片：双层材料 + 高光边 + 动态阴影
+    public func liquidCard(
+        radius: CGFloat = AppTheme.Radius.xxl,
+        material: Material = .regularMaterial,
+        tint: Color = .clear,
+        shadow: (color: Color, radius: CGFloat, x: CGFloat, y: CGFloat) = AppTheme.Shadow.raised,
+        highlight: CGFloat = 0.12
+    ) -> some View {
+        self
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous).fill(material)
+                    if tint != .clear {
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(tint.opacity(0.12))
+                    }
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(Color.white.opacity(highlight), lineWidth: AppTheme.Stroke.hair)
+                    .blendMode(.overlay)
+            )
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(LinearGradient(colors: [Color.white.opacity(0.08), Color.clear],
+                                         startPoint: .top, endPoint: .center))
+                    .frame(height: radius * 0.7)
+                    .allowsHitTesting(false)
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(Color.themeSeparator.opacity(0.20), lineWidth: AppTheme.Stroke.hair)
+            )
+            .shadow(color: shadow.color, radius: shadow.radius, x: shadow.x, y: shadow.y)
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+    }
     public func capsuleTag(
-        fill: Color = Color.quaternarySystemFill,
+        fill: Color = Color.themeQuaternaryFill,
         border: Color = .clear,
         hPad: CGFloat = 10,
         vPad: CGFloat = 4
@@ -114,6 +185,43 @@ extension View {
     public func touchTarget(min: CGFloat = AppTheme.Touch.minTarget) -> some View {
         self.frame(minWidth: min, minHeight: min, alignment: .center)
             .contentShape(Rectangle())
+    }
+    /// 按压反馈：按下时缩放到 0.97 + 轻微下沉 + 提亮
+    public func pressableFeedback() -> some View {
+        modifier(_PressableFeedbackModifier())
+    }
+    /// 节日染色壁纸：月视图 / 日详情 / 设置页 / 编辑页统一风格
+    public func festiveWallpaper(accent: Color) -> some View {
+        self.background {
+            ZStack {
+                Color.systemGroupedBackground
+                LinearGradient(
+                    colors: [accent.opacity(0.09), accent.opacity(0.02), Color.clear],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                Circle().fill(accent.opacity(0.06))
+                    .frame(width: 380, height: 380).blur(radius: 80)
+                    .offset(x: -140, y: -160)
+                Circle().fill(accent.opacity(0.05))
+                    .frame(width: 320, height: 320).blur(radius: 72)
+                    .offset(x: 120, y: 340)
+            }.ignoresSafeArea()
+        }
+    }
+}
+
+private struct _PressableFeedbackModifier: ViewModifier {
+    @State private var pressed = false
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(pressed ? 0.975 : 1.0)
+            .brightness(pressed ? -0.02 : 0)
+            .animation(AppTheme.Motion.pressInOut, value: pressed)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in if !pressed { pressed = true } }
+                    .onEnded { _ in pressed = false }
+            )
     }
 }
 

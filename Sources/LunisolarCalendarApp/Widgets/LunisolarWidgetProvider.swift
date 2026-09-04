@@ -2,6 +2,7 @@
 import WidgetKit
 import SwiftUI
 import Foundation
+import LunarCore
 
 // MARK: - 通用小组件 Entry
 

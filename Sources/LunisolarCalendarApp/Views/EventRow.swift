@@ -23,6 +23,7 @@ struct EventRow: View {
                         Image(systemName: event.type.iconName)
                             .font(compact ? AppTheme.Font.caption2 : AppTheme.Font.caption)
                             .foregroundStyle(event.type.tintColor)
+                            .symbolRenderingMode(.hierarchical)
                         Text(event.displayTimeRange)
                             .font(compact ? AppTheme.Font.caption2 : AppTheme.Font.caption)
                             .foregroundStyle(Color.secondaryLabel).lineLimit(1)
@@ -42,7 +43,7 @@ struct EventRow: View {
                           tint: event.priority.tintColor,
                           font: AppTheme.Font.caption2)
                 if !compact, event.type == .reminder || event.type == .schedule {
-                    Button { store.toggleCompleted(for: event.id) } label: {
+                    Button { store.toggleCompleted(event) } label: {
                         Image(systemName: event.isCompleted ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: AppTheme.Touch.checkboxSize, weight: .semibold))
                             .foregroundStyle(
@@ -53,6 +54,7 @@ struct EventRow: View {
                                    alignment: .trailing)
                             .contentShape(Rectangle())
                     }.buttonStyle(.plain)
+                    .accessibilityLabel(event.isCompleted ? "标记为未完成" : "标记为完成")
                 }
             }
         }
@@ -63,6 +65,9 @@ struct EventRow: View {
         .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
             .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair))
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(event.title) \(event.displayTimeRange)\(event.isCompleted ? " 已完成" : "")")
+        .accessibilityHint(event.type == .reminder || event.type == .schedule ? "轻点完成按钮切换完成状态" : "")
     }
 }
 #endif

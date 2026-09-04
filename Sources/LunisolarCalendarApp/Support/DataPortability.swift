@@ -131,12 +131,17 @@ public enum DataPortability {
                 lines.append("DESCRIPTION:\(escapeICS(notes))")
             }
 
+            // P3 修复（对称映射）：RFC 5545 PRIORITY 1=最高 5=普通 9=最低。
+            //   旧映射 .normal/.low 都给 9，导入侧 "7,8,9"→.low，
+            //   round-trip 会把 .normal 降级为 .low（数据损失）。
+            //   新映射与 importICS 解析侧严格对称：
+            //     urgent(1)→1   high(2-4)→3   normal(5,6)→5   low(7-9)→7
             let priorityVal: String
             switch event.priority {
             case .urgent: priorityVal = "1"
-            case .high:   priorityVal = "5"
-            case .normal: priorityVal = "9"
-            case .low:    priorityVal = "9"
+            case .high:   priorityVal = "3"
+            case .normal: priorityVal = "5"
+            case .low:    priorityVal = "7"
             }
             lines.append("PRIORITY:\(priorityVal)")
             lines.append("STATUS:\(event.isCompleted ? "COMPLETED" : "CONFIRMED")")
@@ -171,14 +176,14 @@ public enum DataPortability {
         for event in events {
             let row: [String] = [
                 escapeCSV(event.title),
-                event.type.displayTitle,
+                event.type.uiLabel,
                 dfmt.string(from: event.startDate),
                 dfmt.string(from: event.endDate),
                 event.isAllDay ? "是" : "否",
                 escapeCSV(event.location ?? ""),
                 escapeCSV(event.notes ?? ""),
-                event.repeatRule.displayTitle,
-                event.priority.displayTitle,
+                event.repeatRule.uiLabel,
+                event.priority.uiLabel,
                 event.isCompleted ? "是" : "否",
                 dfmt.string(from: event.createdAt)
             ]
@@ -231,6 +236,8 @@ public enum DataPortability {
                 var notes: String? = nil
                 var rawUID: String? = nil
                 var parsedRRULE: RepeatRule? = nil
+                var parsedPriority: Priority = .normal
+                var parsedIsCompleted = false
                 var hasStart = false
                 var hasEnd = false
 
@@ -263,6 +270,21 @@ public enum DataPortability {
                         notes = unescapeICS(value)
                     } else if key.hasPrefix("RRULE") {
                         parsedRRULE = parseRRULE(value)
+                    } else if key.hasPrefix("PRIORITY") {
+                        // RFC 5545: 1 = 最高优先级，5/undefined = 普通，9 = 最低
+                        if let p = Int(value) {
+                            switch p {
+                            case 1:          parsedPriority = .urgent
+                            case 2, 3, 4:    parsedPriority = .high
+                            case 5, 6:       parsedPriority = .normal
+                            case 7, 8, 9:    parsedPriority = .low
+                            default:         parsedPriority = .normal
+                            }
+                        }
+                    } else if key.hasPrefix("STATUS") {
+                        // COMPLETED / CANCELLED 都视为已完成，不再重复触发提醒
+                        let v = value.uppercased()
+                        parsedIsCompleted = (v == "COMPLETED" || v == "CANCELLED")
                     }
                     idx += 1
                 }
@@ -287,8 +309,11 @@ public enum DataPortability {
                         isAllDay: isAllDay,
                         location: location,
                         notes: notes,
-                        repeatRule: parsedRRULE ?? .never
+                        repeatRule: parsedRRULE ?? .never,
+                        priority: parsedPriority
                     )
+                    // STATUS:COMPLETED/CANCELLED → 导入后仍保持已完成，避免重挂提醒
+                    if parsedIsCompleted { event.isCompleted = true }
                     // 把外部的 UID 记到 notes 末尾，便于排查（不覆盖原 notes）
                     if let uid = rawUID, !uid.isEmpty {
                         let suffix = "\n\n[ICS-UID]\(uid)"
@@ -320,7 +345,12 @@ public enum DataPortability {
     // MARK: - ICS 转义
 
     private static func escapeICS(_ text: String) -> String {
+        // P3 修复：RFC 5545 §3.3.11 TEXT 转义要求 \r\n / \r / \n 全部转成字面 \n。
+        //   旧实现只转 \n，遇到 \r\n 或单独 \r 时 round-trip 会出现多余的 \n 或残余 \r。
+        //   顺序：先归一化行尾再走标准转义链，避免 \\\\ 占位被 \n 处理误吞。
         text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: ";", with: "\\;")
             .replacingOccurrences(of: ",", with: "\\,")
@@ -358,14 +388,14 @@ public enum DataPortability {
         if upper.contains("FREQ=MONTHLY") { return .monthly }
         if upper.contains("FREQ=YEARLY") { return .yearly }
         if upper.contains("FREQ=WEEKLY") {
-            // 含 BYDAY=MO,TU,WE,TH,FR（且没其他）→ 工作日
+            // 含 BYDAY=MO,TU,WE,TH,FR（且**正好**是这 5 个，不多不少）→ 工作日
+            // 注意：不能用 isSubset——「周一三五」也是工作日子集，但语义上不是「每个工作日」
             if let byDay = upper.split(separator: ";").first(where: { $0.hasPrefix("BYDAY=") }) {
-                let days = String(byDay).dropFirst("BYDAY=".count)
+                let daysStr = String(byDay).dropFirst("BYDAY=".count)
+                let parts = Set(daysStr.split(separator: ",").map(String.init))
                 let workdaySet: Set<String> = ["MO","TU","WE","TH","FR"]
-                let parts = Set(days.split(separator: ",").map(String.init))
-                if !parts.isEmpty && parts.isSubset(of: workdaySet) {
-                    return .workday
-                }
+                // 精确相等才是 workday；BYDAY 不包含（整个 BYDAY 缺省 = 每周按起始日）也算 weekly
+                if parts == workdaySet { return .workday }
             }
             return .weekly
         }

@@ -25,6 +25,11 @@ struct EventEditView: View {
     private var isWide: Bool { hSizeClass == .regular }
     private var isEditing: Bool { original != nil }
     private var gregorian: Calendar { Calendar(identifier: .gregorian) }
+    /// 节日自适应强调色（与月/日/设置页一致）
+    private var accent: Color {
+        let fs = FestivalManager.festivals(on: defaultDate, lunar: defaultDate.lunar)
+        return fs.first.map { Color(hex: $0.accentHex) } ?? Color.appTint
+    }
 
     init(editing: CalendarEvent?, defaultDate: Date = Date()) {
         self.original = editing
@@ -35,8 +40,8 @@ struct EventEditView: View {
             _notes = State(initialValue: ev.notes ?? "")
             _priority = State(initialValue: ev.priority)
             _repeatRule = State(initialValue: ev.repeatRule)
-            _startDate = State(initialValue: ev.start)
-            _endDate = State(initialValue: ev.end)
+            _startDate = State(initialValue: ev.startDate)
+            _endDate = State(initialValue: ev.endDate)
             _isAllDay = State(initialValue: ev.isAllDay)
             _reminderEnabled = State(initialValue: ev.reminderOffsetMinutes != nil)
             _reminderMinutesBefore = State(initialValue: ev.reminderOffsetMinutes ?? 10)
@@ -52,16 +57,25 @@ struct EventEditView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollViewReader { _ in
-                Form {
-                    titleBlock; timeBlock; repeatBlock; priorityBlock; detailBlock
+            ScrollView {
+                VStack(spacing: AppTheme.Spacing.section) {
+                    titleBlock
+                    timeBlock
+                    repeatBlock
+                    priorityBlock
+                    detailBlock
                     if isEditing { statusBlock }
-                    Section { Color.clear.frame(height: 20).listRowBackground(Color.clear) }
+                    Color.clear.frame(height: AppTheme.Spacing.xxl)
                 }
-                .formStyle(.grouped).hideListBackground()
-                .safeAreaInset(edge: .bottom, spacing: 0) { bottomActions }
+                .padding(.horizontal, isWide ? AppTheme.Spacing.xxl : AppTheme.Spacing.lg)
+                .padding(.top, AppTheme.Spacing.lg)
+                .frame(maxWidth: isWide ? 760 : .infinity)
+                .frame(maxWidth: .infinity)
             }
-            .navigationTitle(isEditing ? "编辑\(type.displayTitle)" : "新建\(type.displayTitle)")
+            .festiveWallpaper(accent: accent)
+            .safeAreaInset(edge: .bottom, spacing: 0) { bottomActions }
+            .navigationTitle(isEditing ? "编辑\(type.uiLabel)" : "新建\(type.uiLabel)")
+            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -72,46 +86,70 @@ struct EventEditView: View {
                         .touchTarget(min: AppTheme.Touch.minTarget)
                 }
             }
-            .tint(Color.appTint)
+            #endif
+            .tint(accent)
             .alert("确认删除", isPresented: $showDeleteConfirm) {
                 Button("删除", role: .destructive) {
-                    if let ev = original { store.delete(eventID: ev.id) }
+                    if let ev = original { store.delete(ev) }
                     dismiss()
                 }
                 Button("取消", role: .cancel) {}
             } message: {
-                Text("确定要删除这个\(type.displayTitle)吗？删除后无法恢复。")
+                Text("确定要删除这个\(type.uiLabel)吗？删除后无法恢复。")
             }
         }
     }
 
     private var bottomActions: some View {
-        VStack(spacing: AppTheme.Spacing.sm) {
+        let accent = self.accent
+        return VStack(spacing: AppTheme.Spacing.sm) {
             if isEditing {
                 Button(role: .destructive) {
                     showDeleteConfirm = true
                 } label: {
-                    Label("删除此\(type.displayTitle)", systemImage: "trash.fill")
+                    Label("删除此\(type.uiLabel)", systemImage: "trash.fill")
                         .font(AppTheme.Font.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: AppTheme.Touch.minTarget)
                         .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                             .fill(Color.systemRed.opacity(0.10)))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                                .stroke(Color.systemRed.opacity(0.30), lineWidth: AppTheme.Stroke.hair)
+                        )
+                        .overlay(alignment: .top) {
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                                .fill(LinearGradient(colors: [Color.white.opacity(0.18), .clear],
+                                                     startPoint: .top, endPoint: .bottom))
+                                .frame(height: 22).allowsHitTesting(false).offset(y: 2)
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
+                        }
                         .foregroundStyle(Color.systemRed)
                         .contentShape(Rectangle())
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).pressableFeedback()
             }
             Button { save() } label: {
-                Label(isEditing ? "保存修改" : "添加\(type.displayTitle)", systemImage: "checkmark.circle.fill")
+                Label(isEditing ? "保存修改" : "添加\(type.uiLabel)", systemImage: "checkmark.circle.fill")
                     .font(AppTheme.Font.bodyBold).frame(maxWidth: .infinity)
                     .frame(minHeight: AppTheme.Touch.minTarget)
-                    .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                        .fill(LinearGradient(colors: [Color.appTint, Color.appTint.opacity(0.85)],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    .background {
+                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                            .fill(LinearGradient(colors: [accent, accent.opacity(0.82)],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                            .stroke(Color.white.opacity(0.24), lineWidth: AppTheme.Stroke.hair)
+                    }
+                    .overlay(alignment: .top) {
+                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                            .fill(LinearGradient(colors: [Color.white.opacity(0.22), .clear],
+                                                 startPoint: .top, endPoint: .bottom))
+                            .frame(height: 22).allowsHitTesting(false).offset(y: 2)
+                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
+                    }
                     .foregroundStyle(.white)
-                    .shadow(color: Color.appTint.opacity(0.30), radius: 12, x: 0, y: 5)
+                    .shadow(color: accent.opacity(0.30), radius: 12, x: 0, y: 5)
                     .contentShape(Rectangle())
-            }.buttonStyle(.plain)
+            }.buttonStyle(.plain).pressableFeedback()
              .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
              .opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
         }
@@ -122,21 +160,28 @@ struct EventEditView: View {
             UnevenRoundedRectangle(cornerRadii: .init(topLeading: 24, topTrailing: 24))
                 .fill(.ultraThinMaterial).ignoresSafeArea(edges: .bottom)
         )
-        .overlay(alignment: .top) { Color.hairSeparator.frame(height: AppTheme.Stroke.hair) }
+        .overlay(
+            UnevenRoundedRectangle(cornerRadii: .init(topLeading: 24, topTrailing: 24))
+                .stroke(Color.separator.opacity(0.22), lineWidth: AppTheme.Stroke.hair)
+        )
     }
 
     private var titleBlock: some View {
-        Section {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                TextField("\n请输入标题", text: $title, axis: .vertical)
-                    .font(AppTheme.Font.title2).lineLimit(1...3)
-                    .padding(.vertical, AppTheme.Spacing.sm)
+        _EditSectionCard(
+            header: sectionHeader("内容", icon: "pencil.and.scribble", tint: accent),
+            tint: accent
+        ) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+                TextField("请输入标题", text: $title, axis: .vertical)
+                    .font(AppTheme.Font.title2.weight(.semibold))
+                    .lineLimit(1...3)
+                    .frame(minHeight: 36)
                 FlexibleGrid(horizontalSpacing: AppTheme.Spacing.sm, verticalSpacing: AppTheme.Spacing.sm) {
                     ForEach(EventType.allCases) { t in
-                        Button { type = t } label: {
+                        Button { withAnimation(AppTheme.Motion.pressInOut) { type = t } } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: t.iconName).font(AppTheme.Font.caption)
-                                Text(t.displayTitle).font(AppTheme.Font.subheadline.weight(.semibold))
+                                Image(systemName: t.iconName).font(AppTheme.Font.caption.weight(.semibold))
+                                Text(t.uiLabel).font(AppTheme.Font.subheadline.weight(.semibold))
                             }
                             .foregroundStyle(type == t ? .white : Color.label)
                             .padding(.horizontal, AppTheme.Spacing.md)
@@ -144,26 +189,26 @@ struct EventEditView: View {
                             .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
                                 .fill(type == t ? t.tintColor : Color.quaternarySystemFill))
                             .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                                .stroke(type == t ? t.tintColor.opacity(0.45) : .clear,
+                                .stroke(type == t ? t.tintColor.opacity(0.5) : .clear,
                                         lineWidth: AppTheme.Stroke.hair))
                             .contentShape(Rectangle())
-                        }.buttonStyle(.plain)
+                        }.buttonStyle(.plain).pressableFeedback()
                     }
                 }
-            }.padding(0)
-        } header: {
-            sectionHeader("内容", icon: "pencil.and.scribble", tint: Color.appTint)
-        }.listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-         .listRowBackground(Color.clear)
+            }
+        }
     }
 
     private var timeBlock: some View {
-        Section {
+        _EditSectionCard(
+            header: sectionHeader("时间", icon: "clock.fill", tint: Color.systemOrange),
+            tint: Color.systemOrange
+        ) {
             VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
                 if type != .note {
                     Toggle(isOn: $isAllDay) {
                         Label("全天", systemImage: "sun.max").font(AppTheme.Font.bodyBold)
-                    }.tint(Color.appTint)
+                    }.tint(accent)
                     DatePicker(selection: $startDate,
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]) {
                         Label("开始", systemImage: "calendar.badge.clock").font(AppTheme.Font.body)
@@ -172,7 +217,7 @@ struct EventEditView: View {
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]) {
                         Label("结束", systemImage: "clock.badge.checkmark").font(AppTheme.Font.body)
                     }.environment(\.calendar, gregorian).datePickerStyle(.compact)
-                        .onChange(of: startDate) { newVal in
+                        .onChange(of: startDate, initial: false) { _, newVal in
                             if endDate < newVal { endDate = newVal }
                         }
                 } else {
@@ -181,13 +226,21 @@ struct EventEditView: View {
                     }.environment(\.calendar, gregorian).datePickerStyle(.compact)
                 }
                 if type != .note {
-                    Divider()
                     Toggle(isOn: $reminderEnabled) {
                         Label("开启提醒", systemImage: "bell.badge.fill").font(AppTheme.Font.bodyBold)
                     }.tint(Color.systemOrange)
                     if reminderEnabled {
-                        HStack(spacing: AppTheme.Spacing.md) {
-                            Image(systemName: "timer").foregroundStyle(Color.systemOrange)
+                        HStack(alignment: .center, spacing: AppTheme.Spacing.md) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous)
+                                    .fill(Color.systemOrange.opacity(0.14))
+                                Image(systemName: "timer")
+                                    .font(AppTheme.Font.caption.weight(.semibold))
+                                    .foregroundStyle(Color.systemOrange)
+                            }
+                            .frame(width: 24, height: 24)
+                            Text("提前").font(AppTheme.Font.body)
+                            Spacer()
                             Picker("提前", selection: $reminderMinutesBefore) {
                                 Text("准时").tag(0); Text("5 分钟").tag(5)
                                 Text("10 分钟").tag(10); Text("15 分钟").tag(15)
@@ -195,36 +248,44 @@ struct EventEditView: View {
                                 Text("1 天").tag(1440)
                             }.pickerStyle(.menu).tint(Color.systemOrange)
                         }
+                        .padding(AppTheme.Spacing.md)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                                .fill(Color.quaternarySystemFill)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                                .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
+                        )
                     }
                 }
-            }.padding(.vertical, AppTheme.Spacing.sm)
-        } header: {
-            sectionHeader("时间", icon: "clock.fill", tint: Color.systemOrange)
+            }
         }
     }
 
     private var repeatBlock: some View {
-        Section {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                FlexibleGrid(horizontalSpacing: 6, verticalSpacing: 6) {
-                    ForEach(repeatOptions) { rule in
-                        Button { repeatRule = rule } label: {
-                            Text(rule.displayTitle)
-                                .font(AppTheme.Font.subheadline.weight(.semibold))
-                                .foregroundStyle(repeatRule == rule ? .white : Color.label)
-                                .padding(.horizontal, AppTheme.Spacing.md)
-                                .frame(minHeight: AppTheme.Touch.chipHeight)
-                                .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                                    .fill(repeatRule == rule ? Color.appTint : Color.quaternarySystemFill))
-                                .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                                    .stroke(repeatRule == rule ? Color.appTint.opacity(0.5) : .clear,
-                                            lineWidth: AppTheme.Stroke.hair))
-                                .contentShape(Rectangle())
-                        }.buttonStyle(.plain)
-                    }
+        _EditSectionCard(
+            header: sectionHeader("重复规则", icon: "repeat", tint: Color.systemPurple),
+            tint: Color.systemPurple
+        ) {
+            FlexibleGrid(horizontalSpacing: 6, verticalSpacing: 6) {
+                ForEach(repeatOptions) { rule in
+                    Button { withAnimation(AppTheme.Motion.pressInOut) { repeatRule = rule } } label: {
+                        Text(rule.uiLabel)
+                            .font(AppTheme.Font.subheadline.weight(.semibold))
+                            .foregroundStyle(repeatRule == rule ? .white : Color.label)
+                            .padding(.horizontal, AppTheme.Spacing.md)
+                            .frame(minHeight: AppTheme.Touch.chipHeight)
+                            .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
+                                .fill(repeatRule == rule ? accent : Color.quaternarySystemFill))
+                            .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
+                                .stroke(repeatRule == rule ? accent.opacity(0.5) : .clear,
+                                        lineWidth: AppTheme.Stroke.hair))
+                            .contentShape(Rectangle())
+                    }.buttonStyle(.plain).pressableFeedback()
                 }
             }
-        } header: { sectionHeader("重复规则", icon: "repeat", tint: Color.systemPurple) }
+        }
     }
 
     private var repeatOptions: [RepeatRule] {
@@ -234,64 +295,89 @@ struct EventEditView: View {
     }
 
     private var priorityBlock: some View {
-        Section {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                FlexibleGrid(horizontalSpacing: 6, verticalSpacing: 6) {
-                    ForEach(Priority.allCases) { p in
-                        Button { priority = p } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: p == .urgent ? "exclamationmark.octagon.fill" :
-                                                p == .high ? "flame.fill" :
-                                                p == .normal ? "flag.fill" : "flag")
-                                    .font(AppTheme.Font.caption)
-                                Text(p.displayTitle).font(AppTheme.Font.subheadline.weight(.semibold))
-                            }
-                            .foregroundStyle(priority == p ? .white : p.tintColor)
-                            .padding(.horizontal, AppTheme.Spacing.md)
-                            .frame(minHeight: AppTheme.Touch.chipHeight)
-                            .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                                .fill(priority == p ? p.tintColor : p.tintColor.opacity(0.10)))
-                            .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                                .stroke(priority == p ? p.tintColor.opacity(0.45) : .clear,
-                                        lineWidth: AppTheme.Stroke.hair))
-                            .contentShape(Rectangle())
-                        }.buttonStyle(.plain)
-                    }
+        _EditSectionCard(
+            header: sectionHeader("优先级", icon: "exclamationmark.3", tint: Color.systemRed),
+            tint: Color.systemRed
+        ) {
+            FlexibleGrid(horizontalSpacing: 6, verticalSpacing: 6) {
+                ForEach(Priority.allCases) { p in
+                    Button { withAnimation(AppTheme.Motion.pressInOut) { priority = p } } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: p == .urgent ? "exclamationmark.octagon.fill" :
+                                            p == .high ? "flame.fill" :
+                                            p == .normal ? "flag.fill" : "flag")
+                                .font(AppTheme.Font.caption)
+                            Text(p.uiLabel).font(AppTheme.Font.subheadline.weight(.semibold))
+                        }
+                        .foregroundStyle(priority == p ? .white : p.tintColor)
+                        .padding(.horizontal, AppTheme.Spacing.md)
+                        .frame(minHeight: AppTheme.Touch.chipHeight)
+                        .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
+                            .fill(priority == p ? p.tintColor : p.tintColor.opacity(0.10)))
+                        .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
+                            .stroke(priority == p ? p.tintColor.opacity(0.45) : .clear,
+                                    lineWidth: AppTheme.Stroke.hair))
+                        .contentShape(Rectangle())
+                    }.buttonStyle(.plain).pressableFeedback()
                 }
             }
-        } header: { sectionHeader("优先级", icon: "exclamationmark.3", tint: Color.systemRed) }
+        }
     }
 
     private var detailBlock: some View {
-        Section {
-            TextField("\n备注内容（可选）", text: $notes, axis: .vertical)
+        _EditSectionCard(
+            header: sectionHeader("备注", icon: "note.text", tint: Color.systemTeal),
+            tint: Color.systemTeal
+        ) {
+            TextField("备注内容（可选）", text: $notes, axis: .vertical)
                 .font(AppTheme.Font.body).lineLimit(3...8)
-                .padding(.vertical, AppTheme.Spacing.sm)
-        } header: { sectionHeader("备注", icon: "note.text", tint: Color.systemTeal) }
+                .frame(minHeight: 96, alignment: .top)
+                .padding(AppTheme.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                        .fill(Color.quaternarySystemFill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                        .stroke(Color.separator.opacity(0.20), lineWidth: AppTheme.Stroke.hair)
+                )
+        }
     }
 
     private var statusBlock: some View {
-        Section {
-            Toggle(isOn: $isCompleted) {
-                Label("已完成", systemImage: "checkmark.seal.fill").font(AppTheme.Font.bodyBold)
-            }.tint(Color.systemGreen)
-            if let ev = original {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("创建时间：\(formatStamp(ev.createdAt))")
-                        .font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
-                    Text("更新时间：\(formatStamp(ev.updatedAt))")
-                        .font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
-                }.padding(.top, AppTheme.Spacing.xs)
+        _EditSectionCard(
+            header: sectionHeader("状态", icon: "checkmark.circle.trianglebadge.exclamationmark", tint: Color.systemGreen),
+            tint: Color.systemGreen
+        ) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+                Toggle(isOn: $isCompleted) {
+                    Label("已完成", systemImage: "checkmark.seal.fill").font(AppTheme.Font.bodyBold)
+                }.tint(Color.systemGreen)
+                if let ev = original {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("创建时间：\(formatStamp(ev.createdAt))")
+                            .font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
+                        Text("更新时间：\(formatStamp(ev.updatedAt))")
+                            .font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
+                    }
+                }
             }
-        } header: { sectionHeader("状态", icon: "checkmark.circle.trianglebadge.exclamationmark", tint: Color.systemGreen) }
+        }
     }
 
     @ViewBuilder
     private func sectionHeader(_ title: String, icon: String, tint: Color) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: icon).font(AppTheme.Font.caption.weight(.semibold)).foregroundStyle(tint)
+            ZStack {
+                RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous)
+                    .fill(tint.opacity(0.14))
+                Image(systemName: icon)
+                    .font(AppTheme.Font.caption.weight(.semibold))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 24, height: 24)
             Text(title).font(AppTheme.Font.subheadline.weight(.semibold)).foregroundStyle(Color.secondaryLabel)
-        }.padding(.top, AppTheme.Spacing.sm)
+        }
     }
 
     private func save() {
@@ -302,22 +388,33 @@ struct EventEditView: View {
         if end < startDate { end = startDate }
         let reminderOffset: Int? = reminderEnabled ? reminderMinutesBefore : nil
         let now = Date()
+        let resultingEvent: CalendarEvent
         if let ev = original {
             var copy = ev
             copy.title = trimmed; copy.type = type; copy.notes = notes.isEmpty ? nil : notes
             copy.priority = priority; copy.repeatRule = repeatRule
-            copy.start = startDate; copy.end = end; copy.isAllDay = isAllDay
+            copy.startDate = startDate; copy.endDate = end; copy.isAllDay = isAllDay
             copy.reminderOffsetMinutes = reminderOffset; copy.isCompleted = isCompleted
             copy.updatedAt = now
+            // 用户任何编辑都重置 isNotified（避免：一次性提醒 markNotified=true→用户改了日期→
+            // scheduleNotification 由于 isNotified=true 直接 return，新的提醒永远不会被挂上）
+            copy.isNotified = false
             store.update(copy)
+            resultingEvent = copy
         } else {
-            let ev = CalendarEvent(title: trimmed, type: type, start: startDate, end: end,
-                isAllDay: isAllDay, repeatRule: repeatRule, priority: priority,
-                notes: notes.isEmpty ? nil : notes, reminderOffsetMinutes: reminderOffset,
-                createdAt: now, updatedAt: now)
+            let ev = CalendarEvent(title: trimmed, type: type, startDate: startDate, endDate: end,
+                isAllDay: isAllDay, notes: notes.isEmpty ? nil : notes,
+                repeatRule: repeatRule, priority: priority,
+                reminderOffsetMinutes: reminderOffset)
             store.add(ev)
+            resultingEvent = ev
         }
-        Task { await NotificationManager.shared.rescheduleAllReminders(in: store) }
+        // 只刷新当前事件的通知：避免 O(N) 全量 cancelAll+reschedule 导致
+        // badge 短暂闪烁、大事件库下保存卡顿、不必要的 UN 系统调用
+        Task { @MainActor in
+            NotificationManager.shared.cancelNotification(for: resultingEvent)
+            await NotificationManager.shared.scheduleNotification(for: resultingEvent)
+        }
         dismiss()
     }
 
@@ -332,19 +429,43 @@ private struct FlexibleGrid<Content: View>: View {
     var horizontalSpacing: CGFloat = 8
     var verticalSpacing: CGFloat = 8
     @ViewBuilder var content: () -> Content
+
+    // 流式布局简化实现：单行放不下时换行。
+    // 使用 FlowLayout (Layout 协议) + FallbackFlowLayout (iOS 16 以下)，
+    // FlexibleGrid 只是个壳，真正的布局在 FlowLayout/FallbackFlowLayout 内。
+    //
+    // Layout 协议要求容器直接持有多个子视图（不是 Group 或单一 View），
+    // 所以我们让 ForEach 的结果直接成为 FlowLayout 的 subviews。
+    #if canImport(SwiftUI)
     var body: some View {
-        FlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing, content: content)
+        if #available(iOS 16.0, macOS 13.0, *) {
+            FlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing) {
+                content()
+            }
+        } else {
+            FallbackFlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing, content: content)
+        }
     }
+    #endif
 }
 
-extension Priority {
-    var displayTitle: String {
-        switch self {
-        case .low:    return "低"
-        case .normal: return "中"
-        case .high:   return "高"
-        case .urgent: return "紧急"
+/// 编辑页通用分区卡：液态玻璃 + 顶部 section header + tint 浸染
+private struct _EditSectionCard<Header: View, Content: View>: View {
+    let header: Header
+    let tint: Color
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+            header
+            content()
         }
+        .padding(AppTheme.Spacing.lg)
+        .liquidCard(radius: AppTheme.Radius.xl,
+                    material: .thinMaterial,
+                    tint: tint,
+                    shadow: AppTheme.Shadow.card,
+                    highlight: 0.09)
     }
 }
 

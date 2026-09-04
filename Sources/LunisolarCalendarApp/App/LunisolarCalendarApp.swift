@@ -16,6 +16,7 @@ import os
 struct LunisolarCalendarApp: App {
 
     @State private var store = EventStore.shared
+    @State private var countdownStore = CountdownStore.shared
     /// 持有同步协调器强引用（EventStore.syncCoordinator 为 weak，需要这里保活）
     @State private var syncCoordinator: EventSyncCoordinator?
     /// 外观偏好：跟随系统 / 浅色 / 深色
@@ -29,8 +30,17 @@ struct LunisolarCalendarApp: App {
         WindowGroup {
             AdaptiveRootView()
                 .environment(store)
+                .environment(countdownStore)
                 .preferredColorScheme(appearance.colorScheme)
                 .tint(Color.appTint)
+                .task {
+                    // ⚠️ 启动即重排所有本地提醒：
+                    // - 重新安装后 UNUserNotificationCenter 为全新空态，没有任何 pending request
+                    // - iOS 系统升级/还原后也可能清掉原有 requests
+                    // - 导入/合并非通知调度的冷路径（iCloud pull）需要启动时补位
+                    // 放在独立的 task 里（不和 CloudKit setup 串行，避免受 entitlement 阻塞）
+                    await NotificationManager.shared.rescheduleAllReminders(in: store)
+                }
                 .task {
                     await setupCloudSyncIfNeeded()
                 }
@@ -93,12 +103,18 @@ struct AdaptiveRootView: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
     var body: some View {
-        if hSizeClass == .regular {
-            // iPad：双栏布局
-            iPadRootView()
-        } else {
-            // iPhone：单栏布局
-            CalendarMonthView()
+        Group {
+            if hSizeClass == .regular {
+                // iPad：双栏布局
+                iPadRootView()
+            } else {
+                // iPhone：单栏布局
+                CalendarMonthView()
+            }
+        }
+        .onAppear {
+            // 启动时根据日期自动切换主/春节图标（仅在窗口内切换，否则回主图标）
+            AlternateIconManager.shared.applyTodayIfNeeded()
         }
     }
 }

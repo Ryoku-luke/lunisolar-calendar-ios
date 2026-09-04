@@ -1,4 +1,5 @@
 import Foundation
+import LunarCore
 
 // MARK: - 离散黄历条目模型 (compact JSON keys)
 
@@ -143,6 +144,30 @@ public enum HuangliDBProvider {
         guard let r = c.root else {
             return "离散黄历库未加载（将走算法兜底）"
         }
-        return "离散黄历库 v\(r.version)：\(r.range[0]) ~ \(r.range[1])，共 \(r.count) 条"
+        // P3 修复：JSON 被外部篡改/损坏时 r.range.count 可能 < 2，
+        //   旧代码直接 r.range[1] 会触发 Swift Array index out of range precondition
+        //   → 整个 SettingsView 进程崩溃。改用 first/last 安全访问。
+        let start = r.range.first ?? "未知"
+        let end = r.range.count >= 2 ? r.range.last! : start
+        return "离散黄历库 v\(r.version)：\(start) ~ \(end)，共 \(r.count) 条"
+    }
+}
+
+// MARK: - HuangliGenerator extension（离散库 + 算法 fallback）
+// 放在 App target 里，因为 LunarCore 没有离散库解析能力
+extension HuangliGenerator {
+    /// 基于公历日期生成黄历
+    /// 策略：优先查"离散黄历数据库"（2024-2028，内置 huangli_db.json），命中则直接用
+    /// 未命中（资源缺失/区间外）时走算法推导作为兜底
+    public static func generate(for date: Date) -> HuangliDay {
+        let resolved = HuangliDBProvider.resolve(date: date)
+        if let day = resolved.huangliDay {
+            return day
+        }
+        // 越界时，给一个尽量合理的兜底（lunar 使用占位值）
+        let safeLunar = ChineseCalendar.lunarDateSafe(from: date) ?? LunarDate(
+            year: 0, month: 1, day: 1, isLeapMonth: false
+        )
+        return algorithmGenerate(for: date, lunar: safeLunar)
     }
 }

@@ -40,39 +40,44 @@ struct SettingsView: View {
 
     // iPad regular 模式下居中限宽
     private var isWide: Bool { hSizeClass == .regular }
+    /// 节日自适应强调色（与月/日视图同规则）
+    private var accent: Color {
+        let today = Date()
+        let fs = FestivalManager.festivals(on: today, lunar: today.lunar)
+        return fs.first.map { Color(hex: $0.accentHex) } ?? Color.appTint
+    }
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) {
-                Color.systemGroupedBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: AppTheme.Spacing.section) {
+                    heroHeader
+                        .padding(.top, AppTheme.Spacing.lg)
 
-                ScrollView {
-                    VStack(spacing: AppTheme.Spacing.section) {
-                        heroHeader
-                            .padding(.top, AppTheme.Spacing.lg)
+                    appearanceCard
+                    notificationCard
+                    dataManagementCard
+                    cloudSyncCard
+                    systemImportCard
+                    conflictPolicyCard
+                    dangerZoneCard
+                    statisticsCard
+                    aboutCard
 
-                        appearanceCard
-                        notificationCard
-                        dataManagementCard
-                        cloudSyncCard
-                        systemImportCard
-                        conflictPolicyCard
-                        dangerZoneCard
-                        statisticsCard
-                        aboutCard
-
-                        Color.clear.frame(height: AppTheme.Spacing.xxl)
-                    }
-                    .padding(.horizontal, isWide ? AppTheme.Spacing.xxl : AppTheme.Spacing.lg)
-                    .frame(maxWidth: isWide ? 760 : .infinity)
-                    .frame(maxWidth: .infinity)
+                    Color.clear.frame(height: AppTheme.Spacing.xxl)
                 }
+                .padding(.horizontal, isWide ? AppTheme.Spacing.xxl : AppTheme.Spacing.lg)
+                .frame(maxWidth: isWide ? 760 : .infinity)
+                .frame(maxWidth: .infinity)
             }
+            .festiveWallpaper(accent: accent)
             .navigationTitle("设置")
+            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .tint(Color.appTint)
+            #endif
+            .tint(accent)
             .task {
                 notifStatus = await NotificationManager.shared.authorizationStatusAsync()
             }
@@ -102,55 +107,55 @@ struct SettingsView: View {
                 if let url = shareURL { ShareSheet(items: [url]) }
             }
             #endif
-            .animation(.easeInOut(duration: 0.22), value: toast)
+            .animation(AppTheme.Motion.toast, value: toast)
         }
     }
 
     // MARK: - Hero · 液态玻璃头
 
     private var heroHeader: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+        let accent = self.accent
+        return VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
             HStack(spacing: AppTheme.Spacing.md) {
                 ZStack {
                     RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [Color.appTint, Color.systemIndigo.opacity(0.85)],
+                                colors: [accent, Color.systemIndigo.opacity(0.88)],
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )
-                    Image(systemName: "calendar")
-                        .font(.system(size: 28, weight: .semibold))
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(.white)
-                        .symbolRenderingMode(.hierarchical)
+                        .symbolRenderingMode(.palette)
                 }
                 .frame(width: 56, height: 56)
+                .shadow(color: accent.opacity(0.35), radius: 8, x: 0, y: 4)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("农历日历")
-                        .font(AppTheme.Font.title2)
+                    Text("清和日历")
+                        .font(AppTheme.Font.title2.weight(.bold))
                         .foregroundStyle(Color.label)
                     Text("v1.0.0 · 1900 – 2100")
                         .font(AppTheme.Font.caption)
                         .foregroundStyle(Color.secondaryLabel)
                 }
                 Spacer(minLength: 0)
-                ChipLabel(title: "\(store.events.count) 事件", systemImage: "list.bullet.rectangle", tint: Color.appTint)
+                ChipLabel(title: "\(store.events.count) 事件", systemImage: "list.bullet.rectangle", tint: accent)
             }
 
             HStack(spacing: AppTheme.Spacing.sm) {
-                HeroStat(label: "日程", value: storeCount(of: .schedule), tint: .appTint)
+                HeroStat(label: "日程", value: storeCount(of: .schedule), tint: accent)
                 HeroStat(label: "提醒", value: storeCount(of: .reminder), tint: .systemOrange)
                 HeroStat(label: "记事", value: storeCount(of: .note), tint: .systemIndigo)
             }
         }
         .padding(AppTheme.Spacing.xl)
-        .liquidGlassCard(
-            cornerRadius: AppTheme.Radius.xl,
-            borderColor: Color.appTint.opacity(0.22),
-            borderWidth: 0.8,
-            shadowOpacity: 0.10,
-            interactive: false
-        )
+        .liquidCard(radius: AppTheme.Radius.xl,
+                    material: .thinMaterial,
+                    tint: accent,
+                    shadow: AppTheme.Shadow.raised,
+                    highlight: 0.14)
     }
 
     private func storeCount(of type: EventType) -> Int {
@@ -184,11 +189,34 @@ struct SettingsView: View {
                     Button { openSystemSettings() } label: {
                         Label("前往系统设置开启", systemImage: "arrow.up.right.square")
                             .font(AppTheme.Font.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.appTint)
+                            .foregroundStyle(accent)
                     }
+                    .buttonStyle(.plain)
+                    .pressableFeedback()
                 }
 
-                Divider().opacity(0.0)
+                if notifStatus == .notDetermined {
+                    // P3 UX：首次启动用户没申请过通知权限时，denied 分支（前往系统设置）
+                    // 不生效，下方"重排所有提醒"也因为 != granted 灰掉。用户卡在『啥也点不了』。
+                    // 新增显式按钮：直接调 NM.requestAuthorization 弹出系统权限弹窗。
+                    Button {
+                        Task { @MainActor in
+                            let ok = await NotificationManager.shared.requestAuthorization()
+                            notifStatus = await NotificationManager.shared.authorizationStatusAsync()
+                            toast = ToastMessage(
+                                kind: ok ? .success : .warning,
+                                text: ok ? "通知权限已开启，可重新调度提醒"
+                                     : "未开启通知权限，提醒将不会送达"
+                            )
+                        }
+                    } label: {
+                        Label("申请通知权限", systemImage: "bell.badge")
+                            .font(AppTheme.Font.subheadline.weight(.semibold))
+                            .foregroundStyle(accent)
+                    }
+                    .buttonStyle(.plain)
+                    .pressableFeedback()
+                }
 
                 Button {
                     Task { await NotificationManager.shared.rescheduleAllReminders(in: store) }
@@ -202,19 +230,24 @@ struct SettingsView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.tertiaryLabel)
                     }
+                    .contentShape(Rectangle())
+                    .frame(minHeight: AppTheme.Touch.minTarget, alignment: .leading)
                 }
                 .buttonStyle(.plain)
+                .pressableFeedback()
+                // 允许在 .notDetermined 时按下（按钮文案本来就是"重新调度"，没权限时
+                // 点下去啥也不会做，UX 不好；因此保留 granted-only 禁用，让用户先点上方
+                // 新增的"申请通知权限"完成授权）。
                 .disabled(notifStatus != .granted)
                 .opacity(notifStatus == .granted ? 1 : 0.45)
             }
-            .padding(AppTheme.Spacing.lg)
         }
     }
 
     // MARK: - 3. 数据管理
 
     private var dataManagementCard: some View {
-        SettingsCard(title: "数据管理", icon: "externaldrive.badge.checkmark", tint: Color(hex: "#C41A1A"), subtitle: "备份 · 导出 · 导入 / 恢复，.json 保留全部字段") {
+        SettingsCard(title: "数据管理", icon: "externaldrive.badge.checkmark", tint: Color.festiveRed, subtitle: "备份 · 导出 · 导入 / 恢复，.json 保留全部字段") {
             VStack(spacing: 2) {
                 DataActionRow(
                     icon: "square.and.arrow.up",
@@ -234,7 +267,7 @@ struct SettingsView: View {
                     icon: "externaldrive.badge.checkmark",
                     title: "全量备份为 .json",
                     subtitle: "含农历重复 / 通知状态 / 创建时间",
-                    tint: Color(hex: "#C41A1A")
+                    tint: Color.festiveRed
                 ) { exportAsJSONBackup() }
                 divider
                 DataActionRow(
@@ -243,7 +276,10 @@ struct SettingsView: View {
                     subtitle: ".ics 日历 / .json 全量备份",
                     tint: Color(red: 0.25, green: 0.55, blue: 0.95),
                     accessory: .menu
-                ) { showConflictPolicy = true } secondary: {
+                ) {
+                    importingFileType = .ics
+                    showConflictPolicy = true
+                } secondary: {
                     Menu {
                         Button {
                             importingFileType = .ics
@@ -260,7 +296,8 @@ struct SettingsView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .font(AppTheme.Font.title3)
-                            .foregroundStyle(Color.appTint)
+                            .foregroundStyle(accent)
+                            .touchTarget(min: AppTheme.Touch.minTarget)
                     }
                 }
             }
@@ -304,12 +341,19 @@ struct SettingsView: View {
                             RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
                                 .fill(Color.quaternarySystemFill)
                         )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                                .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
+                        )
                     }
 
                     Button {
                         Task { @MainActor in
                             do {
                                 _ = try await co.syncBidirectional()
+                                // 双向同步可能从 iCloud 拉回了新的 reminder 事件，需要重新排本地通知
+                                await NotificationManager.shared.rescheduleAllReminders(in: store)
+                                toast = .init(kind: .success, text: "同步完成")
                             } catch {
                                 AppLogger.sync.error("立即同步失败：\(error)")
                                 toast = .init(kind: .error, text: "同步失败：\(syncErrorBrief(error))")
@@ -330,8 +374,10 @@ struct SettingsView: View {
                             }
                         }
                         .contentShape(Rectangle())
+                        .frame(minHeight: AppTheme.Touch.minTarget, alignment: .leading)
                     }
                     .buttonStyle(.plain)
+                    .pressableFeedback()
                     .disabled(!co.isEnabled || isSyncing(co.status))
                     .opacity((!co.isEnabled || isSyncing(co.status)) ? 0.45 : 1)
                 } else {
@@ -372,7 +418,6 @@ struct SettingsView: View {
                 }
                 #endif
             }
-            .padding(AppTheme.Spacing.lg)
         }
     }
 
@@ -405,9 +450,14 @@ struct SettingsView: View {
                 if importingSystemSource == .contacts || !store.events.isEmpty {
                     divider
                     HStack(spacing: AppTheme.Spacing.md) {
-                        Image(systemName: "moon.stars.fill")
-                            .font(AppTheme.Font.bodyBold)
-                            .foregroundStyle(Color.systemIndigo)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                                .fill(Color.systemIndigo.opacity(0.14))
+                            Image(systemName: "moon.stars.fill")
+                                .font(AppTheme.Font.caption.weight(.semibold))
+                                .foregroundStyle(Color.systemIndigo)
+                        }
+                        .frame(width: 32, height: 32)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("联系人生日按农历每年")
                                 .font(AppTheme.Font.body)
@@ -420,8 +470,8 @@ struct SettingsView: View {
                             .labelsHidden()
                             .tint(Color.systemIndigo)
                     }
-                    .padding(.horizontal, AppTheme.Spacing.lg)
-                    .padding(.vertical, AppTheme.Spacing.md)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, AppTheme.Spacing.sm)
                 }
 
                 if isImportingSystem {
@@ -450,7 +500,6 @@ struct SettingsView: View {
                     .foregroundStyle(Color.secondaryLabel)
                     .padding(.horizontal, 4)
             }
-            .padding(AppTheme.Spacing.lg)
         }
     }
 
@@ -458,38 +507,44 @@ struct SettingsView: View {
 
     private var dangerZoneCard: some View {
         SettingsCard(title: "危险操作", icon: "exclamationmark.triangle.fill", tint: Color.systemRed, subtitle: "清空后无法恢复，请先在上方导出 .json 备份") {
-            VStack(spacing: AppTheme.Spacing.md) {
-                Button(role: .destructive) {
-                    showClearConfirm = true
-                } label: {
-                    HStack {
-                        Label("清空全部事件", systemImage: "trash.fill")
-                            .font(AppTheme.Font.bodyBold)
-                        Spacer()
-                        Text("\(store.events.count) 条")
-                            .font(AppTheme.Font.caption.weight(.semibold))
-                            .foregroundStyle(Color.tertiaryLabel)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.tertiaryLabel)
-                    }
-                    .padding(.vertical, AppTheme.Spacing.sm)
-                    .padding(.horizontal, AppTheme.Spacing.lg)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .fill(Color.systemRed.opacity(0.08))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .stroke(Color.systemRed.opacity(0.25), lineWidth: AppTheme.Stroke.hair)
-                    )
+            Button(role: .destructive) {
+                showClearConfirm = true
+            } label: {
+                HStack {
+                    Label("清空全部事件", systemImage: "trash.fill")
+                        .font(AppTheme.Font.bodyBold)
+                    Spacer()
+                    Text("\(store.events.count) 条")
+                        .font(AppTheme.Font.caption.weight(.semibold))
+                        .foregroundStyle(Color.tertiaryLabel)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.tertiaryLabel)
                 }
-                .buttonStyle(.plain)
-                .disabled(store.events.isEmpty)
-                .opacity(store.events.isEmpty ? 0.45 : 1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: AppTheme.Touch.minTarget)
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .fill(Color.systemRed.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .stroke(Color.systemRed.opacity(0.25), lineWidth: AppTheme.Stroke.hair)
+                )
+                .overlay(alignment: .top) {
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
+                        .fill(LinearGradient(colors: [Color.white.opacity(0.16), .clear],
+                                             startPoint: .top, endPoint: .bottom))
+                        .frame(height: 22).allowsHitTesting(false).offset(y: 2)
+                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
+                }
+                .contentShape(Rectangle())
             }
-            .padding(AppTheme.Spacing.lg)
+            .buttonStyle(.plain)
+            .pressableFeedback()
+            .disabled(store.events.isEmpty)
+            .opacity(store.events.isEmpty ? 0.45 : 1)
         }
     }
 
@@ -515,7 +570,7 @@ struct SettingsView: View {
     private var aboutCard: some View {
         SettingsCard(title: "关于", icon: "info.circle.fill", tint: Color.secondaryLabel) {
             VStack(spacing: AppTheme.Spacing.xs) {
-                StatRow(label: "应用名称", value: "农历日历")
+                StatRow(label: "应用名称", value: "清和日历")
                 divider
                 StatRow(label: "版本", value: "1.0.0")
                 divider
@@ -530,7 +585,7 @@ struct SettingsView: View {
     private var divider: some View {
         Color.separator.opacity(0.28)
             .frame(height: AppTheme.Stroke.hair)
-            .padding(.leading, 52)
+            .padding(.leading, 48)
     }
 
     private func infoMiniRow(label: String, value: String) -> some View {
@@ -628,6 +683,8 @@ struct SettingsView: View {
             shareURL = url
             showShareSheet = true
             toast = .init(kind: .success, text: "已生成 .ics 日历备份（\(store.events.count) 条）")
+        } else {
+            toast = .init(kind: .error, text: "导出失败：临时文件写入失败，请检查可用空间")
         }
     }
 
@@ -641,6 +698,8 @@ struct SettingsView: View {
             shareURL = url
             showShareSheet = true
             toast = .init(kind: .success, text: "已生成 .csv 表格（\(store.events.count) 条）")
+        } else {
+            toast = .init(kind: .error, text: "导出失败：临时文件写入失败，请检查可用空间")
         }
     }
 
@@ -654,17 +713,25 @@ struct SettingsView: View {
             shareURL = url
             showShareSheet = true
             toast = .init(kind: .success, text: "已生成全量 JSON 备份（\(store.events.count) 条）")
+        } else {
+            toast = .init(kind: .error, text: "导出失败：临时文件写入失败，请检查可用空间")
         }
     }
 
     private func handleImportResult(_ result: Result<URL, Error>, fileType: ImportedFileType) {
         switch result {
         case .success(let url):
-            guard url.startAccessingSecurityScopedResource() else { return }
+            guard url.startAccessingSecurityScopedResource() else {
+                toast = .init(kind: .error, text: "导入失败：无权限读取该文件，请重新选择")
+                importedResult = .init(invalid: 1)
+                showImportResult = true
+                return
+            }
             defer { url.stopAccessingSecurityScopedResource() }
             guard let content = try? String(contentsOf: url, encoding: .utf8) else {
                 importedResult = .init(invalid: 1)
                 showImportResult = true
+                toast = .init(kind: .error, text: "导入失败：文件无法读取或编码不支持（请使用 UTF-8 文本）")
                 return
             }
             let incoming: [CalendarEvent]
@@ -675,7 +742,12 @@ struct SettingsView: View {
             let r = store.merge(incoming, policy: conflictPolicy, skipSync: true)
             importedResult = r
             showImportResult = true
+            // 新增/更新的事件如果是 reminder，需要被挂到 UNUserNotificationCenter。
+            // 由于本 merge 是 O(N) 数据导入，用 rescheduleAllReminders（内部 cancelAll+重排）一次性刷新全局
             if r.added + r.updated > 0 {
+                Task { @MainActor in
+                    await NotificationManager.shared.rescheduleAllReminders(in: store)
+                }
                 toast = .init(kind: .success,
                               text: "导入完成：新增 \(r.added) · 更新 \(r.updated)")
             } else {
@@ -737,7 +809,11 @@ struct SettingsView: View {
         let r = store.merge(events, policy: conflictPolicy, skipSync: true)
         importedResult = r
         showImportResult = false
+        // 系统导入成功后重排所有 pending 通知，把新增 reminder 挂到 UNUserNotificationCenter
         if r.added + r.updated > 0 {
+            Task { @MainActor in
+                await NotificationManager.shared.rescheduleAllReminders(in: store)
+            }
             toast = .init(kind: .success,
                           text: "\(source.displayName) 导入：新增 \(r.added) · 更新 \(r.updated)")
         } else {
@@ -747,9 +823,11 @@ struct SettingsView: View {
     }
 
     private func openSystemSettings() {
+        #if canImport(UIKit)
         if let url = URL(string: UIApplication.openSettingsURLString) {
             openURL(url)
         }
+        #endif
     }
 
     // MARK: - iCloud 同步辅助
@@ -769,6 +847,8 @@ struct SettingsView: View {
             store.syncCoordinator = coordinator
             UserDefaults.standard.set(true, forKey: "Lunisolar.sync.enabled")
             _ = try await coordinator.syncBidirectional()
+            // 首次双向同步后：远端可能有新 reminder，需要排本地通知
+            await NotificationManager.shared.rescheduleAllReminders(in: store)
             toast = .init(kind: .success, text: "iCloud 同步已开启")
         } catch {
             AppLogger.sync.error("首次开启 iCloud 同步失败：\(error)")
@@ -785,6 +865,8 @@ struct SettingsView: View {
             Task { @MainActor in
                 do {
                     _ = try await co.syncBidirectional()
+                    // 开启同步后首次双向同步：远端新 reminder 需要排本地通知
+                    await NotificationManager.shared.rescheduleAllReminders(in: store)
                 } catch {
                     AppLogger.sync.warning("开启同步后首次同步失败：\(error)")
                 }
@@ -845,7 +927,7 @@ struct SettingsView: View {
 
 // MARK: - 子组件：设置卡 / Hero 统计 / 外观分段 / 冲突策略胶囊
 
-/// 通用「设置卡片」：带图标 + 标题 + 副标题 + 内容块
+/// 通用「设置卡片」：液态玻璃 + 节日 tint 高光（iOS 26 风格）
 private struct SettingsCard<Content: View>: View {
     let title: String
     let icon: String
@@ -856,10 +938,15 @@ private struct SettingsCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
             HStack(spacing: AppTheme.Spacing.sm) {
-                Image(systemName: icon)
-                    .font(AppTheme.Font.title3)
-                    .foregroundStyle(tint)
-                    .symbolRenderingMode(.hierarchical)
+                ZStack {
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                        .fill(tint.opacity(0.14))
+                    Image(systemName: icon)
+                        .font(AppTheme.Font.bodyBold)
+                        .foregroundStyle(tint)
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .frame(width: 32, height: 32)
                 Text(title)
                     .font(AppTheme.Font.title3)
                     .foregroundStyle(Color.label)
@@ -869,13 +956,17 @@ private struct SettingsCard<Content: View>: View {
                 Text(subtitle)
                     .font(AppTheme.Font.caption)
                     .foregroundStyle(Color.secondaryLabel)
-                    .padding(.leading, AppTheme.Spacing.md + 4)
+                    .padding(.leading, 40)
                     .padding(.top, -4)
             }
             content()
         }
         .padding(AppTheme.Spacing.lg)
-        .modernCard(radius: AppTheme.Radius.xl, material: .thinMaterial)
+        .liquidCard(radius: AppTheme.Radius.xl,
+                    material: .thinMaterial,
+                    tint: tint,
+                    shadow: AppTheme.Shadow.card,
+                    highlight: 0.08)
     }
 }
 
@@ -912,7 +1003,7 @@ private struct AppearanceSegmented: View {
         HStack(spacing: AppTheme.Spacing.sm) {
             ForEach(AppAppearance.allCases) { mode in
                 Button {
-                    selection = mode
+                    withAnimation(AppTheme.Motion.pressInOut) { selection = mode }
                 } label: {
                     VStack(spacing: 6) {
                         Image(systemName: mode.iconName)
@@ -936,8 +1027,10 @@ private struct AppearanceSegmented: View {
                             .stroke(selection == mode ? Color.appTint.opacity(0.45) : .clear,
                                     lineWidth: AppTheme.Stroke.hair)
                     )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .pressableFeedback()
             }
         }
     }
@@ -950,7 +1043,9 @@ private struct PolicyChipPicker: View {
     var body: some View {
         HStack(spacing: AppTheme.Spacing.sm) {
             ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
-                Button { policy = p } label: {
+                Button {
+                    withAnimation(AppTheme.Motion.pressInOut) { policy = p }
+                } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(p.title)
                             .font(AppTheme.Font.subheadline.weight(.semibold))
@@ -973,8 +1068,10 @@ private struct PolicyChipPicker: View {
                             .stroke(policy == p ? Color.appTint.opacity(0.5) : .clear,
                                     lineWidth: AppTheme.Stroke.hair)
                     )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .pressableFeedback()
             }
         }
     }
@@ -989,9 +1086,31 @@ private struct DataActionRow: View {
     var busy: Bool = false
     var accessory: Accessory = .chevron
     var action: () -> Void = {}
-    @ViewBuilder var secondary: (() -> some View) = { EmptyView() }
+    /// 用 AnyView 做类型擦除：stored property 不能加 @ViewBuilder，
+    /// 也不能存 `() -> some View`（some View 不能用在 stored property）
+    let secondaryView: AnyView
 
     enum Accessory { case chevron, menu, none }
+
+    init(
+        icon: String,
+        title: String,
+        subtitle: String = "",
+        tint: Color,
+        busy: Bool = false,
+        accessory: Accessory = .chevron,
+        action: @escaping () -> Void,
+        @ViewBuilder secondary: () -> any View = { EmptyView() }
+    ) {
+        self.icon = icon
+        self.title = title
+        self.subtitle = subtitle
+        self.tint = tint
+        self.busy = busy
+        self.accessory = accessory
+        self.action = action
+        self.secondaryView = AnyView(secondary())
+    }
 
     var body: some View {
         Button(action: action) {
@@ -1020,7 +1139,7 @@ private struct DataActionRow: View {
                 if busy {
                     ProgressView().scaleEffect(0.7)
                 } else {
-                    secondary()
+                    secondaryView
                     switch accessory {
                     case .chevron:
                         Image(systemName: "chevron.right")
@@ -1036,6 +1155,7 @@ private struct DataActionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pressableFeedback()
     }
 }
 

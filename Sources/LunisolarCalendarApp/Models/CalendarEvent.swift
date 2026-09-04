@@ -1,4 +1,5 @@
 import Foundation
+import LunarCore
 
 // MARK: - 日程/记事 类型
 
@@ -10,7 +11,7 @@ public enum EventType: String, Codable, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 
     /// UI / 导出显示名；不与 SwiftFoundation 的 String.title / AttributedString.title 扩展名冲突
-    public var displayTitle: String {
+    public var uiLabel: String {
         switch self {
         case .schedule: return "日程"
         case .reminder: return "提醒"
@@ -25,6 +26,9 @@ public enum EventType: String, Codable, CaseIterable, Identifiable, Sendable {
         case .note:     return "note.text"
         }
     }
+
+    /// SwiftUI / Widget 显示用图标名（与 systemIcon 同义）
+    public var iconName: String { systemIcon }
 }
 
 // MARK: - 重复规则
@@ -40,7 +44,14 @@ public enum RepeatRule: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
     /// UI / 导出显示名；不与 Foundation String `.title` 语义扩展歧义
-    public var displayTitle: String { rawValue }
+    public var uiLabel: String { rawValue }
+    /// 列表行内的短标签 —— .never 返回 nil（列表不显示"不重复"）
+    public var displayText: String? {
+        switch self {
+        case .never: return nil
+        default:     return uiLabel
+        }
+    }
 }
 
 // MARK: - 优先级
@@ -53,7 +64,7 @@ public enum Priority: String, Codable, CaseIterable, Identifiable, Comparable, S
 
     public var id: String { rawValue }
     /// UI / 导出显示名；不与 Foundation String `.title` 语义扩展歧义
-    public var displayTitle: String { rawValue }
+    public var uiLabel: String { rawValue }
 
     var order: Int {
         switch self {
@@ -83,6 +94,8 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
     public var repeatRule: RepeatRule
     public var priority: Priority
     public var isCompleted: Bool
+    /// 提前提醒分钟数（nil = 无提醒；0 = 准时；正数 = 提前 N 分钟）
+    public var reminderOffsetMinutes: Int?
     /// 通知是否已触发（防止重复弹窗）
     public var isNotified: Bool
     public var createdAt: Date
@@ -91,7 +104,7 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
     /// CodingKeys：显式排除缓存字段
     private enum CodingKeys: String, CodingKey {
         case id, title, type, startDate, endDate, isAllDay, location, notes
-        case repeatRule, priority, isCompleted, isNotified, createdAt, updatedAt
+        case repeatRule, priority, isCompleted, reminderOffsetMinutes, isNotified, createdAt, updatedAt
     }
 
     /// 缓存 startDate 的农历转换结果（用引用类型绕过 struct 不可变性，同一事件永远不变）
@@ -119,6 +132,7 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         try c.encode(repeatRule, forKey: .repeatRule)
         try c.encode(priority, forKey: .priority)
         try c.encode(isCompleted, forKey: .isCompleted)
+        try c.encode(reminderOffsetMinutes, forKey: .reminderOffsetMinutes)
         try c.encode(isNotified, forKey: .isNotified)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(updatedAt, forKey: .updatedAt)
@@ -137,6 +151,7 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         repeatRule     = try c.decode(RepeatRule.self, forKey: .repeatRule)
         priority       = try c.decode(Priority.self, forKey: .priority)
         isCompleted    = try c.decode(Bool.self, forKey: .isCompleted)
+        reminderOffsetMinutes = try c.decodeIfPresent(Int.self, forKey: .reminderOffsetMinutes)
         isNotified     = try c.decode(Bool.self, forKey: .isNotified)
         createdAt      = try c.decode(Date.self, forKey: .createdAt)
         updatedAt      = try c.decode(Date.self, forKey: .updatedAt)
@@ -161,7 +176,8 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         notes: String? = nil,
         repeatRule: RepeatRule = .never,
         priority: Priority = .normal,
-        isCompleted: Bool = false
+        isCompleted: Bool = false,
+        reminderOffsetMinutes: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -181,6 +197,7 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         self.repeatRule = repeatRule
         self.priority = priority
         self.isCompleted = isCompleted
+        self.reminderOffsetMinutes = reminderOffsetMinutes
         self.isNotified = false
         self.createdAt = Date()
         self.updatedAt = Date()
@@ -220,8 +237,13 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
             guard let tl = targetLunar, let sl = startLunarCached else { return false }
             guard target >= start else { return false }
             guard tl.month == sl.month && tl.day == sl.day else { return false }
+            // 闰月事件逻辑：
+            // - 源事件来自闰月：目标年"有闰同月"时只匹配闰月（避免普通月也命中导致每年两次生日）；
+            //   目标年"没有闰同月"时回退为匹配普通同月同日（总不能不过生日）。
+            // - 源事件来自普通月：只匹配普通同月同日（不蹭闰月）。
             if sl.isLeapMonth {
-                return true
+                let targetHasLeap = ChineseCalendar.leapMonth(of: tl.year) == sl.month
+                return targetHasLeap ? tl.isLeapMonth : !tl.isLeapMonth
             } else {
                 return !tl.isLeapMonth
             }
@@ -234,6 +256,9 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         fmt.dateFormat = "HH:mm"
         return "\(fmt.string(from: startDate)) - \(fmt.string(from: endDate))"
     }
+
+    /// SwiftUI / Widget 显示用时间（与 timeDisplay 同义，UI 层统一用 display 前缀）
+    public var displayTimeRange: String { timeDisplay }
 
     // MARK: - 重复规则文本（列表/详情页显示 + 编辑页锚点提示）
 
@@ -322,6 +347,7 @@ extension CalendarEvent: Equatable, Hashable {
         lhs.repeatRule == rhs.repeatRule &&
         lhs.priority == rhs.priority &&
         lhs.isCompleted == rhs.isCompleted &&
+        lhs.reminderOffsetMinutes == rhs.reminderOffsetMinutes &&
         lhs.isNotified == rhs.isNotified &&
         lhs.createdAt == rhs.createdAt &&
         lhs.updatedAt == rhs.updatedAt

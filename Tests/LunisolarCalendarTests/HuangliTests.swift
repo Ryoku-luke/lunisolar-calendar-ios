@@ -1,4 +1,5 @@
 import XCTest
+import LunarCore
 @testable import LunisolarCalendarApp
 
 // MARK: - 黄历测试
