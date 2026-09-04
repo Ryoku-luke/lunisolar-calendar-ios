@@ -202,14 +202,25 @@ public struct LunarCardWidgetView: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.7))
                     .tracking(2)
-                Text("\(entry.lunar?.month ?? 0)月\(entry.lunar?.day ?? 0)")
-                    .font(.system(size: 28, weight: .heavy, design: .serif))
-                    .foregroundStyle(Color.white)
-                Text(entry.lunar?.displayString ?? "")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
+                // P3 修复：农历无数据时 (lunar=nil) 不显示 "0月0"（数字 0 作 fallback
+                //   在节日大红渐变背景上极其突兀）。以语义化占位『暂无数据』替代。
+                if let lunar = entry.lunar {
+                    Text("\(lunar.month)月\(lunar.day)")
+                        .font(.system(size: 28, weight: .heavy, design: .serif))
+                        .foregroundStyle(Color.white)
+                    Text(lunar.displayString)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                } else {
+                    Text("暂无数据")
+                        .font(.system(size: 20, weight: .heavy, design: .serif))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                    Text("请打开 App 刷新")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.75))
+                }
                 Spacer()
                 if let f = entry.festivals.first {
                     HStack(spacing: 3) {
@@ -251,14 +262,20 @@ public struct LunarCardWidgetView: View {
                         .foregroundStyle(Color.white.opacity(0.6))
                         .tracking(1.5)
                     HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Text("\(entry.lunar?.month ?? 0)")
-                            .font(.system(size: 60, weight: .black, design: .serif))
-                            .foregroundStyle(Color.white)
-                        Text("月\(entry.lunar?.day ?? 0)")
-                            .font(.system(size: 20, weight: .heavy, design: .serif))
-                            .foregroundStyle(Color.white.opacity(0.92))
+                        if let lunar = entry.lunar {
+                            Text("\(lunar.month)")
+                                .font(.system(size: 60, weight: .black, design: .serif))
+                                .foregroundStyle(Color.white)
+                            Text("月\(lunar.day)")
+                                .font(.system(size: 20, weight: .heavy, design: .serif))
+                                .foregroundStyle(Color.white.opacity(0.92))
+                        } else {
+                            Text("暂无")
+                                .font(.system(size: 56, weight: .black, design: .serif))
+                                .foregroundStyle(Color.white.opacity(0.96))
+                        }
                     }
-                    Text(entry.lunar?.yearGanZhi ?? "")
+                    Text(entry.lunar?.yearGanZhi ?? "暂无干支 · 刷新 App")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.78))
                     Text("\(entry.date.year) 年 \(entry.date.month) 月 \(entry.date.day) 日 · \(entry.date.weekdaySymbol)")
