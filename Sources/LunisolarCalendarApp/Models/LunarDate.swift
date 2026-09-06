@@ -8,24 +8,20 @@ enum LunarDataProvider {
     static let lunarInfo: [UInt32] = loadLunarInfo()
 
     private static func loadLunarInfo() -> [UInt32] {
-        // 1. 尝试从 Bundle 加载 JSON（LunisolarCalendarApp 会用自己的资源 bundle；
-        //    gen_huangli_db CLI 没有 bundle，会 fallback 到内置数据）
-        // gen_huangli_db CLI 只有 Bundle.main，也找不到 JSON → 自动 fallback 到内置数据
-        // LunisolarCalendarApp 会通过 Bundle.resources (App 里提供) 找资源 → 实际在 Bundle+Resources.swift 里 override 了
-        let candidateBundles: [Bundle] = [.main]
-        for bundle in candidateBundles {
-            if let url = bundle.url(forResource: "lunar_calendar", withExtension: "json"),
-               let data = try? Data(contentsOf: url),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let hexStrings = json["data"] as? [String] {
-                let values = hexStrings.compactMap {
-                    let hex = $0.hasPrefix("0x") ? String($0.dropFirst(2)) : $0
-                    return UInt32(hex, radix: 16)
-                }
-                if values.count == 201 { return values }
+        // 尝试从 Bundle.main 加载 lunar_calendar.json（App/Widget 运行时资源在 main bundle）。
+        // SPM 测试上下文 main bundle 不含此 JSON → 自动 fallback 到内置数据（内容一致）。
+        // 注意：不遍历 Bundle.allBundles——Linux 上部分系统 bundle 访问会触发 SIGSEGV。
+        if let url = Bundle.main.url(forResource: "lunar_calendar", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let hexStrings = json["data"] as? [String] {
+            let values = hexStrings.compactMap {
+                let hex = $0.hasPrefix("0x") ? String($0.dropFirst(2)) : $0
+                return UInt32(hex, radix: 16)
             }
+            if values.count == 201 { return values }
         }
-        // 2. Fallback：内置数据（保证即使 JSON 加载失败也能工作）
+        // Fallback：内置数据（保证即使 JSON 加载失败也能工作）
         return fallbackLunarInfo
     }
 
