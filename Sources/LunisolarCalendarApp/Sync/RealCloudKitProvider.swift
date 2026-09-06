@@ -562,7 +562,9 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             let rid = ckError.serverRecord?.recordID.recordName ?? ""
             return .conflict(rid)
         case .unknownItem:
-            return .recordNotFound("")
+            // P3 修复：旧代码返回空 recordID，丢失诊断信息（日志/UI 提示无法定位是哪条记录）。
+            //   CKError.recordID 在 .unknownItem 时通常已填充，取 recordName 透出。
+            return .recordNotFound(ckError.recordID?.recordName ?? "")
         case .constraintViolation:
             return .invalidPayload(ckError.localizedDescription)
         default:
