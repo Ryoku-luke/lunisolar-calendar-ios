@@ -223,11 +223,8 @@ public enum DataPortability {
         }
 
         var idx = 0
-        let dfmtUTC = DateFormatter()
-        dfmtUTC.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
-        dfmtUTC.timeZone = TimeZone(identifier: "UTC")
-        let dfmtLocal = DateFormatter()
-        dfmtLocal.dateFormat = "yyyyMMdd'T'HHmmss"
+        // P2 修复：非全天 DTSTART/DTEND 现在走 parseICSDateTime（支持 TZID/UTC/floating），
+        //   不再需要预先创建 dfmtUTC/dfmtLocal。
         let dfmtAllDay = DateFormatter()
         dfmtAllDay.dateFormat = "yyyyMMdd"
         dfmtAllDay.timeZone = TimeZone(identifier: "UTC")
@@ -253,7 +250,12 @@ public enum DataPortability {
                     let vline = lines[idx]
                     let parts = vline.split(separator: ":", maxSplits: 1)
                     guard parts.count == 2 else { idx += 1; continue }
-                    let key = parts[0].uppercased()
+                    // P2 修复：TZID 的值是 IANA 时区标识符（大小写敏感，如 "America/New_York"）。
+                    //   key 的参数名（DTSTART/TZID/VALUE）不区分大小写，但 TZID 的值必须保留原始大小写，
+                    //   否则 TimeZone(identifier:) 找不到对应时区 → 回退本地时间 → 跨时区事件时间错误。
+                    //   因此保留 rawKey 用于提取 TZID，keyUpper 仅用于前缀匹配。
+                    let rawKey = String(parts[0])
+                    let key = rawKey.uppercased()
                     let value = String(parts[1])
 
                     if key.hasPrefix("UID") {
@@ -263,7 +265,7 @@ public enum DataPortability {
                     } else if key.hasPrefix("DTSTART") {
                         if key.contains("VALUE=DATE") {
                             if let d = dfmtAllDay.date(from: value) { startDate = d; isAllDay = true; hasStart = true }
-                        } else if let d = dfmtUTC.date(from: value) ?? dfmtLocal.date(from: value) {
+                        } else if let d = parseICSDateTime(value, tzid: tzidFromRawKey(rawKey)) {
                             startDate = d; hasStart = true
                         }
                     } else if key.hasPrefix("DTEND") {
@@ -276,7 +278,7 @@ public enum DataPortability {
                                 endDate = d.addingTimeInterval(-1)
                                 hasEnd = true
                             }
-                        } else if let d = dfmtUTC.date(from: value) ?? dfmtLocal.date(from: value) {
+                        } else if let d = parseICSDateTime(value, tzid: tzidFromRawKey(rawKey)) {
                             endDate = d; hasEnd = true
                         }
                     } else if key.hasPrefix("LOCATION") {
@@ -417,6 +419,49 @@ public enum DataPortability {
             return .weekly
         }
         return nil
+    }
+
+    // MARK: - ICS 辅助：TZID 时区解析（P2 修复）
+
+    /// 从 ICS 属性原始 key 中提取 TZID 参数值（保留原始大小写）。
+    /// 例：`DTSTART;TZID=America/New_York` → `"America/New_York"`
+    /// IANA 时区标识符大小写敏感，因此必须用未大写化的 rawKey。
+    private static func tzidFromRawKey(_ rawKey: String) -> String? {
+        // 参数名 TZID 不区分大小写；用 caseInsensitive 搜索后精确截取值
+        guard let range = rawKey.range(of: "TZID=", options: .caseInsensitive) else { return nil }
+        var rest = rawKey[range.upperBound...]
+        if let semi = rest.firstIndex(of: ";") {
+            rest = rest[..<semi]
+        }
+        let tzid = String(rest).trimmingCharacters(in: .whitespaces)
+        return tzid.isEmpty ? nil : tzid
+    }
+
+    /// 解析 ICS DATE-TIME 值，正确处理三种时区语义：
+    /// 1) 末尾带 `Z` → UTC（RFC 5545 全局时间）
+    /// 2) 带 `TZID=...` 参数 → 按该 IANA 时区解析
+    /// 3) 既无 Z 也无 TZID → floating time（按设备本地时区解释）
+    ///
+    /// P2 修复：旧实现只尝试 UTC 格式（带 Z）然后直接按本地时间解析，
+    ///   完全忽略 TZID。跨时区日历（如 Google Calendar 导出的纽约会议）
+    ///   导入后时间会错位数小时。
+    private static func parseICSDateTime(_ value: String, tzid: String?) -> Date? {
+        if value.hasSuffix("Z") {
+            let dfmt = DateFormatter()
+            dfmt.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+            dfmt.timeZone = TimeZone(identifier: "UTC")
+            return dfmt.date(from: value)
+        }
+        if let tzid, !tzid.isEmpty, let tz = TimeZone(identifier: tzid) {
+            let dfmt = DateFormatter()
+            dfmt.dateFormat = "yyyyMMdd'T'HHmmss"
+            dfmt.timeZone = tz
+            return dfmt.date(from: value)
+        }
+        // floating time：无 Z 无 TZID，按设备本地时区
+        let dfmt = DateFormatter()
+        dfmt.dateFormat = "yyyyMMdd'T'HHmmss"
+        return dfmt.date(from: value)
     }
 
     /// 为导入的事件生成稳定伪 UUID：优先用 ics UID 做 hash + seed；否则用 (title, start, end, allDay)。

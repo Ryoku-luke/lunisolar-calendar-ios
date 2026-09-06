@@ -91,6 +91,60 @@ final class DataPortabilityTests: XCTestCase {
         XCTAssertTrue(workday!.isAllDay)
     }
 
+    /// P2 回归：ICS 带 TZID 的事件必须按时区正确解析，而非按设备本地时间。
+    /// 旧实现忽略 TZID，跨时区日历（如 Google Calendar 纽约会议）导入后时间错位。
+    func testICSImportRespectsTZIDTimezone() {
+        let ics = """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:tzid-ny-meeting
+        DTSTAMP:20240101T000000Z
+        DTSTART;TZID=America/New_York:20240101T120000
+        DTEND;TZID=America/New_York:20240101T130000
+        SUMMARY:纽约会议
+        END:VEVENT
+        END:VCALENDAR
+        """
+        let events = DataPortability.importICS(ics)
+        XCTAssertEqual(events.count, 1)
+        let ev = events[0]
+
+        // 2024-01-01 12:00 America/New_York (EST, UTC-5) = 2024-01-01 17:00 UTC
+        let dfmt = DateFormatter()
+        dfmt.dateFormat = "yyyy-MM-dd HH:mm"
+        dfmt.timeZone = TimeZone(identifier: "UTC")
+        let expectedStart = dfmt.date(from: "2024-01-01 17:00")!
+        let expectedEnd = dfmt.date(from: "2024-01-01 18:00")!
+
+        XCTAssertEqual(ev.startDate, expectedStart,
+                       "DTSTART 带 TZID=America/New_York 应按纽约时区解析，而非设备本地时间")
+        XCTAssertEqual(ev.endDate, expectedEnd,
+                       "DTEND 带 TZID=America/New_York 应按纽约时区解析")
+    }
+
+    /// P2 回归：UTC（末尾 Z）与 floating time（无 Z 无 TZID）解析路径仍然正确。
+    func testICSImportUTCAndFloatingTime() {
+        let ics = """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:utc-event
+        DTSTART:20240101T120000Z
+        DTEND:20240101T130000Z
+        SUMMARY:UTC 事件
+        END:VEVENT
+        END:VCALENDAR
+        """
+        let events = DataPortability.importICS(ics)
+        XCTAssertEqual(events.count, 1)
+        let dfmt = DateFormatter()
+        dfmt.dateFormat = "yyyy-MM-dd HH:mm"
+        dfmt.timeZone = TimeZone(identifier: "UTC")
+        XCTAssertEqual(events[0].startDate, dfmt.date(from: "2024-01-01 12:00")!,
+                       "带 Z 的 DTSTART 应按 UTC 解析")
+    }
+
     // merge 基础：无冲突统计正确
     @MainActor
     func testMergeResultCounters() {
