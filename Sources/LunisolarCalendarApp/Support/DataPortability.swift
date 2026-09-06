@@ -117,7 +117,15 @@ public enum DataPortability {
 
             if event.isAllDay {
                 lines.append("DTSTART;VALUE=DATE:\(dfmtAllDay.string(from: event.startDate))")
-                lines.append("DTEND;VALUE=DATE:\(dfmtAllDay.string(from: event.endDate))")
+                // P2 修复：RFC 5545 §3.8.2.2 规定 DATE 类型的 DTEND 是**排他**的
+                //   （即"不含这一天"）。本 App 内部把全天事件 endDate 存为当日 23:59:59
+                //   （inclusive），若直接格式化导出会得到 DTEND == DTSTART，
+                //   跨日历（Google/Apple/Outlook）导入时显示为 0 时长事件甚至不显示。
+                //   修复：DTEND 取 endDate 所在日期的**次日**，符合 RFC 排他语义。
+                //   例：9/6 全天 → DTSTART=20260906, DTEND=20260907。
+                let exclusiveEnd = Calendar(identifier: .gregorian)
+                    .date(byAdding: .day, value: 1, to: event.endDate) ?? event.endDate
+                lines.append("DTEND;VALUE=DATE:\(dfmtAllDay.string(from: exclusiveEnd))")
             } else {
                 lines.append("DTSTART:\(dfmt.string(from: event.startDate))")
                 lines.append("DTEND:\(dfmt.string(from: event.endDate))")
@@ -260,7 +268,14 @@ public enum DataPortability {
                         }
                     } else if key.hasPrefix("DTEND") {
                         if key.contains("VALUE=DATE") {
-                            if let d = dfmtAllDay.date(from: value) { endDate = d; hasEnd = true }
+                            // P2 修复：RFC 5545 DATE 类型 DTEND 是排他的（不含当天）。
+                            //   本 App 全天事件 endDate 存为当日 23:59:59（inclusive）。
+                            //   导入时把排他 DTEND（次日 00:00）转回 inclusive（当日 23:59:59），
+                            //   即 endDate = exclusiveEnd - 1 秒。避免单日事件被拉成跨两天。
+                            if let d = dfmtAllDay.date(from: value) {
+                                endDate = d.addingTimeInterval(-1)
+                                hasEnd = true
+                            }
                         } else if let d = dfmtUTC.date(from: value) ?? dfmtLocal.date(from: value) {
                             endDate = d; hasEnd = true
                         }
@@ -290,7 +305,9 @@ public enum DataPortability {
                 }
 
                 if hasStart {
-                    if !hasEnd { endDate = startDate.addingTimeInterval(3600) }
+                    // P2 修复：全天事件无 DTEND 时，兜底应为整日（+86399）而非 +3600。
+                    //   否则导入的全天事件 endDate=start+1h，跨日显示/occurs 判断会异常。
+                    if !hasEnd { endDate = startDate.addingTimeInterval(isAllDay ? 86_399 : 3_600) }
                     // ICS 进来的事件没有稳定主键（UID 是对方日历的UUID，且不一定存在）。
                     // 为了让「重复导入不会产生副本」，我们用 (title, start, end, isAllDay) 哈希拼伪 UID
                     // 同时保存导入源 UID 以便 merge 时去重。
