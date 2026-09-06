@@ -236,7 +236,21 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
             let targetLunar = ChineseCalendar.lunarDateSafe(from: date)
             guard let tl = targetLunar, let sl = startLunarCached else { return false }
             guard target >= start else { return false }
-            guard tl.month == sl.month && tl.day == sl.day else { return false }
+            // P2 修复：农历"三十"生日 fallback。
+            //   农历月份有大小月之分（29 或 30 天）。若用户出生在"腊月三十"，
+            //   但目标年的腊月只有 29 天（即没有三十），严格匹配 day==30 会导致
+            //   该年不显示/不提醒生日。正确做法：源日=30 且目标月仅 29 天时，
+            //   回退匹配廿九（民间惯例"二十九当三十过"）。
+            let daysInTargetMonth = ChineseCalendar.daysInLunarMonth(
+                year: tl.year, month: tl.month, isLeap: tl.isLeapMonth
+            )
+            let dayMatches: Bool
+            if sl.day == 30 && daysInTargetMonth == 29 {
+                dayMatches = tl.month == sl.month && tl.day == 29
+            } else {
+                dayMatches = tl.month == sl.month && tl.day == sl.day
+            }
+            guard dayMatches else { return false }
             // 闰月事件逻辑：
             // - 源事件来自闰月：目标年"有闰同月"时只匹配闰月（避免普通月也命中导致每年两次生日）；
             //   目标年"没有闰同月"时回退为匹配普通同月同日（总不能不过生日）。
