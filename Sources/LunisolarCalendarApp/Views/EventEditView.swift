@@ -217,7 +217,7 @@ struct EventEditView: View {
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]) {
                         Label("结束", systemImage: "clock.badge.checkmark").font(AppTheme.Font.body)
                     }.environment(\.calendar, gregorian).datePickerStyle(.compact)
-                        .onChange(of: startDate, initial: false) { _, newVal in
+                        .onChange(of: startDate, initial: false) { newVal in
                             if endDate < newVal { endDate = newVal }
                         }
                 } else {
