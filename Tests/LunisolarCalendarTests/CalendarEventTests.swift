@@ -383,6 +383,53 @@ final class CalendarEventTests: XCTestCase {
         XCTAssertNotEqual(wrongComps.day, effComps.day, "3/15 不应该等于 effective 的 14")
     }
 
+    // MARK: P2 回归：农历"三十"生日在该月仅 29 天的年份回退到廿九
+    //
+    // 旧 bug：occurs(on:) 严格匹配 tl.day == sl.day。若用户出生在"腊月三十"，
+    //   但目标年的腊月只有 29 天（即没有三十），该年生日不显示/不提醒。
+    //   修复：源日=30 且目标月仅 29 天时，回退匹配廿九（民间"二十九当三十过"）。
+    func testLunarAnnuallyDay30FallsBackToDay29() {
+        // 1) 找一个"腊月有 30 天"的年份作为出生年
+        var anchorYear: Int?
+        for y in 2000...2020 {
+            if ChineseCalendar.daysInLunarMonth(year: y, month: 12, isLeap: false) == 30 {
+                anchorYear = y; break
+            }
+        }
+        guard let ay = anchorYear else {
+            XCTFail("未找到腊月有 30 天的年份"); return
+        }
+        guard let anchorSolar = ChineseCalendar.solarDate(
+            fromLunar: ay, month: 12, day: 30, isLeap: false
+        ) else { XCTFail("无法计算腊月三十的公历日期"); return }
+        let ev = CalendarEvent(title: "腊月三十生日", startDate: anchorSolar, repeatRule: .lunarAnnually)
+
+        // 2) 找一个"腊月只有 29 天"的年份（> 出生年）
+        var targetYear: Int?
+        for y in (ay + 1)...2035 {
+            if ChineseCalendar.daysInLunarMonth(year: y, month: 12, isLeap: false) == 29 {
+                targetYear = y; break
+            }
+        }
+        guard let ty = targetYear else {
+            XCTFail("未找到腊月只有 29 天的年份"); return
+        }
+        guard let targetSolar = ChineseCalendar.solarDate(
+            fromLunar: ty, month: 12, day: 29, isLeap: false
+        ) else { XCTFail("无法计算目标年腊月廿九的公历日期"); return }
+
+        // 3) 腊月三十生日在该月仅 29 天的年份应匹配廿九
+        XCTAssertTrue(ev.occurs(on: targetSolar),
+                      "腊月三十生日在该月只有 29 天的年份应回退匹配廿九（P2 回归）")
+
+        // 4) 同年的腊月廿八不应匹配（确保没有过度 fallback）
+        guard let day28Solar = ChineseCalendar.solarDate(
+            fromLunar: ty, month: 12, day: 28, isLeap: false
+        ) else { XCTFail(); return }
+        XCTAssertFalse(ev.occurs(on: day28Solar),
+                       "腊月三十生日不应匹配廿八（防止过度 fallback）")
+    }
+
     // MARK: - Helper（与 NotificationManager 调度守卫保持语义一致）
     // 注：如果 NM 里的守卫再变更，这里也要同步更新——它是逻辑的镜像。
     private func notificationIsEligibleForScheduling(_ ev: CalendarEvent) -> Bool {

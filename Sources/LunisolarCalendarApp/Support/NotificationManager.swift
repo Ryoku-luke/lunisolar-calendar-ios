@@ -95,8 +95,16 @@ public final class NotificationManager {
                 try await center.add(req)
             }
             if rule == .never {
-                // 单次提醒：标记已通知，下次 reschedule 时会跳过
-                EventStore.shared.markNotified(event)
+                // P2 修复：单次提醒只在「已授权」时才标记已通知。
+                //   UNUserNotificationCenter.add(_:) 在权限被拒/未确定时不抛错，
+                //   但通知实际不会送达。若此时 markNotified=true，后续用户授权后
+                //   rescheduleAllReminders 会因 isNotified=true 跳过该事件，
+                //   导致提醒永远不响（典型"看得见不会响"）。
+                //   未授权时留 isNotified=false，授权后 reschedule 会重新调度。
+                let status = await authorizationStatusAsync()
+                if status == .granted {
+                    EventStore.shared.markNotified(event)
+                }
             }
             // 有重复规则的事件永远不 markNotified —— 它们依赖 UNCalendarNotificationTrigger
             // 的内置 repeats 或每次 rescheduleAllReminders 来续上
@@ -280,9 +288,15 @@ public final class NotificationManager {
             } else {
                 useLeap = false
             }
+            // P2 修复：农历"三十"生日 fallback（与 occurs(on:) 语义保持一致）。
+            //   目标年该月只有 29 天时，回退到廿九，避免该年生日提醒被跳过。
+            let daysInMonth = ChineseCalendar.daysInLunarMonth(
+                year: year, month: lunar.month, isLeap: useLeap
+            )
+            let targetDay = (lunar.day == 30 && daysInMonth == 29) ? 29 : lunar.day
             guard let solar = ChineseCalendar.solarDate(
                 fromLunar: year, month: lunar.month,
-                day: lunar.day, isLeap: useLeap
+                day: targetDay, isLeap: useLeap
             ) else { continue }
 
             if let finalDate = gregorian.date(
