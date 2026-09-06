@@ -263,20 +263,39 @@ public final class NotificationManager {
     /// ⚠️ 语义必须与 CalendarEvent.occurs(on:) 的 lunarAnnually 分支保持一致：
     /// - 闰月源事件：目标年「有闰同月」→ 用闰月匹配；目标年「无闰同月」→ 回退普通同月同日匹配。
     /// - 普通月源事件：只匹配普通同月同日（不蹭闰月）。
+    ///
+    /// P1 修复：旧实现 `for year in lunar.year...lunar.year+16`——若事件起始日期距今
+    ///   超过 16 年（如农历生日从出生日起算），整个搜索区间落在过去，返回 nil，
+    ///   导致农历生日/纪念日提醒永不触发。修复：从「今天所在的农历年」开始往后搜。
     private func nextSolarDateForLunarAnnually(
         lunarSource: Date,
         timeSource: Date
     ) -> Date? {
-        guard let lunar = ChineseCalendar.lunarDateSafe(from: lunarSource) else { return nil }
+        Self.nextSolarDateForLunarAnniversary(lunarSource: lunarSource, timeSource: timeSource, now: Date())
+    }
+    #endif
 
+    // MARK: - 农历周年纯函数（可在 Linux 测试，不依赖 UserNotifications）
+
+    /// 纯函数版：计算未来第一个匹配农历月/日的公历日期。
+    /// 抽出到 #if canImport(UserNotifications) 之外，便于 Linux 单元测试覆盖。
+    nonisolated static func nextSolarDateForLunarAnniversary(
+        lunarSource: Date,
+        timeSource: Date,
+        now: Date
+    ) -> Date? {
+        guard let lunar = ChineseCalendar.lunarDateSafe(from: lunarSource) else { return nil }
+        let gregorian = Calendar(identifier: .gregorian)
         let refComponents = gregorian.dateComponents(
             [.hour, .minute, .second], from: timeSource
         )
 
-        let now = Date()
-        // 从 refDate 所在农历年份往后搜最多 16 年（覆盖 minYear..maxYear=2100）
-        let upperBound = min(ChineseCalendar.maxYear, lunar.year + 16)
-        for year in lunar.year...upperBound {
+        // P1 修复：从「今天所在的农历年」开始搜，而非事件创建时的 lunar.year。
+        let currentLunarYear = ChineseCalendar.lunarDateSafe(from: now)?.year ?? lunar.year
+        let startYear = max(lunar.year, currentLunarYear)
+        let upperBound = min(ChineseCalendar.maxYear, startYear + 16)
+
+        for year in startYear...upperBound {
             // 按 occurs 语义决定是否用闰月：
             // - 源是闰月 + 今年有相同闰月 → 闰月匹配
             // - 源是闰月 + 今年无相同闰月 → 回退普通月匹配
@@ -288,8 +307,8 @@ public final class NotificationManager {
             } else {
                 useLeap = false
             }
-            // P2 修复：农历"三十"生日 fallback（与 occurs(on:) 语义保持一致）。
-            //   目标年该月只有 29 天时，回退到廿九，避免该年生日提醒被跳过。
+            // 农历"三十"生日 fallback（与 occurs(on:) 语义保持一致）：
+            // 目标年该月只有 29 天时回退到廿九，避免该年提醒被跳过。
             let daysInMonth = ChineseCalendar.daysInLunarMonth(
                 year: year, month: lunar.month, isLeap: useLeap
             )
@@ -310,7 +329,6 @@ public final class NotificationManager {
         }
         return nil
     }
-    #endif
 }
 
 // MARK: - 授权状态枚举
