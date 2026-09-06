@@ -181,4 +181,46 @@ final class DataPortabilityTests: XCTestCase {
         // \r\n 应还原为单个 \n
         XCTAssertEqual(parsed[0].title, "第一行\n第二行")
     }
+
+    // MARK: P2 回归：ICS 全天事件 DTEND 排他语义
+    //
+    // RFC 5545 §3.8.2.2：DATE 类型 DTEND 是**排他**的（不含当天）。
+    // 旧 bug：
+    //   - 导出：直接把 endDate（inclusive，当日 23:59:59）格式化为 DTEND，
+    //     得到 DTEND == DTSTART → 跨日历导入显示为 0 时长事件。
+    //   - 导入：把排他 DTEND（次日 00:00）直接当 endDate，单日事件被拉成跨两天。
+    // 修复：
+    //   - 导出：DTEND = endDate 日期 + 1 天。
+    //   - 导入：endDate = exclusive DTEND - 1 秒（转回 inclusive 23:59:59）。
+    func testICSAllDayDTENDEndDateExclusiveSemantics() {
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 6
+        let start = cal.date(from: dc)!
+        // 全天事件：endDate 约定为当日 23:59:59
+        let ev = CalendarEvent(
+            id: UUID(),
+            title: "中秋全天",
+            startDate: start,
+            isAllDay: true
+        )
+
+        // 1) 导出：DTEND 应为次日（排他）
+        let ics = DataPortability.exportICS(from: [ev])
+        XCTAssertTrue(ics.contains("DTSTART;VALUE=DATE:20260906"),
+                      "DTSTART 应为 20260906")
+        XCTAssertTrue(ics.contains("DTEND;VALUE=DATE:20260907"),
+                      "全天事件 DTEND 应为次日（排他），实际 ICS：\n\(ics)")
+
+        // 2) 重新导入：endDate 应回到 inclusive（当日 23:59:59），不应跨到 9/7
+        let parsed = DataPortability.importICS(ics)
+        XCTAssertEqual(parsed.count, 1)
+        let back = parsed[0]
+        XCTAssertTrue(back.isAllDay)
+        let startComps = cal.dateComponents([.year, .month, .day], from: back.startDate)
+        let endComps = cal.dateComponents([.year, .month, .day], from: back.endDate)
+        XCTAssertEqual(startComps.day, 6)
+        XCTAssertEqual(endComps.day, 6,
+                       "导入后全天事件 endDate 不应跨到次日（排他 DTEND 应转回 inclusive）")
+    }
 }
