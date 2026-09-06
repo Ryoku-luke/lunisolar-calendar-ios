@@ -50,7 +50,7 @@ struct LunisolarCalendarApp: App {
                 }
                 // P2 修复：App 进入后台/失活时，把 EventStore + CountdownStore 的防抖
                 //   保存立即落盘，避免 0.5s 防抖窗口内系统终止进程导致最新 CRUD 丢失。
-                .onChange(of: scenePhase) { _, newPhase in
+                .onChange(of: scenePhase) { newPhase in
                     if newPhase == .background || newPhase == .inactive {
                         store.flushPendingSave()
                         countdownStore.flushPendingSave()
