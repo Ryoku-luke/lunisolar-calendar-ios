@@ -22,6 +22,10 @@ struct LunisolarCalendarApp: App {
     /// 外观偏好：跟随系统 / 浅色 / 深色
     @AppStorage("Lunisolar.appearance") private var appearanceRaw: String = AppAppearance.system.rawValue
 
+    /// 场景生命周期：用于在 App 进入后台时把防抖保存立即落盘
+    /// （P2：EventStore/CountdownStore 的 0.5s 防抖在后台终止时可能来不及落盘）
+    @Environment(\.scenePhase) private var scenePhase
+
     private var appearance: AppAppearance {
         AppAppearance(rawValue: appearanceRaw) ?? .system
     }
@@ -43,6 +47,14 @@ struct LunisolarCalendarApp: App {
                 }
                 .task {
                     await setupCloudSyncIfNeeded()
+                }
+                // P2 修复：App 进入后台/失活时，把 EventStore + CountdownStore 的防抖
+                //   保存立即落盘，避免 0.5s 防抖窗口内系统终止进程导致最新 CRUD 丢失。
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .background || newPhase == .inactive {
+                        store.flushPendingSave()
+                        countdownStore.flushPendingSave()
+                    }
                 }
         }
     }

@@ -439,4 +439,34 @@ final class EventStoreTests: XCTestCase {
         // 宽松性能断言：3000ms 以内（Linux 沙箱可能较慢）
         XCTAssertLessThan(ms, 3000, "P6 基准超时 \(ms)ms，通常意味着回退到了 O(N²)")
     }
+
+    // MARK: P2 回归：flushPendingSave 在防抖窗口内立即落盘，新实例可读
+    //
+    // 旧 bug：save() 用 0.5s Task.sleep 防抖。若 add/update/delete 后 0.5s 内 App
+    //   被系统在后台终止，Task.sleep 不会被唤醒，最新变更未落盘 → 下次启动数据丢失。
+    //   修复：新增 flushPendingSave()，并在 App scenePhase==.background/.inactive
+    //   时调用。本测试模拟"CRUD 后立即 flush → 新实例能读到"，等价于后台 flush 的落盘语义。
+    func testFlushPendingSavePersistsWithinDebounceWindow() {
+        let baseDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("lunisolar-flush-test-\(UUID().uuidString)", isDirectory: true)
+        // ensure clean dir
+        try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
+
+        // 1) store1：新增事件 → 触发防抖 save（0.5s 内不会自然落盘）
+        let store1 = EventStore(storageBaseDir: baseDir)
+        _ = store1.clearAll(skipSync: true)
+        let ev = CalendarEvent(title: "后台 flush 测试", startDate: Date())
+        store1.add(ev, skipSync: true)
+
+        // 2) 不等待 0.5s，直接 flush（模拟 App 进入后台时的生命周期调用）
+        store1.flushPendingSave()
+
+        // 3) store2：用同一 baseDir 重新加载，应能读到事件
+        let store2 = EventStore(storageBaseDir: baseDir)
+        let found = store2.events.contains { $0.id == ev.id }
+        XCTAssertTrue(found, "flushPendingSave 后新实例应能读到防抖窗口内的新增事件（P2 回归）")
+
+        // 清理
+        try? FileManager.default.removeItem(at: baseDir)
+    }
 }

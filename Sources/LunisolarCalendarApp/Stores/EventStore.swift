@@ -675,6 +675,23 @@ public final class EventStore {
         saveNow()
     }
 
+    /// 生产用：把挂起的防抖落盘立即执行。
+    ///
+    /// P2 修复：`save()` 用 0.5s `Task.sleep` 防抖合并连续 CRUD。若用户在防抖窗口内
+    ///   把 App 切到后台（或系统在后台终止进程），`Task.sleep` 不会被唤醒，最新的
+    ///   add/update/delete 就来不及落盘 → 下次启动数据丢失。
+    ///
+    /// 调用时机：App 进入 `.background` / `.inactive`（scenePhase）、用户手动保存
+    ///   后立即 dismiss 等"窗口即将关闭"的节点。
+    ///
+    /// 注：与 CountdownStore.flushPendingSave() 语义一致。
+    @MainActor
+    public func flushPendingSave() {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
+        saveNow()
+    }
+
     // MARK: - Dirty/Deleted 标记持久化（P4）
 
     /// 启动时从 Documents 恢复 dirty/deleted id；文件不存在/损坏 = 空集合（保守策略：不丢失推送）
