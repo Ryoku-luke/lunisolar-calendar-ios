@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>清和日历 · macOS 26 + Xcode 26 编译与发布图文教程</title>
+<style>
+  :root {
+    --tint: #3d63de;
+    --tint-dark: #2a4bd6;
+    --bg: #f7f7fb;
+    --card: #ffffff;
+    --text: #1c1c1e;
+    --text-2: #3c3c43;
+    --text-3: #8e8e93;
+    --border: #e5e5ea;
+    --green: #34c759;
+    --orange: #ff9500;
+    --red: #ff3b30;
+    --yellow-bg: #fff8e1;
+    --yellow-border: #ffe082;
+    --blue-bg: #e3f2fd;
+    --blue-border: #90caf9;
+    --green-bg: #e8f5e9;
+    --green-border: #a5d6a7;
+    --red-bg: #ffebee;
+    --red-border: #ef9a9a;
+    --radius: 16px;
+    --code-bg: #1e1e2e;
+    --code-fg: #e4e4ef;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--tint); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ===== 顶部封面 ===== */
+  .cover {
+    position: relative;
+    min-height: 460px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #1a3a8f 0%, #4a2fb0 45%, #d96a2c 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #fff;
+    padding: 60px 24px;
+  }
+  .cover::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(255,255,255,0.18), transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(255,180,80,0.22), transparent 45%);
+  }
+  .cover-content { position: relative; z-index: 2; max-width: 760px; }
+  .cover h1 {
+    font-size: 42px; font-weight: 800; letter-spacing: -0.5px;
+    margin-bottom: 16px; text-shadow: 0 2px 16px rgba(0,0,0,0.35);
+  }
+  .cover p { font-size: 17px; opacity: 0.96; margin-bottom: 8px; }
+  .cover .meta {
+    display: inline-flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    margin-top: 22px;
+  }
+  .cover .chip {
+    padding: 7px 16px; border-radius: 999px;
+    background: rgba(255,255,255,0.18); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.28); font-size: 14px; font-weight: 600;
+  }
+
+  /* ===== 容器 ===== */
+  .container { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+
+  /* ===== 目录 ===== */
+  .toc {
+    margin: -40px auto 40px; background: var(--card); border-radius: var(--radius);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.08); padding: 28px 32px;
+    position: relative; z-index: 5;
+  }
+  .toc h2 { font-size: 18px; margin-bottom: 14px; color: var(--tint); }
+  .toc ol { list-style: none; counter-reset: toc; }
+  .toc li { counter-increment: toc; padding: 6px 0; }
+  .toc li::before {
+    content: counter(toc, decimal-leading-zero);
+    color: var(--text-3); font-weight: 700; margin-right: 12px; font-variant-numeric: tabular-nums;
+  }
+  .toc a { color: var(--text-2); font-weight: 500; }
+
+  /* ===== 章节 ===== */
+  section { margin: 48px 0; }
+  h2.section-title {
+    font-size: 28px; font-weight: 800; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  h2.section-title .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 42px; height: 42px; border-radius: 12px;
+    background: var(--tint); color: #fff; font-size: 18px; font-weight: 800;
+    flex-shrink: 0;
+  }
+  .section-sub { color: var(--text-3); font-size: 15px; margin-bottom: 24px; }
+
+  h3 { font-size: 19px; margin: 28px 0 12px; font-weight: 700; }
+  h4 { font-size: 16px; margin: 18px 0 8px; font-weight: 600; color: var(--text-2); }
+
+  p { margin-bottom: 14px; }
+  ul, ol { margin: 10px 0 16px 24px; }
+  li { margin-bottom: 6px; }
+
+  /* ===== 卡片 / 提示 ===== */
+  .card {
+    background: var(--card); border-radius: var(--radius); padding: 22px 26px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05); margin: 18px 0;
+  }
+  .callout {
+    border-radius: 12px; padding: 16px 20px; margin: 18px 0;
+    border-left: 4px solid;
+  }
+  .callout.info { background: var(--blue-bg); border-color: var(--blue-border); }
+  .callout.warn { background: var(--yellow-bg); border-color: var(--yellow-border); }
+  .callout.danger { background: var(--red-bg); border-color: var(--red-border); }
+  .callout.ok { background: var(--green-bg); border-color: var(--green-border); }
+  .callout strong { display: block; margin-bottom: 4px; }
+
+  /* ===== 代码块 ===== */
+  pre {
+    background: var(--code-bg); color: var(--code-fg); border-radius: 12px;
+    padding: 18px 22px; overflow-x: auto; margin: 14px 0;
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 14px; line-height: 1.6;
+  }
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    background: rgba(61,99,222,0.1); color: var(--tint-dark);
+    padding: 2px 7px; border-radius: 6px; font-size: 13.5px;
+  }
+  pre code { background: none; color: inherit; padding: 0; }
+
+  /* ===== 表格 ===== */
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    background: var(--card); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05); font-size: 14.5px;
+  }
+  th { background: var(--tint); color: #fff; text-align: left; padding: 12px 16px; font-weight: 600; }
+  td { padding: 11px 16px; border-top: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: #fafafc; }
+
+  /* ===== 步骤 ===== */
+  .step {
+    display: flex; gap: 16px; margin: 18px 0; align-items: flex-start;
+  }
+  .step .idx {
+    flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+    background: var(--tint); color: #fff; display: flex; align-items: center;
+    justify-content: center; font-weight: 700; font-size: 15px;
+  }
+  .step .body { flex: 1; padding-top: 2px; }
+
+  /* ===== SVG 图 ===== */
+  .diagram {
+    background: var(--card); border-radius: var(--radius); padding: 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05); margin: 20px 0; overflow-x: auto;
+  }
+  .diagram svg { width: 100%; height: auto; display: block; }
+  .diagram-caption { text-align: center; color: var(--text-3); font-size: 13px; margin-top: 10px; }
+
+  /* ===== 页脚 ===== */
+  footer {
+    text-align: center; color: var(--text-3); font-size: 13px;
+    padding: 40px 24px; border-top: 1px solid var(--border); margin-top: 60px;
+  }
+
+  @media (max-width: 600px) {
+    .cover h1 { font-size: 30px; }
+    h2.section-title { font-size: 22px; }
+    .toc { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ 封面 ============ -->
+<div class="cover">
+  <div class="cover-content">
+    <h1>清和日历 · 编译与发布图文教程</h1>
+    <p>基于 <strong>macOS 26 (Tahoe)</strong> 与 <strong>Xcode 26</strong>，从打开仓库到上架 App Store 的完整流程</p>
+    <p>Swift 6 严格并发 · 纯 SwiftPM 工程 · 零第三方依赖</p>
+    <div class="meta">
+      <span class="chip">Xcode 26</span>
+      <span class="chip">Swift 6.1+</span>
+      <span class="chip">iOS 17+ / iOS 26</span>
+      <span class="chip">macOS 26 Tahoe</span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ============ 目录 ============ -->
+<nav class="toc">
+  <h2>📑 目录</h2>
+  <ol>
+    <li><a href="#overview">整体流程一览</a></li>
+    <li><a href="#env">环境要求与自检</a></li>
+    <li><a href="#structure">项目结构与 Target 体系</a></li>
+    <li><a href="#open">用 Xcode 26 打开 Package.swift</a></li>
+    <li><a href="#host">创建宿主 App Target</a></li>
+    <li><a href="#run">编译 & 在模拟器运行</a></li>
+    <li><a href="#test">单元测试（68 cases）</a></li>
+    <li><a href="#widget">Widget 小组件 Extension</a></li>
+    <li><a href="#perms">权限：通知 / 通讯录 / 日历</a></li>
+    <li><a href="#icloud">iCloud · CloudKit 同步</a></li>
+    <li><a href="#huangli">黄历离散数据库生成器</a></li>
+    <li><a href="#ipad">iPad 适配</a></li>
+    <li><a href="#store">Archive & App Store 发布</a></li>
+    <li><a href="#faq">常见问题 FAQ</a></li>
+  </ol>
+</nav>
+
+<!-- ============ 1. 整体流程 ============ -->
+<section id="overview">
+  <h2 class="section-title"><span class="num">1</span>整体流程一览</h2>
+  <p class="section-sub">本项目是 <strong>SwiftPM 纯工程</strong>（仓库里没有 <code>.xcodeproj</code>）。Xcode 打开 <code>Package.swift</code> 会自动识别，但要跑 iOS App / Widget / 真机，仍需手动建一个宿主 iOS App Target。</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 880 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif">
+      <!-- 节点 -->
+      <g>
+        <rect x="20" y="40" width="150" height="60" rx="12" fill="#e3f2fd" stroke="#90caf9" stroke-width="2"/>
+        <text x="95" y="68" text-anchor="middle" font-size="13" fill="#1565c0" font-weight="700">① 打开 Package.swift</text>
+        <text x="95" y="86" text-anchor="middle" font-size="11" fill="#546e7a">Xcode 自动识别 SPM</text>
+      </g>
+      <g>
+        <rect x="210" y="40" width="150" height="60" rx="12" fill="#e8f5e9" stroke="#a5d6a7" stroke-width="2"/>
+        <text x="285" y="68" text-anchor="middle" font-size="13" fill="#2e7d32" font-weight="700">② 建宿主 App Target</text>
+        <text x="285" y="86" text-anchor="middle" font-size="11" fill="#546e7a">SwiftUI + Embed &amp; Sign</text>
+      </g>
+      <g>
+        <rect x="400" y="40" width="150" height="60" rx="12" fill="#fff3e0" stroke="#ffcc80" stroke-width="2"/>
+        <text x="475" y="68" text-anchor="middle" font-size="13" fill="#ef6c00" font-weight="700">③ 模拟器运行 ⌘R</text>
+        <text x="475" y="86" text-anchor="middle" font-size="11" fill="#546e7a">iPhone 16 / iPad</text>
+      </g>
+      <g>
+        <rect x="590" y="40" width="150" height="60" rx="12" fill="#f3e5f5" stroke="#ce93d8" stroke-width="2"/>
+        <text x="665" y="68" text-anchor="middle" font-size="13" fill="#6a1b9a" font-weight="700">④ 单元测试 ⌘U</text>
+        <text x="665" y="86" text-anchor="middle" font-size="11" fill="#546e7a">68 cases 全绿</text>
+      </g>
+      <g>
+        <rect x="730" y="40" width="130" height="60" rx="12" fill="#ffebee" stroke="#ef9a9a" stroke-width="2"/>
+        <text x="795" y="68" text-anchor="middle" font-size="13" fill="#c62828" font-weight="700">⑤ Archive → 上架</text>
+        <text x="795" y="86" text-anchor="middle" font-size="11" fill="#546e7a">App Store Connect</text>
+      </g>
+      <!-- 箭头 -->
+      <g stroke="#90a4ae" stroke-width="2" fill="none" marker-end="url(#arrow)">
+        <line x1="170" y1="70" x2="208" y2="70"/>
+        <line x1="360" y1="70" x2="398" y2="70"/>
+        <line x1="550" y1="70" x2="588" y2="70"/>
+        <line x1="740" y1="70" x2="728" y2="70"/>
+      </g>
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+          <path d="M0,0 L8,5 L0,10 z" fill="#90a4ae"/>
+        </marker>
+      </defs>
+      <!-- 横向支线：可选 Widget / iCloud -->
+      <g>
+        <rect x="120" y="170" width="180" height="56" rx="12" fill="#f5f5f5" stroke="#bdbdbd" stroke-width="1.5"/>
+        <text x="210" y="195" text-anchor="middle" font-size="12" fill="#424242" font-weight="700">可选 · Widget Extension</text>
+        <text x="210" y="213" text-anchor="middle" font-size="11" fill="#757575">3 种小组件 + App Group</text>
+      </g>
+      <g>
+        <rect x="350" y="170" width="180" height="56" rx="12" fill="#f5f5f5" stroke="#bdbdbd" stroke-width="1.5"/>
+        <text x="440" y="195" text-anchor="middle" font-size="12" fill="#424242" font-weight="700">可选 · iCloud / CloudKit</text>
+        <text x="440" y="213" text-anchor="middle" font-size="11" fill="#757575">多设备同步 + LWW</text>
+      </g>
+      <g>
+        <rect x="580" y="170" width="180" height="56" rx="12" fill="#f5f5f5" stroke="#bdbdbd" stroke-width="1.5"/>
+        <text x="670" y="195" text-anchor="middle" font-size="12" fill="#424242" font-weight="700">可选 · 真机调试</text>
+        <text x="670" y="213" text-anchor="middle" font-size="11" fill="#757575">数据线 + 开发者证书</text>
+      </g>
+      <line x1="285" y1="100" x2="210" y2="170" stroke="#bdbdbd" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <line x1="475" y1="100" x2="440" y2="170" stroke="#bdbdbd" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <line x1="665" y1="100" x2="670" y2="170" stroke="#bdbdbd" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="440" y="280" text-anchor="middle" font-size="12" fill="#8e8e93">主线 5 步必做；下方 3 项按需启用</text>
+    </svg>
+    <div class="diagram-caption">图 1 · 从打开仓库到上架的完整流水线</div>
+  </div>
+</section>
+
+<!-- ============ 2. 环境要求 ============ -->
+<section id="env">
+  <h2 class="section-title"><span class="num">2</span>环境要求与自检</h2>
+  <p class="section-sub">推荐使用最新 macOS 26（Tahoe）+ Xcode 26 组合，Swift 6 严格并发模式。</p>
+
+  <div class="card">
+    <h4>📦 软硬件要求</h4>
+    <table>
+      <tr><th style="width:30%">项目</th><th>要求</th></tr>
+      <tr><td>Mac</td><td>Apple Silicon（M1+）或 Intel 均可</td></tr>
+      <tr><td>macOS</td><td><strong>macOS 26 (Tahoe)</strong>（最低 macOS 14）</td></tr>
+      <tr><td>Xcode</td><td><strong>Xcode 26</strong>（含 Swift 6.1+ 工具链，strict concurrency）</td></tr>
+      <tr><td>iOS SDK</td><td>最低支持 iOS 17；推荐 iOS 26 Simulator</td></tr>
+      <tr><td>Swift</td><td>6.0（<code>swift-tools-version: 6.0</code>）</td></tr>
+      <tr><td>依赖管理</td><td>纯 SwiftPM，<strong>无 CocoaPods / 无第三方依赖</strong></td></tr>
+      <tr><td>Apple 开发者账号</td><td>真机调试免费；CloudKit / 上架需付费计划（$99/年）</td></tr>
+    </table>
+  </div>
+
+  <h3>🔧 命令行快速自检</h3>
+  <p>打开「终端」运行以下命令，确认环境就绪：</p>
+<pre><code>xcode-select -p            # 应指向 /Applications/Xcode.app/Contents/Developer
+xcodebuild -version        # Xcode 26.x + 对应 iOS SDK
+swift --version            # Swift 6.1+
+swift build                # 全 target 构建（命令行）
+swift test                 # 跑 68 个单元测试（命令行）</code></pre>
+
+  <div class="callout info">
+    <strong>💡 提示</strong>
+    如果 <code>xcode-select -p</code> 指向 CommandLineTools 而非 Xcode.app，运行：
+    <code>sudo xcode-select -s /Applications/Xcode.app/Contents/Developer</code>
+  </div>
+</section>
+
+<!-- ============ 3. 项目结构 ============ -->
+<section id="structure">
+  <h2 class="section-title"><span class="num">3</span>项目结构与 Target 体系</h2>
+  <p class="section-sub">双 Library 拆分：<code>LunarCore</code> 纯算法（可被 CLI 复用），<code>LunisolarCalendarApp</code> 含 UI + 业务。</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif">
+      <!-- Package.swift root -->
+      <rect x="280" y="10" width="160" height="44" rx="10" fill="#3d63de"/>
+      <text x="360" y="32" text-anchor="middle" font-size="13" fill="#fff" font-weight="700">Package.swift</text>
+      <text x="360" y="48" text-anchor="middle" font-size="10" fill="#c5d1f5">swift-tools 6.0</text>
+
+      <!-- LunarCore -->
+      <rect x="40" y="90" width="200" height="120" rx="12" fill="#e8f5e9" stroke="#66bb6a" stroke-width="2"/>
+      <text x="140" y="115" text-anchor="middle" font-size="14" fill="#2e7d32" font-weight="700">LunarCore (library)</text>
+      <text x="140" y="138" text-anchor="middle" font-size="11" fill="#388e3c">Models/LunarDate.swift</text>
+      <text x="140" y="156" text-anchor="middle" font-size="11" fill="#388e3c">Models/Huangli.swift</text>
+      <text x="140" y="180" text-anchor="middle" font-size="10" fill="#66bb6a">纯 Swift · 无 UIKit/SwiftUI</text>
+      <text x="140" y="196" text-anchor="middle" font-size="10" fill="#66bb6a">gen_huangli_db 只依赖它</text>
+
+      <!-- LunisolarCalendarApp -->
+      <rect x="260" y="90" width="200" height="120" rx="12" fill="#e3f2fd" stroke="#42a5f5" stroke-width="2"/>
+      <text x="360" y="115" text-anchor="middle" font-size="14" fill="#1565c0" font-weight="700">LunisolarCalendarApp</text>
+      <text x="360" y="138" text-anchor="middle" font-size="11" fill="#1976d2">Views / Stores / Sync</text>
+      <text x="360" y="156" text-anchor="middle" font-size="11" fill="#1976d2">Widgets / Support / App</text>
+      <text x="360" y="180" text-anchor="middle" font-size="10" fill="#42a5f5">依赖 LunarCore</text>
+      <text x="360" y="196" text-anchor="middle" font-size="10" fill="#42a5f5">exclude: LunarDate, Huangli</text>
+
+      <!-- gen_huangli_db -->
+      <rect x="480" y="90" width="200" height="120" rx="12" fill="#fff3e0" stroke="#ffa726" stroke-width="2"/>
+      <text x="580" y="115" text-anchor="middle" font-size="14" fill="#ef6c00" font-weight="700">gen_huangli_db (exec)</text>
+      <text x="580" y="138" text-anchor="middle" font-size="11" fill="#f57c00">Tools/gen_huangli_db/</text>
+      <text x="580" y="156" text-anchor="middle" font-size="11" fill="#f57c00">main.swift</text>
+      <text x="580" y="180" text-anchor="middle" font-size="10" fill="#ffa726">只依赖 LunarCore</text>
+      <text x="580" y="196" text-anchor="middle" font-size="10" fill="#ffa726">避免 @main 冲突</text>
+
+      <!-- LunisolarCalendarTests -->
+      <rect x="200" y="250" width="320" height="70" rx="12" fill="#f3e5f5" stroke="#ab47bc" stroke-width="2"/>
+      <text x="360" y="278" text-anchor="middle" font-size="14" fill="#6a1b9a" font-weight="700">LunisolarCalendarTests (testTarget)</text>
+      <text x="360" y="300" text-anchor="middle" font-size="11" fill="#8e24aa">依赖 LunisolarCalendarApp + LunarCore · 68 cases</text>
+
+      <!-- 连线 -->
+      <g stroke="#90a4ae" stroke-width="1.8" fill="none">
+        <line x1="320" y1="54" x2="140" y2="88"/>
+        <line x1="360" y1="54" x2="360" y2="88"/>
+        <line x1="400" y1="54" x2="580" y2="88"/>
+        <line x1="140" y1="210" x2="260" y2="250"/>
+        <line x1="360" y1="210" x2="360" y2="250"/>
+      </g>
+      <!-- 依赖箭头 LunarCore -> App -->
+      <g stroke="#66bb6a" stroke-width="2" fill="none" marker-end="url(#arr2)">
+        <line x1="240" y1="150" x2="258" y2="150"/>
+      </g>
+      <!-- 依赖箭头 LunarCore -> gen -->
+      <g stroke="#66bb6a" stroke-width="2" fill="none" marker-end="url(#arr2)">
+        <line x1="480" y1="150" x2="478" y2="150" transform="translate(0,0)"/>
+      </g>
+      <defs>
+        <marker id="arr2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L8,4.5 L0,9 z" fill="#66bb6a"/>
+        </marker>
+      </defs>
+    </svg>
+    <div class="diagram-caption">图 2 · Package.swift 的 4 个 Target 与依赖关系</div>
+  </div>
+
+  <div class="callout warn">
+    <strong>⚠️ 关键设计</strong>
+    <code>LunarCore</code> 只包含 <code>LunarDate.swift</code> 和 <code>Huangli.swift</code> 两个纯算法文件。
+    <code>LunisolarCalendarApp</code> 通过 <code>exclude</code> 把这两个文件排除（避免重复编译），再以依赖方式引入。
+    这样 <code>gen_huangli_db</code> CLI 只链接 LunarCore，不会触发 <code>@main</code> 符号冲突。
+  </div>
+</section>
+
+<!-- ============ 4. 打开 Package.swift ============ -->
+<section id="open">
+  <h2 class="section-title"><span class="num">4</span>用 Xcode 26 打开 Package.swift</h2>
+
+  <div class="step">
+    <div class="idx">1</div>
+    <div class="body">
+      <p>启动 <strong>Xcode 26</strong>，菜单 <strong>File → Open…</strong>（⌘O），选择仓库根目录的 <code>Package.swift</code>。</p>
+    </div>
+  </div>
+  <div class="step">
+    <div class="idx">2</div>
+    <div class="body">
+      <p>Xcode 会自动解析 SPM 工程，左侧 Project Navigator 顶部出现 <code>LunisolarCalendar</code> 包，展开可见 <code>Sources</code>、<code>Tests</code>、<code>Tools</code>。首次打开会触发 <strong>Resolve Package Dependencies</strong>（本项目无外部依赖，秒级完成）。</p>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <strong>💡 为什么没有 .xcodeproj？</strong>
+    本项目刻意保持 SwiftPM 纯工程结构。Xcode 打开 <code>Package.swift</code> 时会在 DerivedData 自动生成工程，无需手动保存。这样仓库干净、跨平台（Linux CI 用 <code>swift build</code>）。
+  </div>
+</section>
+
+<!-- ============ 5. 创建宿主 App Target ============ -->
+<section id="host">
+  <h2 class="section-title"><span class="num">5</span>创建宿主 App Target</h2>
+  <p class="section-sub">SPM 工程不会生成可执行的 iOS App。需要手动建一个空 SwiftUI App 作为宿主，把 <code>LunisolarCalendarApp</code> library 嵌入进去。</p>
+
+  <div class="step">
+    <div class="idx">1</div>
+    <div class="body">
+      <p>菜单 <strong>File → New → Target…</strong> → 选 <strong>iOS → App</strong>，点 Next。</p>
+    </div>
+  </div>
+  <div class="step">
+    <div class="idx">2</div>
+    <div class="body">
+      <p>填写选项：</p>
+      <ul>
+        <li><strong>Product Name</strong>：<code>LunisolarCalendar</code>（或任意名字，只要与 SPM product 名不同即可）</li>
+        <li><strong>Interface</strong>：SwiftUI</li>
+        <li><strong>Language</strong>：Swift</li>
+        <li>❌ <strong>不勾</strong> Use Core Data / Include Tests / Use Swift Data</li>
+      </ul>
+    </div>
+  </div>
+  <div class="step">
+    <div class="idx">3</div>
+    <div class="body">
+      <p>新 target 创建后，进入 <strong>Project → Target → General → Frameworks, Libraries, and Embedded Content</strong>，点 <code>+</code>，在 <em>Package Products</em> 分组下选 <strong><code>LunisolarCalendarApp</code></strong>，状态设为 <strong>Embed &amp; Sign</strong>。</p>
+    </div>
+  </div>
+  <div class="step">
+    <div class="idx">4</div>
+    <div class="body">
+      <p>删除模板生成的 <code>ContentView.swift</code> 和 <code>LunisolarCalendarApp.swift</code>（Xcode 默认建的那个空壳）。</p>
+    </div>
+  </div>
+  <div class="step">
+    <div class="idx">5</div>
+    <div class="body">
+      <p>在宿主 target 的文件夹里新建入口文件 <code>HostApp.swift</code>（<strong>不要</strong>放进 <code>Sources/LunisolarCalendarApp</code>）：</p>
+<pre><code>import SwiftUI
+import LunisolarCalendarApp
+
+@main
+struct HostApp: App {
+    var body: some Scene {
+        WindowGroup {
+            AdaptiveRootView()
+                .environment(EventStore.shared)
+        }
+    }
+}</code></pre>
+    </div>
+  </div>
+  <div class="step">
+    <div class="idx">6</div>
+    <div class="body">
+      <p>在 <strong>Signing &amp; Capabilities</strong> 设置你的 Team，并把 Bundle Identifier 改成唯一值（如 <code>com.yourname.lunisolar-calendar</code>）。</p>
+    </div>
+  </div>
+
+  <div class="callout danger">
+    <strong>❌ 常见错误</strong>
+    同时把 <code>LunarCore</code> 和 <code>LunisolarCalendarApp</code> 都加进宿主 target 的 Frameworks，会报
+    <code>duplicate symbols</code>。因为 <code>LunisolarCalendarApp</code> 已依赖 <code>LunarCore</code>，只需加 <code>LunisolarCalendarApp</code> 即可。
+  </div>
+</section>
+
+<!-- ============ 6. 编译 & 运行 ============ -->
+<section id="run">
+  <h2 class="section-title"><span class="num">6</span>编译 &amp; 在模拟器运行</h2>
+
+  <h3>Xcode 界面</h3>
+  <ul>
+    <li>左上角 Scheme 选<strong>宿主 App target</strong>（不是 SPM 生成的 <code>LunisolarCalendarApp</code> library）。</li>
+    <li>设备选 <strong>iPhone 16 (iOS 26)</strong> 或 iPad Simulator。</li>
+    <li><strong>⌘R</strong> 运行；<strong>⌘B</strong> 只编译；<strong>⌘.</strong> 停止。</li>
+  </ul>
+
+  <h3>命令行（CI / 脚本）</h3>
+<pre><code># 模拟器 Debug 构建
+xcodebuild -scheme LunisolarCalendar \
+    -destination 'platform=iOS Simulator,name=iPhone 16' \
+    -configuration Debug build
+
+# 真机 Release 构建（需要签名）
+xcodebuild -scheme LunisolarCalendar \
+    -destination 'generic/platform=iOS' \
+    -configuration Release build CODE_SIGNING_ALLOWED=YES</code></pre>
+
+  <h3>常见编译错误速查</h3>
+  <div class="card">
+    <table>
+      <tr><th style="width:38%">错误</th><th>原因</th><th>修复</th></tr>
+      <tr><td><code>'HuangliDay' initializer is inaccessible</code></td><td>跨模块 internal init</td><td>确保 <code>Huangli.swift</code>/<code>LunarDate.swift</code> 有显式 <code>public init</code>（已修）</td></tr>
+      <tr><td><code>cannot find 'ChineseCalendar' in scope</code></td><td>测试文件未拿到 LunarCore</td><td>保留 <code>HuangliDBProvider.swift</code> 里的 <code>@_exported import LunarCore</code></td></tr>
+      <tr><td><code>Bundle.module unavailable</code></td><td>iOS App Target 非 SPM module</td><td>已改用 <code>Bundle.main</code> + Bundle+Resources.swift</td></tr>
+      <tr><td><code>Color.tertiary removed</code></td><td>iOS 18 移除旧 API</td><td>用 <code>Color(uiColor: .tertiaryLabel)</code> 或 <code>Theme.tertiary</code></td></tr>
+      <tr><td><code>UIScreen.main deprecated</code></td><td>iOS 26 弃用</td><td>用 GeometryReader 或 UIWindowScene</td></tr>
+      <tr><td>CloudKit entitlement 缺失</td><td>没加 iCloud capability</td><td>见 §10</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 7. 单元测试 ============ -->
+<section id="test">
+  <h2 class="section-title"><span class="num">7</span>单元测试（68 cases）</h2>
+
+  <h3>命令行（推荐先跑）</h3>
+<pre><code>swift test
+# 期望：Executed 68 tests, with 0 failures</code></pre>
+
+  <h3>Xcode 界面</h3>
+  <ul>
+    <li>Scheme 选宿主 App target，<strong>⌘U</strong> 或 Product → Test。</li>
+    <li>Test Navigator（⌘6）可单独跑某一个 Case。</li>
+  </ul>
+
+  <h3>测试覆盖清单</h3>
+  <div class="card">
+    <table>
+      <tr><th>测试类</th><th style="width:12%">数量</th><th>覆盖内容</th></tr>
+      <tr><td>LunarDateTests</td><td>4</td><td>公历↔农历双向真值表（1900-2100）、闰月</td></tr>
+      <tr><td>HuangliTests</td><td>3</td><td>天干地支、神位、chongSha/naYin 兼容别名</td></tr>
+      <tr><td>HuangliDBProviderTests</td><td>6</td><td>离散库命中 / fallback / 算法一致性</td></tr>
+      <tr><td>CalendarEventTests</td><td>12</td><td>RepeatRule、displayText、iconName、UID、ICS、农历三十 fallback</td></tr>
+      <tr><td>EventStoreTests</td><td>10</td><td>CRUD、dirty/migration、statsCache、flushPendingSave 回归</td></tr>
+      <tr><td>DataPortabilityTests</td><td>3</td><td>JSON 导入导出、UUID 合并</td></tr>
+      <tr><td>ICloudSyncTests</td><td>6</td><td>syncBidirectional、Mock 全链路</td></tr>
+      <tr><td>WidgetSnapshotTests</td><td>4</td><td>snapshot 写入、stale 忽略</td></tr>
+      <tr><td>SystemImportTests</td><td>9</td><td>Contacts 桥接、UUID 稳定、DTO 映射</td></tr>
+      <tr><td>NotificationTests</td><td>11</td><td>lunarAnnually、workday、eligibility、offset、授权守卫</td></tr>
+    </table>
+  </div>
+
+  <div class="callout ok">
+    <strong>✅ Linux / CI 兼容</strong>
+    所有 CloudKit / UserNotifications / WidgetKit 代码用 <code>#if canImport(...)</code> 隔离，
+    <code>swift test</code> 在 Linux 上也能全绿（同步走 Mock provider）。
+  </div>
+</section>
+
+<!-- ============ 8. Widget ============ -->
+<section id="widget">
+  <h2 class="section-title"><span class="num">8</span>Widget 小组件 Extension</h2>
+  <p class="section-sub">已实现 3 种 Widget，统一在 <code>LunisolarWidgetBundle()</code> 注册。</p>
+
+  <div class="card">
+    <table>
+      <tr><th style="width:26%">样式</th><th>入口</th><th>说明</th></tr>
+      <tr><td>今日黄历概览</td><td><code>HuangliTodayWidget</code></td><td>宜忌 + 冲煞 + 农历日期</td></tr>
+      <tr><td>农历日期卡片</td><td><code>LunarDateWidget</code></td><td>农历月日 + 节日 + 生肖</td></tr>
+      <tr><td>今日待办进度</td><td><code>EventProgressWidget</code></td><td>完成比例 + 近期待办条数</td></tr>
+    </table>
+  </div>
+
+  <h3>Xcode 接入步骤</h3>
+  <div class="step"><div class="idx">1</div><div class="body"><p><strong>File → New → Target…</strong> → <strong>Widget Extension</strong>，Product Name 填 <code>LunisolarWidget</code>，<strong>不勾</strong> "Include Configuration App Intent"。</p></div></div>
+  <div class="step"><div class="idx">2</div><div class="body"><p>进入 <code>LunisolarWidget</code> target → <strong>General → Frameworks</strong> → <code>+</code> → Package Products → <code>LunisolarCalendarApp</code> → <strong>Embed &amp; Sign</strong>。</p></div></div>
+  <div class="step"><div class="idx">3</div><div class="body"><p>删掉模板生成的 Widget 文件，替换为：</p>
+<pre><code>import WidgetKit
+import SwiftUI
+import LunisolarCalendarApp
+
+@main
+struct LunisolarWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        HuangliTodayWidget()
+        LunarDateWidget()
+        EventProgressWidget()
+    }
+}</code></pre>
+  </div></div>
+  <div class="step"><div class="idx">4</div><div class="body">
+    <p><strong>App Group 配置</strong>（让宿主 App 与 Widget 共享快照数据）：</p>
+    <ul>
+      <li>宿主 App + Widget 两个 target 都在 <strong>Signing &amp; Capabilities</strong> 加 <strong>App Groups</strong>，勾选 <code>group.com.yourname.lunisolar</code>。</li>
+      <li>宿主 App 入口里设置：<code>EventStore.shared.widgetAppGroupID = "group.com.yourname.lunisolar"</code></li>
+    </ul>
+  </div></div>
+
+  <div class="callout info">
+    <strong>💡 Widget 调试</strong>
+    Run Scheme 选宿主 App（Widget 不能单独 Run）。真机长按桌面 → <code>+</code> → 搜 "Lunisolar" 添加。
+    数据由 <code>EventStore</code> 写 snapshot JSON，Widget 下次刷新（系统 15 分钟节流）时读取。
+  </div>
+</section>
+
+<!-- ============ 9. 权限 ============ -->
+<section id="perms">
+  <h2 class="section-title"><span class="num">9</span>权限：通知 / 通讯录 / 日历</h2>
+  <p>Info.plist 已预置 usage description，真机首次使用弹窗询问。</p>
+
+  <div class="card">
+    <table>
+      <tr><th style="width:38%">Key</th><th>场景</th></tr>
+      <tr><td><code>NSContactsUsageDescription</code></td><td>导入联系人生日 → 农历/公历纪念日</td></tr>
+      <tr><td><code>NSCalendarsUsageDescription</code> / <code>NSCalendarsFullAccessUsageDescription</code></td><td>导入/导出 ICS（EventKit）</td></tr>
+      <tr><td><code>UNUserNotificationCenter</code></td><td>设置提醒时排程本地通知</td></tr>
+    </table>
+  </div>
+
+  <h3>通知申请（已内置）</h3>
+<pre><code>NotificationManager.shared.requestAuthorization()  // Settings 页首次使用触发</code></pre>
+  <p>用户允许后才能排程 <code>UNCalendarNotificationTrigger</code>。若权限被拒，<code>markNotified</code> 不会置 true，授权后 <code>rescheduleAllReminders</code> 会重排。</p>
+
+  <h3>通讯录导入（已内置）</h3>
+<pre><code>ContactsImportProvider().fetchBirthdays()  // 返回 [SystemContactBirthdayDTO]</code></pre>
+  <p>内部自动申请 <code>CNContactStore</code> 授权，拒绝后返回空数组，不崩溃。</p>
+</section>
+
+<!-- ============ 10. iCloud ============ -->
+<section id="icloud">
+  <h2 class="section-title"><span class="num">10</span>iCloud · CloudKit 同步</h2>
+
+  <h3>前提配置</h3>
+  <ol>
+    <li>宿主 App + Widget target 都在 <strong>Signing &amp; Capabilities</strong> 加 <strong>iCloud</strong>，勾选 <strong>CloudKit</strong>，选/建 Container（如 <code>iCloud.com.yourname.lunisolar</code>）。</li>
+    <li>同步代码用 <code>#if canImport(CloudKit)</code> 隔离，Linux CI 走 Mock，真机自动切 Real。</li>
+  </ol>
+
+  <h3>Mock vs Real 切换</h3>
+  <ul>
+    <li>默认 <strong>MockCloudKitProvider</strong>（纯内存，离线测试 / <code>swift test</code>）。</li>
+    <li>真机 iCloud 由 <code>EventSyncCoordinator</code> 在用户开启同步时装配 <code>RealCloudKitProvider</code>。</li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>⚠️ 不要无条件调用 CKContainer.default()</strong>
+    iOS Simulator 没 CloudKit entitlement 时会 <code>EXC_BREAKPOINT</code> 崩溃。
+    本项目把 RealCloudKitProvider 创建延迟到 SettingsView 的 Toggle 打开时，用 do/catch 探测 isAvailable，失败弹 toast。
+  </div>
+
+  <h3>调试技巧</h3>
+  <ul>
+    <li>CloudKit Dashboard：<a href="https://icloud.developer.apple.com/dashboard/" target="_blank">icloud.developer.apple.com/dashboard</a></li>
+    <li>Console.app 过滤 <code>Lunisolar</code> 看 <code>AppLogger.sync</code> 日志。</li>
+    <li>清本地 iCloud 缓存：Settings → Apple ID → iCloud → Manage Storage → 你的 App → Delete All。</li>
+  </ul>
+</section>
+
+<!-- ============ 11. 黄历数据库 ============ -->
+<section id="huangli">
+  <h2 class="section-title"><span class="num">11</span>黄历离散数据库生成器</h2>
+  <p class="section-sub">位置 <code>Tools/gen_huangli_db/main.swift</code>，只依赖 LunarCore，独立 CLI。</p>
+
+  <h3>生成离散库</h3>
+<pre><code>swift run gen_huangli_db Sources/LunisolarCalendarApp/Resources/huangli_db.json</code></pre>
+
+  <h3>输出格式</h3>
+<pre><code>{
+  "v": 1,
+  "range": ["2024-01-01", "2028-12-31"],
+  "count": 1826,
+  "days": {
+    "2026-09-01": {
+      "y": ["祭祀", "祈福"],
+      "j": ["出行", "开市"],
+      "c": "鼠", "s": "南", "w": "海中金",
+      "g": "喜神:东北 财神:西南"
+    }
+  }
+}</code></pre>
+
+  <div class="callout info">
+    <strong>💡 扩展年份</strong>
+    改 <code>main.swift</code> 里 <code>start</code> / <code>end</code> 的 DateComponents 即可。农历数据表覆盖 1900-2100，任意连续区间都能生成。
+    生成器强制走纯算法（不查已有库），避免循环写。运行后 <code>HuangliDBProvider</code> 优先查库，缺失才 fallback 到算法。
+  </div>
+</section>
+
+<!-- ============ 12. iPad ============ -->
+<section id="ipad">
+  <h2 class="section-title"><span class="num">12</span>iPad 适配</h2>
+  <p><code>CalendarMonthView</code> 手势代码用 <code>#if canImport(UIKit)</code> 隔离，避免 macOS/Linux 编译缺失 <code>GestureState</code>。</p>
+  <ul>
+    <li><strong>双栏布局</strong>：<code>AdaptiveRootView</code> 根据 <code>horizontalSizeClass</code> 自动切 <code>NavigationSplitView</code>（左月历 + 右详情）。</li>
+    <li><strong>横竖屏</strong>：Info.plist 已声明 <code>UIInterfaceOrientationLandscapeLeft/Right</code>。</li>
+    <li><strong>Widget</strong>：iPad 默认 <code>systemMedium</code> / <code>systemLarge</code> 自动适配。</li>
+  </ul>
+  <p>真机调优：Product → Destination → iPad Pro 13" (M4)，横屏默认双栏、竖屏折叠单栏，符合 HIG。</p>
+</section>
+
+<!-- ============ 13. App Store ============ -->
+<section id="store">
+  <h2 class="section-title"><span class="num">13</span>Archive &amp; App Store 发布</h2>
+
+  <h3>13.1 准备工作</h3>
+  <ol>
+    <li>付费 Apple Developer 账号（$99/年）。</li>
+    <li><a href="https://developer.apple.com/account/" target="_blank">developer.apple.com/account</a> 注册 App ID：Bundle ID 与 Xcode Signing 一致；Capabilities 勾 <strong>iCloud</strong> + CloudKit + <strong>Push Notifications</strong>。</li>
+    <li>如需 Widget，建 App Group 并关联到 App ID。</li>
+  </ol>
+
+  <h3>13.2 版本号</h3>
+  <ul>
+    <li><code>CFBundleShortVersionString</code>：语义化版本（如 <code>1.2.0</code>），App Store 展示用。</li>
+    <li><code>CFBundleVersion</code>：build 号，每次上传必须 +1（整数）。</li>
+  </ul>
+
+  <h3>13.3 Archive</h3>
+<pre><code>xcodebuild \
+  -scheme LunisolarCalendar \
+  -archivePath LunisolarCalendar.xcarchive \
+  -destination 'generic/platform=iOS' \
+  -configuration Release archive</code></pre>
+  <p>或 Xcode：<strong>Product → Archive</strong>（⌘Y）→ Organizer → Distribute App。</p>
+
+  <h3>13.4 Distribute 选项</h3>
+  <div class="card">
+    <table>
+      <tr><th style="width:22%">场景</th><th>选项</th><th>说明</th></tr>
+      <tr><td>内测</td><td>App Store Connect → TestFlight</td><td>先 beta 测一遍</td></tr>
+      <tr><td>灰度</td><td>Ad Hoc</td><td>小范围（需设备 UDID）</td></tr>
+      <tr><td>正式上架</td><td><strong>App Store Connect</strong></td><td>自动签名 + 上传</td></tr>
+    </table>
+  </div>
+
+  <h3>13.5 App Store Connect 填写</h3>
+  <ol>
+    <li><a href="https://appstoreconnect.apple.com/" target="_blank">appstoreconnect.apple.com</a> → My Apps → <code>+ New App</code>。</li>
+    <li>Bundle ID、版本号、build 号与 Archive 一致。</li>
+    <li><strong>App Information</strong>：Primary Category = Lifestyle；Subcategory = Productivity；Copyright = <code>© 2026 清和日历</code>。</li>
+    <li><strong>App Privacy</strong>：说明 Contacts / Calendars / Notifications / iCloud 数据用途。</li>
+    <li><strong>Review Information</strong>：准备测试账号（含 Contacts 演示）和 iCloud 演示步骤。</li>
+    <li>等待审核（通常 24-72 小时）。</li>
+  </ol>
+</section>
+
+<!-- ============ 14. FAQ ============ -->
+<section id="faq">
+  <h2 class="section-title"><span class="num">14</span>常见问题 FAQ</h2>
+
+  <details class="card" style="margin:10px 0">
+    <summary style="cursor:pointer;font-weight:600">Xcode 打开 Package.swift 后没有 iOS App target？</summary>
+    <p style="margin-top:10px">SPM 不生成可执行 App target。按 §5 创建空 SwiftUI App target，加 Package Product 依赖即可。</p>
+  </details>
+
+  <details class="card" style="margin:10px 0">
+    <summary style="cursor:pointer;font-weight:600">真机 Run 报 "The app identifier cannot be registered"？</summary>
+    <p style="margin-top:10px">Bundle ID 冲突或没 Team。Signing &amp; Capabilities → Team 选付费开发者账号，Bundle ID 改唯一值（<code>com.&lt;你的名字&gt;.lunisolar</code>）。</p>
+  </details>
+
+  <details class="card" style="margin:10px 0">
+    <summary style="cursor:pointer;font-weight:600">Widget Run 了但桌面没有？</summary>
+    <p style="margin-top:10px">真机长按桌面 → <code>+</code> → 搜 "Lunisolar" 添加。Widget Extension 不能单 Run，由宿主 App 带装。</p>
+  </details>
+
+  <details class="card" style="margin:10px 0">
+    <summary style="cursor:pointer;font-weight:600">CloudKit 同步不工作？</summary>
+    <p style="margin-top:10px">1) App ID 绑定 CloudKit；2) App Group 和 iCloud Container ID 一致；3) 真机 iCloud Drive 已开；4) 首次登录 Apple ID 后重启 App。</p>
+  </details>
+
+  <details class="card" style="margin:10px 0">
+    <summary style="cursor:pointer;font-weight:600"><code>swift test</code> 在 GitHub Actions 能过吗？</summary>
+    <p style="margin-top:10px">能。纯 SwiftPM 工程，CI 直接 <code>swift test</code>。CloudKit 走 Mock，Linux 环境也全绿。</p>
+  </details>
+
+  <details class="card" style="margin:10px 0">
+    <summary style="cursor:pointer;font-weight:600">后台切回后刚加的事件丢了？</summary>
+    <p style="margin-top:10px">已修复：App 在 <code>scenePhase == .background/.inactive</code> 时调用 <code>EventStore.flushPendingSave()</code> 立即落盘，避免 0.5s 防抖窗口内系统终止进程丢数据。</p>
+  </details>
+</section>
+
+<!-- ============ 快速参考 ============ -->
+<section>
+  <h2 class="section-title"><span class="num">⚡</span>快速参考</h2>
+  <div class="card">
+    <table>
+      <tr><th style="width:40%">目标</th><th>命令</th></tr>
+      <tr><td>命令行构建</td><td><code>swift build</code></td></tr>
+      <tr><td>命令行测试（68 cases）</td><td><code>swift test</code></td></tr>
+      <tr><td>生成黄历离散库</td><td><code>swift run gen_huangli_db Sources/LunisolarCalendarApp/Resources/huangli_db.json</code></td></tr>
+      <tr><td>Xcode 打开</td><td><code>open Package.swift</code></td></tr>
+      <tr><td>iOS Archive</td><td><code>xcodebuild -scheme LunisolarCalendar -archivePath L.xcarchive -destination 'generic/platform=iOS' -configuration Release archive</code></td></tr>
+    </table>
+  </div>
+</section>
+
+</div><!-- /container -->
+
+<footer>
+  <p>清和日历 · macOS 26 + Xcode 26 编译与发布图文教程</p>
+  <p style="margin-top:6px">基于 SwiftPM 纯工程 · Swift 6 严格并发 · 零第三方依赖</p>
+  <p style="margin-top:10px;font-size:12px">最后更新：2026-09-06</p>
+</footer>
+
+</body>
+</html>
