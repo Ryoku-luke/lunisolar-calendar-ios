@@ -23,6 +23,52 @@ final class EventStoreTests: XCTestCase {
         XCTAssertEqual(store.events(on: today).count, initial, "删除后恢复")
     }
 
+    // MARK: P2 回归：toggleCompleted 取消完成时应保留 isNotified 并触发通知重排
+    //
+    // 背景：旧 toggleCompleted 只在「标记完成」时 cancelNotification，
+    //   但「取消完成」时不重排通知 → 用户取消完成后 pending 通知已被取消、
+    //   又没有重建 → 提醒到点不响，直到下次 App 启动/前台 reschedule 才恢复
+    //   （可能已错过提醒时间）。
+    // 修复：取消完成时调 scheduleNotification（内部处理 .never && isNotified 不重排）。
+    // 本测试在 Linux 上无法实际验证 UNUserNotificationCenter 行为，
+    // 但验证关键不变量：取消完成后 isCompleted=false 且 isNotified 保持原值。
+    func testToggleCompletedUncompletePreservesNotifiedState() {
+        let store = makeIsolatedEventStore()
+        let today = Date()
+        let ev = CalendarEvent(title: "取消完成测试", startDate: today)
+        store.add(ev)
+
+        // 1) 标记完成
+        store.toggleCompleted(ev)
+        var current = store.events(on: today).first(where: { $0.id == ev.id })
+        XCTAssertTrue(current?.isCompleted ?? false, "标记完成后 isCompleted 应为 true")
+        XCTAssertFalse(current?.isNotified ?? true, "isNotified 初始应为 false")
+
+        // 2) 模拟已通知（一次性提醒触发过）
+        if let c = current { store.markNotified(c) }
+        current = store.events(on: today).first(where: { $0.id == ev.id })
+        XCTAssertTrue(current?.isNotified ?? false, "markNotified 后 isNotified 应为 true")
+
+        // 3) 取消完成：isCompleted 应回到 false，isNotified 应保持 true
+        //    （scheduleNotification 内部会因 .never && isNotified 跳过，不会重复弹窗）
+        if let c = current { store.toggleCompleted(c) }
+        current = store.events(on: today).first(where: { $0.id == ev.id })
+        XCTAssertFalse(current?.isCompleted ?? true, "P2 修复：取消完成后 isCompleted 应为 false")
+        XCTAssertTrue(current?.isNotified ?? false, "P2 修复：取消完成应保留 isNotified，不被重置")
+
+        // 4) 重复事件取消完成：isNotified 始终为 false，scheduleNotification 会正常重排
+        var repeating = CalendarEvent(title: "重复取消完成", startDate: today, repeatRule: .daily)
+        repeating.isNotified = false
+        store.add(repeating)
+        store.toggleCompleted(repeating)
+        current = store.events(on: today).first(where: { $0.id == repeating.id })
+        XCTAssertTrue(current?.isCompleted ?? false, "重复事件标记完成")
+        if let c = current { store.toggleCompleted(c) }
+        current = store.events(on: today).first(where: { $0.id == repeating.id })
+        XCTAssertFalse(current?.isCompleted ?? true, "重复事件取消完成后 isCompleted=false")
+        XCTAssertFalse(current?.isNotified ?? true, "重复事件 isNotified 保持 false")
+    }
+
     func testMarkNotified() async {
         let store = makeIsolatedEventStore()
         let cal = Calendar(identifier: .gregorian)
