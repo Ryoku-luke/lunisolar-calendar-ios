@@ -300,6 +300,133 @@ final class ICloudSyncTests: XCTestCase {
         XCTAssertEqual(storeB.events.count, 0, "跨设备墓碑删除传播：设备 B 同步后应 0 条")
     }
 
+    // MARK: 7. P1 回归：syncBidirectional 在 isEnabled=false 时不应该清空 dirty/deleted 标记
+    //
+    // 背景：旧路径 syncBidirectional → push() 在 !isEnabled 时早返回 success(empty failedRecordIDs)，
+    // 然后调 retainDirtyFlags(onlyFailed: []) → formIntersection([]) → 全部 dirty/deleted 标记被清空。
+    // 但本地从未真正推送 → 用户暂时关掉同步、又打开同步后，这段时间的本地编辑被永久丢失。
+    @MainActor
+    func testSyncDisabledPreservesDirtyFlags() async throws {
+        // setUp 里 delete(skipSync:true) 会把样例事件打进 deletedEventIDs；先清空获取干净基线
+        store.clearDirtyFlags()
+
+        // 在本地造 2 条 dirty 事件（skipSync=true 模拟"暂时不推"）
+        let ev1 = sampleEvents(count: 1, prefix: "P1-dirty-1").first!
+        let ev2 = sampleEvents(count: 1, prefix: "P1-dirty-2").first!
+        store.add(ev1, skipSync: true)
+        store.add(ev2, skipSync: true)
+        // 模拟一条本地删除（也应保留 deleted 标记）
+        let ev3 = sampleEvents(count: 1, prefix: "P1-del").first!
+        store.add(ev3, skipSync: true)
+        store.delete(ev3, skipSync: true)
+
+        let (dirtyBefore, deletedBefore) = store.consumeDirtyEvents()
+        XCTAssertEqual(dirtyBefore.count, 2, "P1 前应有 2 条 dirty")
+        XCTAssertEqual(deletedBefore.count, 1, "P1 前应有 1 条 deleted")
+
+        // 关掉同步，触发 syncBidirectional
+        coordinator.isEnabled = false
+        let r = try await coordinator.syncBidirectional()
+        XCTAssertEqual(r.pushed, 0, "关闭同步时不应推送")
+        XCTAssertEqual(r.pulled, 0, "关闭同步时不应拉取")
+        XCTAssertTrue(r.errors.isEmpty, "关闭同步应返回干净结果，不算失败")
+
+        // 关键断言：dirty/deleted 标记必须保留
+        let (dirtyAfter, deletedAfter) = store.consumeDirtyEvents()
+        XCTAssertEqual(dirtyAfter.count, 2, "P1 修复：dirty 标记不应被清空")
+        XCTAssertEqual(deletedAfter.count, 1, "P1 修复：deleted 标记不应被清空")
+    }
+
+    // MARK: 8. P2 回归：pullAndMerge 不应给本地事件打 dirty 标记 / 不应覆盖 remote.updatedAt
+    //
+    // 背景：旧 pullAndMerge 调 eventStore.update(skipSync:true) / add(skipSync:true)，
+    // 这两个方法即便 skipSync=true 也会 dirtyEventIDs.insert(id) → 下一轮 sync 把刚拉下来的
+    // 记录又推回云、version +1，造成"每轮 sync 每条远端记录 version 永久 +1"的版本膨胀；
+    // 同时 update() 把 remote 的 updatedAt 覆盖为 Date()，造成 UI 显示"刚刚更新"误导用户，
+    // 以及 merge(keepLatest) round-trip 误判。修复：pullAndMerge 改走 applyRemote / applyRemoteDelete。
+    @MainActor
+    func testPullAndMergeDoesNotMarkDirtyOrOverrideUpdatedAt() async throws {
+        // setUp 清理：delete(skipSync:true) 污染的 deleted 标记清零
+        store.clearDirtyFlags()
+
+        // 远端注入一条 updatedAt=1 年前的事件
+        var ev = sampleEvents(count: 1, prefix: "P2-remote-updated").first!
+        // 关键点：把事件自身的 updatedAt 设为 1 年前（decodedEvent 从 payloadJSON 解出 updatedAt）
+        let oneYearAgo = Date().addingTimeInterval(-365 * 86400)
+        ev.updatedAt = oneYearAgo
+        let oneYearAgoMs = Int64(oneYearAgo.timeIntervalSince1970 * 1000)
+        let rec = try SyncRecord.eventRecord(for: ev, version: 1, originDevice: "OtherDevice")
+        let forcedOldUpdate = SyncRecord(
+            id: rec.id, kind: .event, version: 1, originDevice: "OtherDevice",
+            updatedAtMs: oneYearAgoMs, isDeleted: false, payloadJSON: rec.payloadJSON
+        )
+        await mockProvider.injectServerRecord(forcedOldUpdate)
+
+        // pull
+        let r = try await coordinator.pullAndMerge()
+        XCTAssertEqual(r.pulled, 1)
+        XCTAssertEqual(store.events.count, 1)
+
+        // 关键断言 1：本地事件不应被打 dirty 标记
+        let (dirty, deleted) = store.consumeDirtyEvents()
+        XCTAssertEqual(dirty.count, 0, "P2 修复：远端合并不应打 dirty 标记")
+        XCTAssertEqual(deleted.count, 0, "P2 修复：远端合并不应打 deleted 标记")
+
+        // 关键断言 2：本地事件的 updatedAt 应保留远端语义（1 年前），而不是 Date() 覆盖
+        let localEv = try XCTUnwrap(store.events.first { $0.id == ev.id })
+        let localMs = Int64(localEv.updatedAt.timeIntervalSince1970 * 1000)
+        XCTAssertLessThan(localMs, Int64(Date().addingTimeInterval(-180 * 86400).timeIntervalSince1970 * 1000),
+                          "P2 修复：远端 updatedAt 应保留为远端语义（约 1 年前），不应被覆盖为 now")
+
+        // 关键断言 3：再调一次 syncBidirectional，云端版本号不应膨胀
+        //   （本地若被打 dirty，syncBidirectional 会把这条推回云，version 从 1 → 2）
+        let cloudVerBefore = await mockProvider.serverGet(id: ev.id.uuidString)?.version
+        _ = try await coordinator.syncBidirectional()
+        let cloudVerAfter = await mockProvider.serverGet(id: ev.id.uuidString)?.version
+        XCTAssertEqual(cloudVerBefore, cloudVerAfter,
+                       "P2 修复：远端合并后下一轮 sync 不应推回云（version 不应膨胀）")
+    }
+
+    // MARK: 9. P2 回归：远端墓碑合并不应把 deleted 标记打回本地
+    //
+    // 背景：旧 pullAndMerge 处理 remoteRec.isDeleted 时调 eventStore.delete(skipSync:true)，
+    // 该方法即便 skipSync=true 也会 deletedEventIDs.insert(id) → 下一轮 sync 把墓碑又推回云、
+    // version +1，造成版本膨胀。修复：pullAndMerge 改走 applyRemoteDelete。
+    @MainActor
+    func testPullRemoteTombstoneDoesNotMarkDeleted() async throws {
+        // setUp 清理：delete(skipSync:true) 污染的 deleted 标记清零
+        store.clearDirtyFlags()
+
+        // 设备 A：先 push 一条建立基础
+        let ev = sampleEvents(count: 1, prefix: "P2-tombstone").first!
+        _ = try await coordinator.push(events: [ev])
+        // 模拟另一台设备在云端把这条变成墓碑
+        let tombMs = Int64(Date().addingTimeInterval(-1000).timeIntervalSince1970 * 1000)
+        let tomb = SyncRecord(
+            id: ev.id.uuidString, kind: .event,
+            version: 5, originDevice: "OtherDevice",
+            updatedAtMs: tombMs, isDeleted: true, payloadJSON: "{}"
+        )
+        await mockProvider.injectServerRecord(tomb)
+
+        // pull：本地应被删除
+        let r = try await coordinator.pullAndMerge()
+        XCTAssertEqual(r.pulled, 1)
+        XCTAssertEqual(store.events.count, 0, "远端墓碑合并后本地应删除")
+
+        // 关键断言：deleted 标记不应被打（墓碑刚从云拿，不应再推回去）
+        let (_, deleted) = store.consumeDirtyEvents()
+        XCTAssertEqual(deleted.count, 0, "P2 修复：远端墓碑合并不应把 deleted 标记打回本地")
+
+        // 下一轮 sync 不应再推墓碑（version 不应在云端膨胀）
+        let cloudRecBefore = await mockProvider.serverGet(id: ev.id.uuidString)
+        XCTAssertEqual(cloudRecBefore?.version, 5, "云端墓碑版本应为远端的 5")
+        _ = try await coordinator.syncBidirectional()
+        let cloudRecAfter = await mockProvider.serverGet(id: ev.id.uuidString)
+        XCTAssertEqual(cloudRecAfter?.version, 5, "P2 修复：墓碑 version 不应膨胀")
+        XCTAssertEqual(cloudRecAfter?.isDeleted, true, "墓碑状态应保持")
+    }
+
     // MARK: - 测试辅助
 
     @MainActor private func sampleEvents(count: Int, prefix: String) -> [CalendarEvent] {

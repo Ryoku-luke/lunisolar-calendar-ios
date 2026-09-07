@@ -129,6 +129,53 @@ final class CalendarEventTests: XCTestCase {
         XCTAssertGreaterThan(Priority.normal, Priority.low)
     }
 
+    // MARK: P2 回归：primaryFestival 主节日名字对齐（带"节"后缀）
+    //
+    // 背景：旧 primaryNames 写的是 "元宵/端午/七夕/中秋/重阳"（无"节"后缀），
+    // 但 lunarFestivals 里的 Festival.name 全部带"节"后缀（"元宵节/端午节/..."），
+    // `primaryNames.contains("元宵节")` 永远返回 false → 这些农历主节日不触发 banner / 主题色。
+    // 修复：primaryNames 与 Festival.name 字面严格对齐。
+    func testPrimaryFestivalNamesMatchActualFestivalNames() {
+        let cal = Calendar(identifier: .gregorian)
+
+        // 用已知的农历节日公历日期（CalendarEventTests 已有真值校验）：
+        // 2025 中秋节 = 2025-10-06（农历八月十五）
+        var dcMidAutumn = DateComponents(); dcMidAutumn.year = 2025; dcMidAutumn.month = 10; dcMidAutumn.day = 6
+        let midAutumn = cal.date(from: dcMidAutumn)!
+        let fsMidAutumn = FestivalManager.festivals(on: midAutumn)
+        XCTAssertTrue(fsMidAutumn.contains(where: { $0.name == "中秋节" }),
+                      "2025-10-06 应是中秋节")
+        // 关键：primaryFestival 应该能命中"中秋节"（旧代码因名字失配返回 nil）
+        let primaryMid = FestivalManager.primaryFestival(on: midAutumn)
+        XCTAssertEqual(primaryMid?.name, "中秋节",
+                       "P2 修复：primaryFestival 应命中带'节'后缀的农历主节日")
+        XCTAssertNotNil(FestivalManager.accentColorHex(on: midAutumn),
+                        "中秋节应有主题色")
+
+        // 2025 端午节 = 2025-05-31（农历五月初五）
+        var dcDragonBoat = DateComponents(); dcDragonBoat.year = 2025; dcDragonBoat.month = 5; dcDragonBoat.day = 31
+        let dragonBoat = cal.date(from: dcDragonBoat)!
+        XCTAssertTrue(FestivalManager.festivals(on: dragonBoat).contains(where: { $0.name == "端午节" }))
+        XCTAssertEqual(FestivalManager.primaryFestival(on: dragonBoat)?.name, "端午节",
+                       "P2 修复：端午节应命中 primaryFestival")
+
+        // 2025 春节 = 2025-01-29（农历正月初一）
+        var dcSpring = DateComponents(); dcSpring.year = 2025; dcSpring.month = 1; dcSpring.day = 29
+        let spring = cal.date(from: dcSpring)!
+        XCTAssertEqual(FestivalManager.primaryFestival(on: spring)?.name, "春节")
+
+        // 2025 元宵节 = 2025-02-12（农历正月十五）
+        var dcLantern = DateComponents(); dcLantern.year = 2025; dcLantern.month = 2; dcLantern.day = 12
+        let lantern = cal.date(from: dcLantern)!
+        XCTAssertEqual(FestivalManager.primaryFestival(on: lantern)?.name, "元宵节",
+                       "P2 修复：元宵节应命中 primaryFestival")
+
+        // 公历节日（国庆节）也应命中
+        var dcNational = DateComponents(); dcNational.year = 2025; dcNational.month = 10; dcNational.day = 1
+        let national = cal.date(from: dcNational)!
+        XCTAssertEqual(FestivalManager.primaryFestival(on: national)?.name, "国庆节")
+    }
+
     func testICSExportImport() {
         let ev = CalendarEvent(title: "导出测试事件", startDate: Date(), location: "测试地点", notes: "备注")
         let ics = DataPortability.exportICS(from: [ev])
