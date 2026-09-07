@@ -151,31 +151,53 @@ Tools/
 ├── gen_huangli_db/main.swift                # 黄历数据库生成工具
 └── gen-app-icons.sh                         # macOS sips 一键批量缩图脚本
 
-Tests/LunisolarCalendarTests/                # 59 个单元测试
+Tests/LunisolarCalendarTests/                # 80 个单元测试
 ```
 
 ## 构建与测试
 
 ```bash
 swift build        # 编译所有 Target（0 警告）
-swift test         # 运行 59 个单元测试
+swift test         # 运行 80 个单元测试
 ```
 
 > Linux 环境仅验证模型层（农历/黄历/事件CRUD/导入导出/同步Mock），SwiftUI 视图编译需 iOS/macOS SDK。
 
-## 测试覆盖（59/59 通过）
+## 测试覆盖（80/80 通过）
 
 | 套件 | 数量 | 覆盖内容 |
 |---|---|---|
 | LunarDateTests | 4 | 17 个农历真值点、闰月、边界 nil 安全、反向转换 |
 | HuangliTests | 3 | 宜忌稳定性、冲煞验证 |
 | HuangliDBProviderTests | 6 | 离散库命中、边界 fallback、DB↔算法一致性 |
-| CalendarEventTests | 11 | 事件模型、农历重复规则、ICS 往返、优先级 |
-| EventStoreTests | 7 | CRUD、搜索、合并策略、副本防护 |
+| CalendarEventTests | 12 | 事件模型、农历重复规则、ICS 往返、优先级、节日主色 |
+| EventStoreTests | 8 | CRUD、搜索、合并策略、副本防护、toggleCompleted 通知重排 |
 | DataPortabilityTests | 3 | JSON/ICS 往返、伪 UUID 稳定性、合并统计 |
-| ICloudSyncTests | 6 | 推送/拉取/冲突/增量/离线上线/墓碑传播 |
+| ICloudSyncTests | 10 | 推送/拉取/冲突/增量/离线上线/墓碑传播/isNotified 不跨设备同步 |
 | WidgetSnapshotTests | 4 | 快照读写、过期检测、自动写入 |
 | SystemImportTests | 9 | DTO 映射、确定性 UUID、聚合、端到端无副本 |
+| NotificationLunarAnniversaryTests | 3 | 农历周年提醒边界、16 年搜索窗口 |
+| CountdownTests | 3 | 倒计时 CRUD、农历周年 2/29 fallback |
+| AccessibilityTests | 2 | 所有交互元素 ≥ 44pt 触碰区 |
+
+## 发布清单（Release Checklist）
+
+上架 App Store 前必须逐项确认：
+
+- [ ] `CFBundleShortVersionString` / `CFBundleVersion` 已递增
+- [ ] Xcode → Product → Archive 成功（无 codesign 错误）
+- [ ] 主 App Target + Widget Extension Target 均勾选同一 App Group（`group.com.lunisolar.calendar`）
+- [ ] iCloud Capability 已启用，CloudKit Container ID 已配置
+- [ ] `NSContactsUsageDescription` / `NSCalendarsFullAccessUsageDescription` 文案已审核
+- [ ] App Icon 1024×1024 无透明通道（App Store 要求）
+- [ ] 春节限定备用图标 `CFBundleAlternateIcons` 声明完整
+- [ ] 真机测试：通知权限 → 创建提醒 → 锁屏弹窗验证
+- [ ] 真机测试：iCloud 同步开/关 → 多设备数据一致性
+- [ ] 真机测试：Widget 快照 6h 过期 + 同日校验
+- [ ] 隐私清单（Privacy Manifest）：`NSPrivacyAccessedAPITypes` 已声明 File timestamp
+- [ ] App Store Connect：截图、描述、关键词、隐私标签已填写
+
+详见 [`docs/ENTITLEMENTS.md`](docs/ENTITLEMENTS.md) 和 [`docs/APP_STORE.md`](docs/APP_STORE.md)。
 
 ## 已修复的关键问题
 
