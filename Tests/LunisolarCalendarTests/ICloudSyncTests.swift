@@ -427,6 +427,51 @@ final class ICloudSyncTests: XCTestCase {
         XCTAssertEqual(cloudRecAfter?.isDeleted, true, "墓碑状态应保持")
     }
 
+    // MARK: 10. P1 回归：isNotified 设备本地状态不应参与 iCloud 同步
+    //
+    // 背景：isNotified 表示「本机 UNUserNotificationCenter 是否已触发过该通知」，
+    // 是纯设备本地状态。旧代码 SyncRecord.eventRecord 直接 encode 整个 CalendarEvent，
+    // 把 isNotified 带进 payloadJSON → 设备 A 响过后 markNotified=true，
+    // 用户改个标题 push 上去 → 设备 B pull 下来 isNotified=true → rescheduleAllReminders
+    // 跳过 → 设备 B 永远收不到。反向：设备 B 改标题推上去，设备 A pull 后 applyRemote
+    // 整体替换 → 设备 A 的 isNotified 被远端 false 覆盖 → 重新调度 → 重复弹窗。
+    // 修复：eventRecord 编码前强制 isNotified=false；applyRemote 保留本地 isNotified。
+    @MainActor
+    func testIsNotifiedDoesNotSyncAcrossDevices() async throws {
+        // 1) eventRecord 编码时必须剥离 isNotified
+        var ev = sampleEvents(count: 1, prefix: "P1-isNotified").first!
+        ev.isNotified = true  // 模拟本机已响过
+        let rec = try SyncRecord.eventRecord(for: ev, version: 1, originDevice: "device-A")
+        let decoded = try rec.decodedEvent()
+        XCTAssertFalse(decoded.isNotified,
+                       "P1 修复：SyncRecord payload 里 isNotified 必须为 false（设备本地状态不进云）")
+
+        // 2) applyRemote 合并远端事件时，必须保留本地 isNotified
+        //    先 push 一条建立本地记录
+        store.add(ev, skipSync: true)
+        store.markNotified(ev)  // 本地标记已通知
+        XCTAssertEqual(store.eventBy(idString: ev.id.uuidString)?.isNotified, true,
+                       "本地事件 isNotified 应为 true")
+
+        //    模拟远端（另一设备）推送了一个 version 更高的同 ID 事件（比如改了标题）
+        var remoteEv = ev
+        remoteEv.title = "远端改了标题"
+        remoteEv.isNotified = false  // 远端 payload 里 isNotified=false（已被 eventRecord 剥离）
+        let remoteRec = try SyncRecord.eventRecord(for: remoteEv, version: 5, originDevice: "device-B")
+        await mockProvider.injectServerRecord(remoteRec)
+
+        //    pull 合并
+        _ = try await coordinator.pullAndMerge()
+
+        //    关键断言：本地 isNotified 应保留为 true（不被远端 false 覆盖）
+        let localAfter = store.eventBy(idString: ev.id.uuidString)
+        XCTAssertEqual(localAfter?.isNotified, true,
+                       "P1 修复：applyRemote 必须保留本地 isNotified，不能被远端覆盖")
+        //    同时标题应更新为远端的
+        XCTAssertEqual(localAfter?.title, "远端改了标题",
+                       "远端的标题变更应正常合并")
+    }
+
     // MARK: - 测试辅助
 
     @MainActor private func sampleEvents(count: Int, prefix: String) -> [CalendarEvent] {
