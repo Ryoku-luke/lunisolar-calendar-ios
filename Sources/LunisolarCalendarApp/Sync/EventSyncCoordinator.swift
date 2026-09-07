@@ -240,24 +240,24 @@ public final class EventSyncCoordinator: @unchecked Sendable {
                 if remoteRec.isDeleted {
                     // 云端墓碑 → 本地删除（按 ID 查后删）
                     if let l = localExisting {
-                        eventStore.delete(l, skipSync: true)
+                        // P2 修复：旧路径 `eventStore.delete(l, skipSync: true)` 会把这条
+                        //   id 写入 deletedEventIDs → 下一轮 syncBidirectional 又把墓碑推回云、
+                        //   version +1，造成版本膨胀；改用 applyRemoteDelete 避免污染。
+                        eventStore.applyRemoteDelete(id: l.id)
                     }
                 } else if let ev = remoteEvent {
-                    // P3 修复：写入本地时**保留远端事件的 updatedAt 语义**，不再
-                    //   强制 overwrite 为 Date()。否则设备 A 去年编辑了某事件、
-                    //   设备 B 刚启用同步拉下来一看"上次更新：刚刚"——明显误导用户，
-                    //   更严重的是 merge(keepLatest) 在后续 round-trip 会因为
-                    //   伪造的 updatedAt=now 被误判为"本地更新版本"而拒绝真正新的远端。
+                    // P2 修复：写入本地时走 applyRemote 专用入口：
+                    //   1) 保留远端事件的 updatedAt 语义——旧 `update()` 会强行覆盖为 Date()，
+                    //      设备 A 去年编辑的事件、设备 B 刚同步拉下来一看"上次更新：刚刚"，
+                    //      既误导用户，也会被 merge(keepLatest) 在 round-trip 时误判。
+                    //   2) 不写 dirtyEventIDs——否则下一轮 sync 把刚拉下来的记录又推回云，
+                    //      version 每轮 +1，造成版本膨胀（多设备并发场景下 version 永远递增）。
                     // 如果远端 payload 本身的 updatedAt 就是 nil/epoch 再兜底到 now。
                     var toSave = ev
                     if toSave.updatedAt.timeIntervalSince1970 <= 0 {
                         toSave.updatedAt = Date()
                     }
-                    if localExisting != nil {
-                        eventStore.update(toSave, skipSync: true)
-                    } else {
-                        eventStore.add(toSave, skipSync: true)
-                    }
+                    eventStore.applyRemote(toSave)
                 }
                 versionMap[remoteRec.id] = remoteRec.version
                 merged += 1
@@ -291,6 +291,27 @@ public final class EventSyncCoordinator: @unchecked Sendable {
         defer { isSyncing = false }
 
         let start = Date()
+
+        // P1 修复：用户在设置里关闭 iCloud 同步（isEnabled=false）时，
+        //   syncBidirectional 必须直接返回干净结果，**完全不触碰** dirty/deleted 标记。
+        //
+        //   之前路径：syncBidirectional → push() → push 内部 guard isEnabled else { return success(empty) }
+        //   → 回到 syncBidirectional 后调 retainDirtyFlags(onlyFailed: r1.failedRecordIDs=[]) →
+        //   dirtyEventIDs.formIntersection([]) / deletedEventIDs.formIntersection([]) →
+        //   全部 dirty/deleted 标记被清空！但本地从未真正推送到云端 → **多设备数据永久丢失**。
+        //
+        //   场景复现：用户暂时关掉 iCloud 同步、做了若干本地编辑（事件已 dirty），
+        //   然后又打开同步触发 syncBidirectional → 旧逻辑在 push 早返回时清掉了所有 dirty →
+        //   重新打开后的 sync 不会把这段时间的本地变更推上去。
+        if !isEnabled {
+            let r = SyncResult(direction: .both, pushed: 0, pulled: 0,
+                               conflictsResolved: 0, errors: [],
+                               startedAt: start, finishedAt: Date())
+            status = .idle
+            lastResult = r
+            return r
+        }
+
         status = .inProgress(.both)
 
         var pushed = 0, pulled = 0, conflicts = 0, allErrors: [SyncError] = []

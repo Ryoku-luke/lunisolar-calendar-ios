@@ -340,6 +340,63 @@ public final class EventStore {
         }
     }
 
+    // MARK: - 远端合并专用入口（不污染 dirty/deleted，不覆盖 updatedAt）
+
+    /// 由 EventSyncCoordinator.pullAndMerge 在收到远端记录后调用：
+    /// - 已存在 → 原地（或重新二分插入）替换，**保留** event.updatedAt（远端语义）；
+    /// - 不存在 → 二分插入新增；
+    /// - **不写** dirtyEventIDs，**不入** deletedEventIDs，**不调** enqueuePush。
+    ///
+    /// 之所以独立成专用方法，是因为旧的 `update(_:skipSync:true)` / `add(_:skipSync:true)` 路径
+    /// 即便 skipSync=true，仍然会在 dirtyEventIDs.insert(id) 上把"刚从云拿下来的记录"打为脏。
+    /// 下一轮 syncBidirectional 推送时把这条 id 当作本地变更推回云，version 每次 +1，
+    /// 形成**版本膨胀**（每轮 sync 每条远端记录 version 永久 +1），且会把远端的 updatedAt
+    /// 通过 EventStore.update 中的 `applied.updatedAt = Date()` 覆盖成本地"now"——
+    /// 既误导 UI（远端 1 年前的编辑被显示为"刚刚更新"），也会被 merge(keepLatest)
+    /// 在 round-trip 时误判为"本地更新版本"而拒绝真正更新的远端。
+    public func applyRemote(_ event: CalendarEvent) {
+        if let idx = indexOfEvent(id: event.id) {
+            // 已存在：参照 updateInPlaceFast，但**不改 updatedAt**
+            let oldStart = events[idx].startDate
+            if oldStart == event.startDate {
+                // 位置不变：直接替换，idToIndex 不动
+                events[idx] = event
+            } else {
+                events.remove(at: idx)
+                idToIndex.removeValue(forKey: event.id)
+                shiftIndices(from: idx, by: -1)
+                let at = sortedInsertionIndex(for: event.startDate)
+                events.insert(event, at: at)
+                shiftIndices(from: at, by: 1)
+                idToIndex[event.id] = at
+            }
+        } else {
+            // 新事件：二分插入
+            let at = sortedInsertionIndex(for: event.startDate)
+            events.insert(event, at: at)
+            shiftIndices(from: at, by: 1)
+            idToIndex[event.id] = at
+        }
+        invalidateCache()
+        // 防抖保存即可：远端合并批量到达时不需每条立即落盘
+        save()
+    }
+
+    /// 远端墓碑合并专用：按 UUID 删除本地事件；**不写** deletedEventIDs，**不调** enqueuePush。
+    /// 仍然取消 pending 通知（避免幽灵提醒），因为通知是设备本地状态。
+    public func applyRemoteDelete(id: UUID) {
+        guard let idx = idToIndex[id] else { return }
+        let ev = events[idx]
+        events.remove(at: idx)
+        idToIndex.removeValue(forKey: id)
+        shiftIndices(from: idx, by: -1)
+        invalidateCache()
+        save()
+        // 取消 pending 通知（与 delete(_:) 一致；通知是设备本地状态，不应跨墓碑留存）
+        NotificationManager.shared.cancelNotification(for: ev)
+        // 不写 deletedEventIDs / dirtyEventIDs：刚从云拿到墓碑，没必要再推回去。
+    }
+
     // MARK: - 同步辅助
 
     /// 将 push 操作入队（序列化执行，避免并发竞争）

@@ -111,9 +111,14 @@ public enum FestivalManager: Sendable {
     /// 是否为"大节日"（决定是否触发主题色 banner）
     public static func primaryFestival(on date: Date) -> Festival? {
         let all = festivals(on: date)
-        // 按优先级：农历节日优先于公历节日
+        // 按优先级：农历节日优先于公历节日。
+        // P2 修复：旧 primaryNames 用了 "元宵/端午/七夕/中秋/重阳"（无"节"后缀），
+        //   但 lunarFestivals 里的 name 全部带"节"后缀（"元宵节/端午节/..."），
+        //   `primaryNames.contains("元宵节")` 永远返回 false → 这些农历主节日
+        //   不触发 banner / 主题色 override，仅"除夕/春节"因字面相同侥幸命中。
+        //   修复：primaryNames 与 Festival.name 字面严格对齐。
         let primaryNames: Set<String> = [
-            "春节","元宵","端午","七夕","中秋","重阳","除夕",
+            "春节","元宵节","端午节","七夕节","中秋节","重阳节","除夕",
             "国庆节","元旦","劳动节","儿童节"
         ]
         return all.first { primaryNames.contains($0.name) } ?? all.first
