@@ -320,6 +320,18 @@ public final class EventStore {
         if wasNotCompleted && events[idx].isCompleted {
             NotificationManager.shared.cancelNotification(for: events[idx])
         }
+        // P2 修复：从「已完成」取消勾选变回「未完成」时，必须重新调度通知。
+        //   旧逻辑只在标记完成时 cancelNotification，但取消完成时不重排 →
+        //   用户取消完成后 pending 通知已被取消、又没有重建 → 提醒到点不响，
+        //   直到下次 App 启动/前台 rescheduleAllReminders 才恢复（可能已错过提醒时间）。
+        //   scheduleNotification 内部会处理：.never && isNotified 不再重复调度；
+        //   repeating 事件正常重排。
+        if !wasNotCompleted && !events[idx].isCompleted {
+            let restored = events[idx]
+            Task { @MainActor in
+                await NotificationManager.shared.scheduleNotification(for: restored)
+            }
+        }
         if !skipSync {
             enqueuePush()
         }
