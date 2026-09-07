@@ -87,8 +87,15 @@ public final class NotificationManager {
         let identifiers = buildNotificationRequests(for: event, content: content)
         guard !identifiers.isEmpty else { return }
 
-        // 先移除旧的同事件通知（防止用户改时间后旧通知还挂着）
-        center.removePendingNotificationRequests(withIdentifiers: identifiers.map(\.identifier))
+        // 先移除旧的同事件通知（防止用户改时间后旧通知还挂着）。
+        // P2 修复：之前只用 identifiers.map(\.identifier)（本次新建的 IDs），
+        //   若用户把重复规则从 .never（ID=base）改成 .lunarAnnually（ID=base-lunar），
+        //   旧的 base 通知不会被移除 → 残留幽灵通知。
+        //   改用 notificationIdentifiers(for:) 返回该事件所有可能的 IDs（base/base-lunar/base-wd-N），
+        //   一次性清干净。
+        center.removePendingNotificationRequests(
+            withIdentifiers: notificationIdentifiers(for: event)
+        )
 
         do {
             for req in identifiers {

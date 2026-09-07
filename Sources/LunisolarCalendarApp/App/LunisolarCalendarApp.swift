@@ -50,10 +50,19 @@ struct LunisolarCalendarApp: App {
                 }
                 // P2 修复：App 进入后台/失活时，把 EventStore + CountdownStore 的防抖
                 //   保存立即落盘，避免 0.5s 防抖窗口内系统终止进程导致最新 CRUD 丢失。
-                .onChange(of: scenePhase) { newPhase in
+                // P1 修复：App 回到前台（.active）时重排所有提醒——
+                //   农历每年提醒用 repeats:false 的 timeInterval trigger，依赖 rescheduleAllReminders
+                //   每年续排。若用户长期不重启 App（iOS 上 App 常驻后台很常见），
+                //   仅靠启动时的 reschedule 会导致农历生日/纪念日第二年漏排。
+                //   前台是最自然的"续排时机"（用户打开 App 时检查），开销可接受（O(N) 取消+重建）。
+                .onChange(of: scenePhase) { oldPhase, newPhase in
                     if newPhase == .background || newPhase == .inactive {
                         store.flushPendingSave()
                         countdownStore.flushPendingSave()
+                    } else if newPhase == .active {
+                        Task { @MainActor in
+                            await NotificationManager.shared.rescheduleAllReminders(in: store)
+                        }
                     }
                 }
         }

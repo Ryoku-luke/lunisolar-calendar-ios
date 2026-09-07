@@ -356,19 +356,24 @@ public final class EventStore {
     /// 在 round-trip 时误判为"本地更新版本"而拒绝真正更新的远端。
     public func applyRemote(_ event: CalendarEvent) {
         if let idx = indexOfEvent(id: event.id) {
-            // 已存在：参照 updateInPlaceFast，但**不改 updatedAt**
+            // 已存在：参照 updateInPlaceFast，但**不改 updatedAt**，
+            // 且**保留本地 isNotified**（设备本地状态，不被远端覆盖）。
+            // 远端 payload 里 isNotified 已被 eventRecord 强制设为 false，
+            // 若直接整体替换会把本机已触发的提醒重置为未触发 → 重复弹窗。
+            var merged = event
+            merged.isNotified = events[idx].isNotified
             let oldStart = events[idx].startDate
-            if oldStart == event.startDate {
+            if oldStart == merged.startDate {
                 // 位置不变：直接替换，idToIndex 不动
-                events[idx] = event
+                events[idx] = merged
             } else {
                 events.remove(at: idx)
-                idToIndex.removeValue(forKey: event.id)
+                idToIndex.removeValue(forKey: merged.id)
                 shiftIndices(from: idx, by: -1)
-                let at = sortedInsertionIndex(for: event.startDate)
-                events.insert(event, at: at)
+                let at = sortedInsertionIndex(for: merged.startDate)
+                events.insert(merged, at: at)
                 shiftIndices(from: at, by: 1)
-                idToIndex[event.id] = at
+                idToIndex[merged.id] = at
             }
         } else {
             // 新事件：二分插入
