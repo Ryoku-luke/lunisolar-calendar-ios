@@ -71,20 +71,56 @@ import Foundation
 }
 
 /// 测试驱动/预览用的 Provider
+///
+/// 架构加固（并发安全）：
+///   MockCloudKitStore（records 字典）已是 @globalActor actor，线程安全。
+///   但 Provider 自身的配置属性（isOnline / iCloudAvailable / ...）和 lastSyncMs
+///   是普通存储属性，在 Swift 6 strict concurrency 下属于「非隔离可变状态」。
+///   Provider 的 async 方法（push/pull/...）运行在 cooperative pool 的非 MainActor
+///   执行器上，而测试在主线程设置这些配置 → 存在数据竞争。
+///   修复：所有可变状态统一由 NSLock 保护，@unchecked Sendable 有明确的线程安全保证。
 public final class MockCloudKitProvider: ICloudSyncProvider, @unchecked Sendable {
 
-    // MARK: - 配置
+    // MARK: - 配置（NSLock 保护）
+
+    private struct Config: Sendable {
+        var simulatedLatencyMs: Int = 0
+        var isOnline: Bool = true
+        var iCloudAvailable: Bool = true
+        var simulateQuotaExceeded: Bool = false
+        var subscriptionEnabled: Bool = false
+        var lastSyncMs: Int64 = 0
+    }
+
+    /// 所有可变配置/状态的统一锁（NSLock 在 Apple + Linux Foundation 均可用）
+    private let stateLock = NSLock()
+    private var config = Config()
 
     /// 模拟网络延迟（毫秒）。默认 0，测试里调成 300 可看到 UI loading
-    public var simulatedLatencyMs: Int = 0
+    public var simulatedLatencyMs: Int {
+        get { stateLock.withLock { config.simulatedLatencyMs } }
+        set { stateLock.withLock { config.simulatedLatencyMs = newValue } }
+    }
     /// 离线开关：true → 所有 push/pull 直接抛出 networkUnavailable
-    public var isOnline: Bool = true
+    public var isOnline: Bool {
+        get { stateLock.withLock { config.isOnline } }
+        set { stateLock.withLock { config.isOnline = newValue } }
+    }
     /// iCloud 可用开关（比如用户未登录 → false）
-    public var iCloudAvailable: Bool = true
+    public var iCloudAvailable: Bool {
+        get { stateLock.withLock { config.iCloudAvailable } }
+        set { stateLock.withLock { config.iCloudAvailable = newValue } }
+    }
     /// 模拟配额超限（默认 false）
-    public var simulateQuotaExceeded: Bool = false
+    public var simulateQuotaExceeded: Bool {
+        get { stateLock.withLock { config.simulateQuotaExceeded } }
+        set { stateLock.withLock { config.simulateQuotaExceeded = newValue } }
+    }
     /// 模拟订阅是否启用（setupSubscription 返回此值）
-    public var subscriptionEnabled: Bool = false
+    public var subscriptionEnabled: Bool {
+        get { stateLock.withLock { config.subscriptionEnabled } }
+        set { stateLock.withLock { config.subscriptionEnabled = newValue } }
+    }
 
     // MARK: - 设备ID
 
@@ -94,7 +130,10 @@ public final class MockCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     private let store: MockCloudKitStore
     /// 最近一次同步时间戳（毫秒），pull(sinceMs) 默认用它
-    public private(set) var lastSyncMs: Int64 = 0
+    public private(set) var lastSyncMs: Int64 {
+        get { stateLock.withLock { config.lastSyncMs } }
+        set { stateLock.withLock { config.lastSyncMs = newValue } }
+    }
 
     // MARK: - Init
 
@@ -117,9 +156,13 @@ public final class MockCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     public func push(records: [SyncRecord]) async throws -> (written: Int, errors: [String: SyncError]) {
         try await simulateLatency()
-        guard isOnline else { throw SyncError.networkUnavailable }
-        guard iCloudAvailable else { throw SyncError.notAvailable }
-        guard !simulateQuotaExceeded else { throw SyncError.quotaExceeded }
+        // 快照配置：锁内读取后释放，避免长持锁阻塞
+        let (online, available, quotaExceeded) = stateLock.withLock {
+            (config.isOnline, config.iCloudAvailable, config.simulateQuotaExceeded)
+        }
+        guard online else { throw SyncError.networkUnavailable }
+        guard available else { throw SyncError.notAvailable }
+        guard !quotaExceeded else { throw SyncError.quotaExceeded }
 
         var written = 0
         var errors: [String: SyncError] = [:]
@@ -144,28 +187,38 @@ public final class MockCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             _ = await store.upsert(r)
             written += 1
         }
-        if let maxMs = records.map(\.updatedAtMs).max(), maxMs > lastSyncMs {
-            lastSyncMs = maxMs
+        if let maxMs = records.map(\.updatedAtMs).max() {
+            stateLock.withLock {
+                if maxMs > config.lastSyncMs { config.lastSyncMs = maxMs }
+            }
         }
         return (written, errors)
     }
 
     public func pull(sinceMs: Int64) async throws -> [SyncRecord] {
         try await simulateLatency()
-        guard isOnline else { throw SyncError.networkUnavailable }
-        guard iCloudAvailable else { throw SyncError.notAvailable }
+        let (online, available) = stateLock.withLock {
+            (config.isOnline, config.iCloudAvailable)
+        }
+        guard online else { throw SyncError.networkUnavailable }
+        guard available else { throw SyncError.notAvailable }
 
         let recs = await store.recordsSince(sinceMs)
-        if let max = recs.map(\.updatedAtMs).max(), max > lastSyncMs {
-            lastSyncMs = max
+        if let max = recs.map(\.updatedAtMs).max() {
+            stateLock.withLock {
+                if max > config.lastSyncMs { config.lastSyncMs = max }
+            }
         }
         return recs
     }
 
     public func delete(recordIDs: [String]) async throws -> (deletedCount: Int, errors: [String: SyncError]) {
         try await simulateLatency()
-        guard isOnline else { throw SyncError.networkUnavailable }
-        guard iCloudAvailable else { throw SyncError.notAvailable }
+        let (online, available) = stateLock.withLock {
+            (config.isOnline, config.iCloudAvailable)
+        }
+        guard online else { throw SyncError.networkUnavailable }
+        guard available else { throw SyncError.notAvailable }
 
         var deletedCount = 0
         let errors: [String: SyncError] = [:]
@@ -185,24 +238,29 @@ public final class MockCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     public func setupSubscription(enabled: Bool) async -> Bool {
         try? await simulateLatency()
-        guard iCloudAvailable else { return false }
-        subscriptionEnabled = enabled
+        let available = stateLock.withLock { config.iCloudAvailable }
+        guard available else { return false }
+        stateLock.withLock { config.subscriptionEnabled = enabled }
         return true
     }
 
     public func purgeExpiredTombstones(olderThanMs: Int64) async throws -> Int {
         try await simulateLatency()
-        guard isOnline else { throw SyncError.networkUnavailable }
-        guard iCloudAvailable else { throw SyncError.notAvailable }
+        let (online, available) = stateLock.withLock {
+            (config.isOnline, config.iCloudAvailable)
+        }
+        guard online else { throw SyncError.networkUnavailable }
+        guard available else { throw SyncError.notAvailable }
         return await store.purgeExpiredTombstones(olderThanMs: olderThanMs)
     }
 
     // MARK: - 内部
 
     private func simulateLatency() async throws {
-        guard simulatedLatencyMs > 0 else { return }
+        let latency = stateLock.withLock { config.simulatedLatencyMs }
+        guard latency > 0 else { return }
         // Task.sleep nanoseconds 不能太长 (≤ Int.max) ，安全起见按 ms 拆分
-        let ns = min(UInt64(simulatedLatencyMs) * 1_000_000, 5_000_000_000)
+        let ns = min(UInt64(latency) * 1_000_000, 5_000_000_000)
         try await Task.sleep(nanoseconds: ns)
     }
 
