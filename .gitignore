@@ -1,7 +1,9 @@
 # SwiftPM / Xcode / macOS
 .build/
 DerivedData/
-*.xcodeproj/
+# 仅忽略 Xcode 用户私有数据，工程文件本身纳入版本控制
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
 xcuserdata/
 .swiftpm/xcode/
 Package.resolved
@@ -23,3 +25,6 @@ calendar_events.json
 
 # 日志
 *.log
+
+# 临时上传目录（截屏等）
+.uploads/
