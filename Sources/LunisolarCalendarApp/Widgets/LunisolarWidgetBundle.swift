@@ -8,10 +8,11 @@ import SwiftUI
 @available(iOSApplicationExtension 17.0, *)
 public struct HuangliOverviewWidget: Widget {
     public let kind: String = "HuangliOverview"
-    public init() {}
+    private let appGroupID: String?
+    public init(appGroupID: String? = nil) { self.appGroupID = appGroupID }
 
     public var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider()) { entry in
+        StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
             HuangliOverviewWidgetView(entry: entry)
         }
         .configurationDisplayName("今日黄历概览")
@@ -25,10 +26,11 @@ public struct HuangliOverviewWidget: Widget {
 @available(iOSApplicationExtension 17.0, *)
 public struct LunarCardWidget: Widget {
     public let kind: String = "LunarCard"
-    public init() {}
+    private let appGroupID: String?
+    public init(appGroupID: String? = nil) { self.appGroupID = appGroupID }
 
     public var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider()) { entry in
+        StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
             LunarCardWidgetView(entry: entry)
         }
         .configurationDisplayName("农历日期卡片")
@@ -42,10 +44,11 @@ public struct LunarCardWidget: Widget {
 @available(iOSApplicationExtension 17.0, *)
 public struct TodoProgressWidget: Widget {
     public let kind: String = "TodoProgress"
-    public init() {}
+    private let appGroupID: String?
+    public init(appGroupID: String? = nil) { self.appGroupID = appGroupID }
 
     public var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider()) { entry in
+        StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
             TodoProgressWidgetView(entry: entry)
         }
         .configurationDisplayName("今日待办进度")
@@ -71,13 +74,14 @@ public struct TodoProgressWidget: Widget {
 /// 直接复用此处的 3 个 Widget 实现即可。
 @available(iOSApplicationExtension 17.0, *)
 public struct LunisolarWidgetsBundle: WidgetBundle {
-    public init() {}
+    private let appGroupID: String?
+    public init(appGroupID: String? = nil) { self.appGroupID = appGroupID }
 
     @WidgetBundleBuilder
     public var body: some Widget {
-        HuangliOverviewWidget()
-        LunarCardWidget()
-        TodoProgressWidget()
+        HuangliOverviewWidget(appGroupID: appGroupID)
+        LunarCardWidget(appGroupID: appGroupID)
+        TodoProgressWidget(appGroupID: appGroupID)
     }
 }
 #endif
