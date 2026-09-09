@@ -58,19 +58,20 @@ private struct CountdownRow: View {
     let today: Date
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: AppTheme.Spacing.lg) {
             Text(event.emoji)
-                .font(.system(size: 32))
+                // 用 AppTheme.Font.numeralXL 而非散落硬编码 size: 32
+                .font(.system(size: 30, weight: .semibold, design: .rounded))
                 .frame(width: 48, height: 48)
-                .background(Color.secondary.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Color.themeQuaternaryFill)
+                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
                 Text(event.title)
-                    .font(.body.weight(.semibold))
+                    .font(AppTheme.Font.bodyBold)
                     .foregroundStyle(Color.label)
                 Text(event.date.formatted(date: .abbreviated, time: .omitted))
-                    .font(.caption)
+                    .font(AppTheme.Font.caption)
                     .foregroundStyle(Color.secondaryLabel)
             }
 
@@ -78,14 +79,14 @@ private struct CountdownRow: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(event.displayText(today: today))
-                    .font(.headline)
+                    .font(AppTheme.Font.title3)
                     .foregroundStyle(abs(event.daysFrom(today: today)) <= 7 ? Color.festiveRed : Color.label)
                 Text(event.kind.label)
-                    .font(.caption2)
+                    .font(AppTheme.Font.caption2)
                     .foregroundStyle(Color.tertiaryLabel)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, AppTheme.Spacing.xs)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(event.title) \(event.displayText(today: today))")
     }

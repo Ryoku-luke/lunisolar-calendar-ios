@@ -16,21 +16,19 @@ struct DayDetailView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                // 节日染色背景（与月视图同款柔和渐变）
-                DayDetailBackground(accent: accent).ignoresSafeArea()
-                ScrollView {
-                    VStack(spacing: AppTheme.Spacing.section) {
-                        headerCard.padding(.top, AppTheme.Spacing.lg)
-                        almanacCard
-                        eventsCard
-                        Color.clear.frame(height: AppTheme.Spacing.xxl)
-                    }
-                    .padding(.horizontal, isWide ? AppTheme.Spacing.xxl : AppTheme.Spacing.lg)
-                    .frame(maxWidth: isWide ? 760 : .infinity)
-                    .frame(maxWidth: .infinity)
+            ScrollView {
+                VStack(spacing: AppTheme.Spacing.section) {
+                    headerCard.padding(.top, AppTheme.Spacing.lg)
+                    almanacCard
+                    eventsCard
+                    Color.clear.frame(height: AppTheme.Spacing.xxl)
                 }
+                .padding(.horizontal, isWide ? AppTheme.Spacing.xxl : AppTheme.Spacing.lg)
+                .frame(maxWidth: isWide ? 760 : .infinity)
+                .frame(maxWidth: .infinity)
             }
+            // 统一节日壁纸（替代内联 DayDetailBackground，全应用同一视觉语言）
+            .festiveWallpaper(accent: accent)
             .navigationTitle(date.weekdaySymbol)
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
@@ -114,10 +112,7 @@ struct DayDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, AppTheme.Spacing.sm)
                     .padding(.vertical, AppTheme.Spacing.md)
-                    .background(RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
-                        .fill(.ultraThinMaterial))
-                    .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
-                        .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair))
+                    .softChipBackground(radius: AppTheme.Radius.md)
                     .contentShape(Rectangle())
                 }
             }
@@ -218,10 +213,7 @@ struct DayDetailView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(AppTheme.Spacing.xl)
-                .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                    .fill(.ultraThinMaterial))
-                .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                    .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair))
+                .softChipBackground(material: .ultraThinMaterial)
             } else {
                 VStack(spacing: AppTheme.Spacing.sm) {
                     ForEach(todays) { ev in
@@ -238,50 +230,12 @@ struct DayDetailView: View {
                 showAdd = true
             } label: {
                 Label("新建\(EventType.schedule.uiLabel)", systemImage: "plus.circle.fill")
-                    .font(AppTheme.Font.bodyBold).frame(maxWidth: .infinity)
-                    .frame(minHeight: AppTheme.Touch.minTarget)
-                    .background {
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .fill(LinearGradient(colors: [accent, accent.opacity(0.82)],
-                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .stroke(Color.white.opacity(0.24), lineWidth: AppTheme.Stroke.hair)
-                    }
-                    .overlay(alignment: .top) {
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .fill(LinearGradient(colors: [Color.white.opacity(0.22), .clear],
-                                                 startPoint: .top, endPoint: .bottom))
-                            .frame(height: 22).allowsHitTesting(false)
-                            .offset(y: 2)
-                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
-                    }
-                    .foregroundStyle(.white)
-                    .shadow(color: accent.opacity(0.30), radius: 12, x: 0, y: 5)
-                    .contentShape(Rectangle())
-            }.buttonStyle(.plain)
-                .pressableFeedback()
+            }
+            .buttonStyle(PrimaryActionButtonStyle(accent: accent))
         }
         .padding(AppTheme.Spacing.xl)
         .liquidCard(radius: AppTheme.Radius.xl, material: .thinMaterial,
                      tint: accent.opacity(0.6), shadow: AppTheme.Shadow.card, highlight: 0.08)
-    }
-}
-
-/// DayDetail 背景：节⽇染色色斑 + 系统分组背景
-private struct DayDetailBackground: View {
-    let accent: Color
-    var body: some View {
-        ZStack {
-            Color.systemGroupedBackground
-            LinearGradient(colors: [accent.opacity(0.08), accent.opacity(0.02), .clear],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
-            Circle().fill(accent.opacity(0.06))
-                .frame(width: 360, height: 360).blur(radius: 72)
-                .offset(x: -160, y: -200)
-            Circle().fill(accent.opacity(0.05))
-                .frame(width: 300, height: 300).blur(radius: 64)
-                .offset(x: 140, y: 260)
-        }
     }
 }
 
