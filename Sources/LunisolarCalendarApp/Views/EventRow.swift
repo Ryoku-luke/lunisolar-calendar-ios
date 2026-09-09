@@ -60,10 +60,8 @@ struct EventRow: View {
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
         .padding(.vertical, compact ? AppTheme.Spacing.lg : AppTheme.Spacing.xl)
-        .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-            .fill(Color.secondarySystemGroupedBackground))
-        .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-            .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair))
+        .softChipBackground(radius: AppTheme.Radius.lg,
+                             fill: Color.secondarySystemGroupedBackground)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(event.title) \(event.displayTimeRange)\(event.isCompleted ? " 已完成" : "")")

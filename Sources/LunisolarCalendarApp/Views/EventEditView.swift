@@ -104,54 +104,22 @@ struct EventEditView: View {
         let accent = self.accent
         return VStack(spacing: AppTheme.Spacing.sm) {
             if isEditing {
-                Button(role: .destructive) {
+                Button {
                     showDeleteConfirm = true
                 } label: {
                     Label("删除此\(type.uiLabel)", systemImage: "trash.fill")
-                        .font(AppTheme.Font.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: AppTheme.Touch.minTarget)
-                        .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .fill(Color.systemRed.opacity(0.10)))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                                .stroke(Color.systemRed.opacity(0.30), lineWidth: AppTheme.Stroke.hair)
-                        )
-                        .overlay(alignment: .top) {
-                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                                .fill(LinearGradient(colors: [Color.white.opacity(0.18), .clear],
-                                                     startPoint: .top, endPoint: .bottom))
-                                .frame(height: 22).allowsHitTesting(false).offset(y: 2)
-                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
-                        }
-                        .foregroundStyle(Color.systemRed)
-                        .contentShape(Rectangle())
-                }.buttonStyle(.plain).pressableFeedback()
+                }
+                .buttonStyle(DestructiveActionButtonStyle())
+                .pressableFeedback()
             }
-            Button { save() } label: {
+            Button {
+                save()
+            } label: {
                 Label(isEditing ? "保存修改" : "添加\(type.uiLabel)", systemImage: "checkmark.circle.fill")
-                    .font(AppTheme.Font.bodyBold).frame(maxWidth: .infinity)
-                    .frame(minHeight: AppTheme.Touch.minTarget)
-                    .background {
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .fill(LinearGradient(colors: [accent, accent.opacity(0.82)],
-                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .stroke(Color.white.opacity(0.24), lineWidth: AppTheme.Stroke.hair)
-                    }
-                    .overlay(alignment: .top) {
-                        RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                            .fill(LinearGradient(colors: [Color.white.opacity(0.22), .clear],
-                                                 startPoint: .top, endPoint: .bottom))
-                            .frame(height: 22).allowsHitTesting(false).offset(y: 2)
-                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
-                    }
-                    .foregroundStyle(.white)
-                    .shadow(color: accent.opacity(0.30), radius: 12, x: 0, y: 5)
-                    .contentShape(Rectangle())
-            }.buttonStyle(.plain).pressableFeedback()
-             .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-             .opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+            }
+            .buttonStyle(PrimaryActionButtonStyle(accent: accent))
+            .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
         .padding(.top, AppTheme.Spacing.md)
@@ -181,18 +149,11 @@ struct EventEditView: View {
                         Button { withAnimation(AppTheme.Motion.pressInOut) { type = t } } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: t.iconName).font(AppTheme.Font.caption.weight(.semibold))
-                                Text(t.uiLabel).font(AppTheme.Font.subheadline.weight(.semibold))
+                                Text(t.uiLabel)
                             }
-                            .foregroundStyle(type == t ? .white : Color.label)
-                            .padding(.horizontal, AppTheme.Spacing.md)
-                            .frame(minHeight: AppTheme.Touch.chipHeight)
-                            .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                                .fill(type == t ? t.tintColor : Color.quaternarySystemFill))
-                            .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                                .stroke(type == t ? t.tintColor.opacity(0.5) : .clear,
-                                        lineWidth: AppTheme.Stroke.hair))
-                            .contentShape(Rectangle())
-                        }.buttonStyle(.plain).pressableFeedback()
+                        }
+                        .buttonStyle(SelectChipStyle(isSelected: type == t, tint: t.tintColor))
+                        .pressableFeedback()
                     }
                 }
             }
@@ -249,14 +210,8 @@ struct EventEditView: View {
                             }.pickerStyle(.menu).tint(Color.systemOrange)
                         }
                         .padding(AppTheme.Spacing.md)
-                        .background(
-                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
-                                .fill(Color.quaternarySystemFill)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
-                                .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
-                        )
+                        .softChipBackground(radius: AppTheme.Radius.md,
+                                             fill: Color.quaternarySystemFill)
                     }
                 }
             }
@@ -272,17 +227,9 @@ struct EventEditView: View {
                 ForEach(repeatOptions) { rule in
                     Button { withAnimation(AppTheme.Motion.pressInOut) { repeatRule = rule } } label: {
                         Text(rule.uiLabel)
-                            .font(AppTheme.Font.subheadline.weight(.semibold))
-                            .foregroundStyle(repeatRule == rule ? .white : Color.label)
-                            .padding(.horizontal, AppTheme.Spacing.md)
-                            .frame(minHeight: AppTheme.Touch.chipHeight)
-                            .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                                .fill(repeatRule == rule ? accent : Color.quaternarySystemFill))
-                            .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                                .stroke(repeatRule == rule ? accent.opacity(0.5) : .clear,
-                                        lineWidth: AppTheme.Stroke.hair))
-                            .contentShape(Rectangle())
-                    }.buttonStyle(.plain).pressableFeedback()
+                    }
+                    .buttonStyle(SelectChipStyle(isSelected: repeatRule == rule, tint: accent))
+                    .pressableFeedback()
                 }
             }
         }
@@ -307,18 +254,11 @@ struct EventEditView: View {
                                             p == .high ? "flame.fill" :
                                             p == .normal ? "flag.fill" : "flag")
                                 .font(AppTheme.Font.caption)
-                            Text(p.uiLabel).font(AppTheme.Font.subheadline.weight(.semibold))
+                            Text(p.uiLabel)
                         }
-                        .foregroundStyle(priority == p ? .white : p.tintColor)
-                        .padding(.horizontal, AppTheme.Spacing.md)
-                        .frame(minHeight: AppTheme.Touch.chipHeight)
-                        .background(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                            .fill(priority == p ? p.tintColor : p.tintColor.opacity(0.10)))
-                        .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                            .stroke(priority == p ? p.tintColor.opacity(0.45) : .clear,
-                                    lineWidth: AppTheme.Stroke.hair))
-                        .contentShape(Rectangle())
-                    }.buttonStyle(.plain).pressableFeedback()
+                    }
+                    .buttonStyle(SelectChipStyle(isSelected: priority == p, tint: p.tintColor))
+                    .pressableFeedback()
                 }
             }
         }
@@ -333,14 +273,8 @@ struct EventEditView: View {
                 .font(AppTheme.Font.body).lineLimit(3...8)
                 .frame(minHeight: 96, alignment: .top)
                 .padding(AppTheme.Spacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
-                        .fill(Color.quaternarySystemFill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
-                        .stroke(Color.separator.opacity(0.20), lineWidth: AppTheme.Stroke.hair)
-                )
+                .softChipBackground(radius: AppTheme.Radius.md,
+                                     fill: Color.quaternarySystemFill)
         }
     }
 

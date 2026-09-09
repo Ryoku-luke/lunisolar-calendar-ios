@@ -10,8 +10,8 @@ struct WeekHeaderView: View {
         HStack(spacing: 0) {
             ForEach(0..<7, id: \.self) { idx in
                 Text(weekdays[idx])
-                    .font(isRegular ? .system(size: 13, weight: .semibold, design: .rounded)
-                                     : .system(size: 11, weight: .semibold, design: .rounded))
+                    // 复用 AppTheme.Font 阶梯（caption/caption2），避免散落硬编码
+                    .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
                     .foregroundStyle(idx == 0 || idx == 6
                                      ? Color.systemRed.opacity(0.65)
                                      : Color.secondaryLabel.opacity(0.85))
@@ -19,12 +19,29 @@ struct WeekHeaderView: View {
             }
         }
         .padding(.vertical, isRegular ? 10 : 8)
-        .padding(.horizontal, isRegular ? 16 : 12)
+        .padding(.horizontal, isRegular ? AppTheme.Spacing.lg : AppTheme.Spacing.md)
         .overlay(alignment: .bottom) {
             Rectangle().fill(Color.hairSeparator)
                 .frame(height: AppTheme.Stroke.hair)
-                .padding(.horizontal, isRegular ? 20 : 14)
+                .padding(.horizontal, isRegular ? AppTheme.Spacing.xl : AppTheme.Spacing.lg)
         }
+    }
+}
+
+// MARK: - 法定假日徽章（抽取自 DayCellView，消除两处重复的"休/班"圆形代码）
+
+struct HolidayBadge: View {
+    let type: HolidayType
+    let isRegular: Bool
+
+    var body: some View {
+        Text(type == .holiday ? "休" : "班")
+            .font(.system(size: isRegular ? 9 : 8, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: isRegular ? 14 : 12, height: isRegular ? 14 : 12)
+            .background(
+                Circle().fill(type == .holiday ? Color.systemGreen : Color.systemOrange)
+            )
     }
 }
 
@@ -86,24 +103,12 @@ struct DayCellView: View {
                             .frame(width: isRegular ? 12 : 9, height: isRegular ? 5 : 4)
                     }
                     if holidayType != .normal {
-                        Text(holidayType == .holiday ? "休" : "班")
-                            .font(.system(size: isRegular ? 9 : 8, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: isRegular ? 14 : 12, height: isRegular ? 14 : 12)
-                            .background(
-                                Circle().fill(holidayType == .holiday ? Color.systemGreen : Color.systemOrange)
-                            )
+                        HolidayBadge(type: holidayType, isRegular: isRegular)
                     }
                 }
                 .frame(height: isRegular ? 6 : 5)
             } else if holidayType != .normal {
-                Text(holidayType == .holiday ? "休" : "班")
-                    .font(.system(size: isRegular ? 9 : 8, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: isRegular ? 14 : 12, height: isRegular ? 14 : 12)
-                    .background(
-                        Circle().fill(holidayType == .holiday ? Color.systemGreen : Color.systemOrange)
-                    )
+                HolidayBadge(type: holidayType, isRegular: isRegular)
             } else {
                 Color.clear.frame(height: isRegular ? 6 : 5)
             }

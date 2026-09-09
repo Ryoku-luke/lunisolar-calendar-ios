@@ -44,10 +44,10 @@ struct DateJumpView: View {
                     Picker("日", selection: $day) {
                         ForEach(1...maxDaysInMonth, id: \.self) { Text("\($0) 日").tag($0) }
                     }
-                    .onChange(of: month) { _ in
+                    .onChange(of: month, initial: false) { _ in
                         if day > maxDaysInMonth { day = maxDaysInMonth }
                     }
-                    .onChange(of: year) { _ in
+                    .onChange(of: year, initial: false) { _ in
                         if day > maxDaysInMonth { day = maxDaysInMonth }
                     }
                 }

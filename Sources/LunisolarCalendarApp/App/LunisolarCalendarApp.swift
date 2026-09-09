@@ -55,7 +55,7 @@ struct LunisolarCalendarApp: App {
                 //   每年续排。若用户长期不重启 App（iOS 上 App 常驻后台很常见），
                 //   仅靠启动时的 reschedule 会导致农历生日/纪念日第二年漏排。
                 //   前台是最自然的"续排时机"（用户打开 App 时检查），开销可接受（O(N) 取消+重建）。
-                .onChange(of: scenePhase) { oldPhase, newPhase in
+                .onChange(of: scenePhase, initial: false) { newPhase in
                     if newPhase == .background || newPhase == .inactive {
                         store.flushPendingSave()
                         countdownStore.flushPendingSave()

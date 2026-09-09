@@ -68,32 +68,19 @@ struct CalendarMonthView: View {
                         NavigationLink {
                             EventEditView(editing: nil, defaultDate: selectedDate).environment(store)
                         } label: {
+                            // 液态玻璃 FAB：节日色自动切换，克制装饰（去除顶部高光 overlay 叠加层）
                             Image(systemName: "plus")
-                                .font(.system(size: 26, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color.white)
+                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
                                 .frame(width: 60, height: 60)
-                                .background {
-                                    ZStack {
-                                        // iOS 26 液态玻璃浮动按钮：节日色自动切换
-                                        Circle()
-                                            .fill(LinearGradient(
-                                                colors: [accentColorForToday, accentColorForToday.opacity(0.80)],
-                                                startPoint: .topLeading, endPoint: .bottomTrailing
-                                            ))
-                                        Circle()
-                                            .stroke(Color.white.opacity(0.24), lineWidth: AppTheme.Stroke.hair)
-                                    }
-                                }
-                                .shadow(color: accentColorForToday.opacity(0.32),
-                                        radius: 20, x: 0, y: 10)
-                                .overlay(alignment: .top) {
-                                    // 顶部高光
-                                    Circle()
-                                        .fill(LinearGradient(colors: [Color.white.opacity(0.30), .clear],
-                                                             startPoint: .top, endPoint: .bottom))
-                                        .frame(height: 28).allowsHitTesting(false)
-                                        .offset(y: 2).clipShape(Circle())
-                                }
+                                .background(
+                                    Circle().fill(LinearGradient(
+                                        colors: [accentColorForToday, accentColorForToday.opacity(0.80)],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing
+                                    ))
+                                )
+                                .overlay(Circle().stroke(Color.white.opacity(0.22), lineWidth: AppTheme.Stroke.hair))
+                                .shadow(color: accentColorForToday.opacity(0.30), radius: 18, x: 0, y: 8)
                         }
                         .buttonStyle(.plain)
                         .pressableFeedback()
@@ -397,12 +384,7 @@ struct CalendarMonthView: View {
                     jiBlock(huangli.ji, maxShown: 6)
                 }
                 .padding(AppTheme.Spacing.md)
-                .background {
-                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                        .fill(.thinMaterial)
-                    RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                        .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
-                }
+                .softChipBackground(material: .thinMaterial)
             }
 
             VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
@@ -433,10 +415,7 @@ struct CalendarMonthView: View {
                     }
                     .padding(AppTheme.Spacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                        .fill(.ultraThinMaterial))
-                    .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                        .stroke(Color.separator.opacity(0.18), lineWidth: AppTheme.Stroke.hair))
+                    .softChipBackground(material: .ultraThinMaterial)
                 } else {
                     let slice = isPanelExpanded ? todaysEvents : Array(todaysEvents.prefix(3))
                     VStack(spacing: AppTheme.Spacing.sm) {
@@ -475,48 +454,16 @@ struct CalendarMonthView: View {
                     DayDetailView(date: selectedDate).environment(store)
                 } label: {
                     Label("查看黄历详情", systemImage: "doc.text.magnifyingglass")
-                        .font(AppTheme.Font.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: AppTheme.Touch.minTarget)
-                        .background {
-                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                                .fill(.thinMaterial)
-                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                                .stroke(Color.separator.opacity(0.20), lineWidth: AppTheme.Stroke.hair)
-                        }
-                        .foregroundStyle(Color.label)
-                        .contentShape(Rectangle())
                 }
-                .pressableFeedback()
+                .buttonStyle(SecondaryActionButtonStyle(accent: accent))
 
                 NavigationLink {
                     EventEditView(editing: nil, defaultDate: selectedDate).environment(store)
                 } label: {
                     Label("新建日程", systemImage: "plus.circle.fill")
-                        .font(AppTheme.Font.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: AppTheme.Touch.minTarget)
-                        .background {
-                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                                .fill(LinearGradient(colors: [accent, accent.opacity(0.82)],
-                                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                                .stroke(Color.white.opacity(0.24), lineWidth: AppTheme.Stroke.hair)
-                        }
-                        .overlay(alignment: .top) {
-                            RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                                .fill(LinearGradient(colors: [Color.white.opacity(0.22), .clear],
-                                                     startPoint: .top, endPoint: .bottom))
-                                .frame(height: 22).allowsHitTesting(false)
-                                .offset(y: 2)
-                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
-                        }
-                        .foregroundStyle(.white)
-                        .shadow(color: accent.opacity(0.28), radius: 10, x: 0, y: 4)
-                        .contentShape(Rectangle())
                 }
-                .pressableFeedback()
-            }.buttonStyle(.plain)
+                .buttonStyle(PrimaryActionButtonStyle(accent: accent))
+            }
         }
         .padding(AppTheme.Spacing.xl)
         .liquidCard(radius: 28, material: .regularMaterial,
