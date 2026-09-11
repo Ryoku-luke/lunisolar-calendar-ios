@@ -1,4 +1,5 @@
 import XCTest
+import LunarCore
 @testable import LunisolarCalendarApp
 
 // MARK: - 黄历离散数据库 Provider 测试

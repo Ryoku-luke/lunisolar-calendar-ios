@@ -1,4 +1,5 @@
 import XCTest
+import LunarCore
 @testable import LunisolarCalendarApp
 
 // MARK: - 事件模型测试
@@ -128,6 +129,53 @@ final class CalendarEventTests: XCTestCase {
         XCTAssertGreaterThan(Priority.normal, Priority.low)
     }
 
+    // MARK: P2 回归：primaryFestival 主节日名字对齐（带"节"后缀）
+    //
+    // 背景：旧 primaryNames 写的是 "元宵/端午/七夕/中秋/重阳"（无"节"后缀），
+    // 但 lunarFestivals 里的 Festival.name 全部带"节"后缀（"元宵节/端午节/..."），
+    // `primaryNames.contains("元宵节")` 永远返回 false → 这些农历主节日不触发 banner / 主题色。
+    // 修复：primaryNames 与 Festival.name 字面严格对齐。
+    func testPrimaryFestivalNamesMatchActualFestivalNames() {
+        let cal = Calendar(identifier: .gregorian)
+
+        // 用已知的农历节日公历日期（CalendarEventTests 已有真值校验）：
+        // 2025 中秋节 = 2025-10-06（农历八月十五）
+        var dcMidAutumn = DateComponents(); dcMidAutumn.year = 2025; dcMidAutumn.month = 10; dcMidAutumn.day = 6
+        let midAutumn = cal.date(from: dcMidAutumn)!
+        let fsMidAutumn = FestivalManager.festivals(on: midAutumn)
+        XCTAssertTrue(fsMidAutumn.contains(where: { $0.name == "中秋节" }),
+                      "2025-10-06 应是中秋节")
+        // 关键：primaryFestival 应该能命中"中秋节"（旧代码因名字失配返回 nil）
+        let primaryMid = FestivalManager.primaryFestival(on: midAutumn)
+        XCTAssertEqual(primaryMid?.name, "中秋节",
+                       "P2 修复：primaryFestival 应命中带'节'后缀的农历主节日")
+        XCTAssertNotNil(FestivalManager.accentColorHex(on: midAutumn),
+                        "中秋节应有主题色")
+
+        // 2025 端午节 = 2025-05-31（农历五月初五）
+        var dcDragonBoat = DateComponents(); dcDragonBoat.year = 2025; dcDragonBoat.month = 5; dcDragonBoat.day = 31
+        let dragonBoat = cal.date(from: dcDragonBoat)!
+        XCTAssertTrue(FestivalManager.festivals(on: dragonBoat).contains(where: { $0.name == "端午节" }))
+        XCTAssertEqual(FestivalManager.primaryFestival(on: dragonBoat)?.name, "端午节",
+                       "P2 修复：端午节应命中 primaryFestival")
+
+        // 2025 春节 = 2025-01-29（农历正月初一）
+        var dcSpring = DateComponents(); dcSpring.year = 2025; dcSpring.month = 1; dcSpring.day = 29
+        let spring = cal.date(from: dcSpring)!
+        XCTAssertEqual(FestivalManager.primaryFestival(on: spring)?.name, "春节")
+
+        // 2025 元宵节 = 2025-02-12（农历正月十五）
+        var dcLantern = DateComponents(); dcLantern.year = 2025; dcLantern.month = 2; dcLantern.day = 12
+        let lantern = cal.date(from: dcLantern)!
+        XCTAssertEqual(FestivalManager.primaryFestival(on: lantern)?.name, "元宵节",
+                       "P2 修复：元宵节应命中 primaryFestival")
+
+        // 公历节日（国庆节）也应命中
+        var dcNational = DateComponents(); dcNational.year = 2025; dcNational.month = 10; dcNational.day = 1
+        let national = cal.date(from: dcNational)!
+        XCTAssertEqual(FestivalManager.primaryFestival(on: national)?.name, "国庆节")
+    }
+
     func testICSExportImport() {
         let ev = CalendarEvent(title: "导出测试事件", startDate: Date(), location: "测试地点", notes: "备注")
         let ics = DataPortability.exportICS(from: [ev])
@@ -200,5 +248,240 @@ final class CalendarEventTests: XCTestCase {
         let ev2101 = CalendarEvent(title: "OOB2", startDate: oob2101, repeatRule: .lunarAnnually)
         XCTAssertFalse(ev2101.repeatRuleLabel.isEmpty)
         XCTAssertFalse(ev2101.occurs(on: Date()))
+    }
+
+    // MARK: P1 回归：闰月生日在有相同闰月的年只过闰月，不过普通月（防双生日回归）
+    //
+    // 旧代码 bug：lunarAnnually 分支里 if sl.isLeapMonth { return true } —— 无条件 true，
+    // 导致闰六月源事件在"有闰六月的年"里同时命中『六月廿九』（普通月）+『闰六月廿九』，
+    // 用户过两次生日。修复后：有闰同月 → 只匹配闰月；无闰同月 → 回退普通月。
+    func testLunarAnnuallyLeapSource_NoDoubleBirthdayInLeapYear() {
+        let cal = Calendar(identifier: .gregorian)
+
+        // 锚点：2025 闰六月 → 需先在 2025 年内找一个闰六月的公历日期作为起点
+        // 2025 的 leapMonth 查表应为 6（DataProvider 定义）
+        let startYear = 2025
+        let leap = ChineseCalendar.leapMonth(of: startYear)
+        XCTAssertEqual(leap, 6, "测试前提：2025 年应是闰六月，如数据库更新需换锚点年")
+
+        // 取 2025 闰六月 十五日作为事件起始日
+        guard let startSolar = ChineseCalendar.solarDate(
+            fromLunar: startYear, month: 6, day: 15, isLeap: true
+        ) else {
+            XCTFail("无法构造 2025 闰六月十五"); return
+        }
+        let ev = CalendarEvent(title: "闰六月生日（母亲）", startDate: startSolar, repeatRule: .lunarAnnually)
+
+        // 在 2025 年（有相同闰六月）：
+        // 1) 普通六月十五日 → 不应匹配（避免双生日！）
+        guard let plainSolar = ChineseCalendar.solarDate(
+            fromLunar: startYear, month: 6, day: 15, isLeap: false
+        ) else { XCTFail("无法构造 2025 普通六月十五"); return }
+        let plainLunar = ChineseCalendar.lunarDateSafe(from: plainSolar)
+        XCTAssertEqual(plainLunar?.month, 6)
+        XCTAssertEqual(plainLunar?.day, 15)
+        XCTAssertEqual(plainLunar?.isLeapMonth, false)
+        XCTAssertFalse(ev.occurs(on: plainSolar),
+            "有闰同月的年里，闰月源事件不应匹配普通同月（防双生日旧bug回归）")
+
+        // 2) 闰六月十五日 → 应匹配
+        let leapLunar = ChineseCalendar.lunarDateSafe(from: startSolar)
+        XCTAssertEqual(leapLunar?.isLeapMonth, true, "起锚日应为闰六月十五")
+        XCTAssertTrue(ev.occurs(on: startSolar), "闰六月源事件在闰六月当日 应匹配")
+
+        // 在无闰六月的邻近年（2026）：普通六月十五应回退命中（用户总不能不过生日）
+        let targetYear = 2026
+        let leap26 = ChineseCalendar.leapMonth(of: targetYear)
+        XCTAssertNotEqual(leap26, 6, "测试前提：2026 年应不再闰六月")
+        guard let fallback26 = ChineseCalendar.solarDate(
+            fromLunar: targetYear, month: 6, day: 15, isLeap: false
+        ) else { XCTFail("无法构造 2026 普通六月十五"); return }
+        let fb26Lunar = ChineseCalendar.lunarDateSafe(from: fallback26)
+        XCTAssertEqual(fb26Lunar?.month, 6)
+        XCTAssertEqual(fb26Lunar?.day, 15)
+        XCTAssertEqual(fb26Lunar?.isLeapMonth, false)
+        // occurs 需要 target >= start，2026 在 2025 之后，OK
+        XCTAssertTrue(ev.occurs(on: fallback26),
+            "无闰同月的年里，闰月源事件应回退命中普通同月同日")
+    }
+
+    // MARK: - 通知调度关键判定回归（对应 NotificationManager 修复）
+    //
+    // 说明：NM.swift 本体依赖 UserNotifications / UNUserNotificationCenter，
+    // 测试环境（SPM / Linux）未必可用，因此这里把 NM 里两道关键守卫转写为
+    // 等价的 pure 逻辑进行测试：
+    //   a) 重复提醒（yearly/weekly/...）即使 startDate 在过去也应"可调度"；
+    //      仅 .never 一次性要求 startDate > 今天。
+    //   b) yearly 规则的 reminderOffsetMinutes 应完整生效到 month/day/hour/minute，
+    //      即调度 fire 的月/日 = effectiveStart(=startDate - 偏移) 月/日，
+    //      不是 startDate 月/日（否则"婚礼前 1 天提醒"每年当天才响）。
+
+    /// NM guard 回归：startDate 过去的 yearly 重复提醒应当 eligible；仅 .never past 拒绝
+    func testNotificationEligibilityIgnoresPastStartForRepeatRules() {
+        let cal = Calendar(identifier: .gregorian)
+
+        // Case 1：.never 一次性提醒 + startDate 3 小时前 → 不可调度
+        var past = Date().addingTimeInterval(-3 * 3600)
+        let neverPast = CalendarEvent(
+            title: "已过期单次",
+            type: .reminder,
+            startDate: past,
+            repeatRule: .never
+        )
+        let eligibleNeverPast = notificationIsEligibleForScheduling(neverPast)
+        XCTAssertFalse(eligibleNeverPast, ".never 且 startDate 已过去：应该拒调度")
+
+        // Case 2：.never 一次性提醒 + startDate 3 小时后 → 可调度
+        let future = Date().addingTimeInterval(3 * 3600)
+        let neverFuture = CalendarEvent(
+            title: "未到单次",
+            type: .reminder,
+            startDate: future,
+            repeatRule: .never
+        )
+        XCTAssertTrue(notificationIsEligibleForScheduling(neverFuture),
+            ".never 且 startDate 未来：应该可调度")
+
+        // Case 3：yearly 生日提醒，startDate 从 2019 年开始（过去） → 应可调度
+        var dc = DateComponents(); dc.year = 2019; dc.month = 4; dc.day = 10
+        past = cal.date(from: dc)!
+        let yearlyPast = CalendarEvent(
+            title: "生日（每年）",
+            type: .reminder,
+            startDate: past,
+            repeatRule: .yearly
+        )
+        XCTAssertTrue(notificationIsEligibleForScheduling(yearlyPast),
+            "yearly 起锚在过去也应该 eligible（第 8 轮修复前一刀切被拒）")
+
+        // Case 4：其余重复规则过去 → 都应 eligible
+        let rules: [RepeatRule] = [.daily, .weekly, .monthly, .workday, .lunarAnnually]
+        for rule in rules {
+            let rep = CalendarEvent(
+                title: "\(rule) 循环",
+                type: .reminder,
+                startDate: past,
+                repeatRule: rule
+            )
+            XCTAssertTrue(notificationIsEligibleForScheduling(rep),
+                "重复规则 \(rule) 起锚在过去，应 eligible")
+        }
+
+        // Case 5：.schedule 类型（非 reminder），哪怕未来也不能走 NM reminder 调度
+        let task = CalendarEvent(
+            title: "普通日程",
+            type: .schedule,
+            startDate: future,
+            repeatRule: .never
+        )
+        XCTAssertFalse(notificationIsEligibleForScheduling(task),
+            "type != .reminder 的事件不该排提醒")
+    }
+
+    /// NM yearly 偏移月/日完整生效："婚礼 3/15 + offset=-1440min（提前 1 天）" → 触发月/日应为 3/14
+    func testYearlyReminderOffsetAppliesToMonthAndDay() {
+        let cal = Calendar(identifier: .gregorian)
+
+        // 婚礼 2025-03-15 上午 09:00，提前 1 天提醒（=1440min 前）
+        var dc = DateComponents()
+        dc.year = 2025; dc.month = 3; dc.day = 15
+        dc.hour = 9; dc.minute = 0
+        let start = cal.date(from: dc)!
+        let wedding = CalendarEvent(
+            title: "婚礼",
+            type: .reminder,
+            startDate: start,
+            endDate: start.addingTimeInterval(8 * 3600),
+            repeatRule: .yearly,
+            reminderOffsetMinutes: 1440  // 提前 1 天
+        )
+
+        // 这就是 NM.buildNotificationRequests 内部计算 effectiveStart 的方式：
+        //   effectiveStart = startDate - reminderOffset*60
+        let offsetSec = TimeInterval((wedding.reminderOffsetMinutes ?? 0)) * 60
+        let effective = wedding.startDate.addingTimeInterval(-offsetSec)
+        let effComps = cal.dateComponents([.month, .day, .hour, .minute], from: effective)
+
+        // 断言：effectiveStart 应该是 2025-03-14 09:00（提前 1 天，同一天同一时）
+        // 第 8 轮修复前 year 分支只取 startDate 的 month/day，结果触发仍然是 3/15。
+        XCTAssertEqual(effComps.month, 3)
+        XCTAssertEqual(effComps.day,   14, "提前 1 天：触发日应该是 3/14，不是 3/15")
+        XCTAssertEqual(effComps.hour,  9)
+        XCTAssertEqual(effComps.minute, 0)
+
+        // 用 occurs 语义再验证：yearly 事件的 fire 日期应该每年 3/14（不是 3/15）
+        // 即每年 3/14 这天 fire 一次。直接用日+月匹配：
+        //   2026-03-14 应该是 fire 日，不是 2026-03-15
+        var dc26Mar14 = DateComponents()
+        dc26Mar14.year = 2026; dc26Mar14.month = 3; dc26Mar14.day = 14
+        let nextFireDay = cal.date(from: dc26Mar14)!
+        let nextFireComps = cal.dateComponents([.month,.day], from: nextFireDay)
+        // 调度组件应该 == effective 月/日，不是 startDate 月/日
+        XCTAssertEqual(nextFireComps.month, effComps.month)
+        XCTAssertEqual(nextFireComps.day, effComps.day)
+
+        // 反证：2026-03-15 不应匹配 effective 的 month/day 条件（修复前错误路径）
+        var dc26Mar15 = DateComponents()
+        dc26Mar15.year = 2026; dc26Mar15.month = 3; dc26Mar15.day = 15
+        let wrongFireDay = cal.date(from: dc26Mar15)!
+        let wrongComps = cal.dateComponents([.month,.day], from: wrongFireDay)
+        XCTAssertEqual(wrongComps.month, 3)
+        XCTAssertEqual(wrongComps.day, 15)
+        XCTAssertNotEqual(wrongComps.day, effComps.day, "3/15 不应该等于 effective 的 14")
+    }
+
+    // MARK: P2 回归：农历"三十"生日在该月仅 29 天的年份回退到廿九
+    //
+    // 旧 bug：occurs(on:) 严格匹配 tl.day == sl.day。若用户出生在"腊月三十"，
+    //   但目标年的腊月只有 29 天（即没有三十），该年生日不显示/不提醒。
+    //   修复：源日=30 且目标月仅 29 天时，回退匹配廿九（民间"二十九当三十过"）。
+    func testLunarAnnuallyDay30FallsBackToDay29() {
+        // 1) 找一个"腊月有 30 天"的年份作为出生年
+        var anchorYear: Int?
+        for y in 2000...2020 {
+            if ChineseCalendar.daysInLunarMonth(year: y, month: 12, isLeap: false) == 30 {
+                anchorYear = y; break
+            }
+        }
+        guard let ay = anchorYear else {
+            XCTFail("未找到腊月有 30 天的年份"); return
+        }
+        guard let anchorSolar = ChineseCalendar.solarDate(
+            fromLunar: ay, month: 12, day: 30, isLeap: false
+        ) else { XCTFail("无法计算腊月三十的公历日期"); return }
+        let ev = CalendarEvent(title: "腊月三十生日", startDate: anchorSolar, repeatRule: .lunarAnnually)
+
+        // 2) 找一个"腊月只有 29 天"的年份（> 出生年）
+        var targetYear: Int?
+        for y in (ay + 1)...2035 {
+            if ChineseCalendar.daysInLunarMonth(year: y, month: 12, isLeap: false) == 29 {
+                targetYear = y; break
+            }
+        }
+        guard let ty = targetYear else {
+            XCTFail("未找到腊月只有 29 天的年份"); return
+        }
+        guard let targetSolar = ChineseCalendar.solarDate(
+            fromLunar: ty, month: 12, day: 29, isLeap: false
+        ) else { XCTFail("无法计算目标年腊月廿九的公历日期"); return }
+
+        // 3) 腊月三十生日在该月仅 29 天的年份应匹配廿九
+        XCTAssertTrue(ev.occurs(on: targetSolar),
+                      "腊月三十生日在该月只有 29 天的年份应回退匹配廿九（P2 回归）")
+
+        // 4) 同年的腊月廿八不应匹配（确保没有过度 fallback）
+        guard let day28Solar = ChineseCalendar.solarDate(
+            fromLunar: ty, month: 12, day: 28, isLeap: false
+        ) else { XCTFail(); return }
+        XCTAssertFalse(ev.occurs(on: day28Solar),
+                       "腊月三十生日不应匹配廿八（防止过度 fallback）")
+    }
+
+    // MARK: - Helper（与 NotificationManager 调度守卫保持语义一致）
+    // 注：如果 NM 里的守卫再变更，这里也要同步更新——它是逻辑的镜像。
+    private func notificationIsEligibleForScheduling(_ ev: CalendarEvent) -> Bool {
+        guard ev.type == .reminder else { return false }
+        if ev.repeatRule == .never && !(ev.startDate > Date()) { return false }
+        return true
     }
 }

@@ -91,6 +91,60 @@ final class DataPortabilityTests: XCTestCase {
         XCTAssertTrue(workday!.isAllDay)
     }
 
+    /// P2 回归：ICS 带 TZID 的事件必须按时区正确解析，而非按设备本地时间。
+    /// 旧实现忽略 TZID，跨时区日历（如 Google Calendar 纽约会议）导入后时间错位。
+    func testICSImportRespectsTZIDTimezone() {
+        let ics = """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:tzid-ny-meeting
+        DTSTAMP:20240101T000000Z
+        DTSTART;TZID=America/New_York:20240101T120000
+        DTEND;TZID=America/New_York:20240101T130000
+        SUMMARY:纽约会议
+        END:VEVENT
+        END:VCALENDAR
+        """
+        let events = DataPortability.importICS(ics)
+        XCTAssertEqual(events.count, 1)
+        let ev = events[0]
+
+        // 2024-01-01 12:00 America/New_York (EST, UTC-5) = 2024-01-01 17:00 UTC
+        let dfmt = DateFormatter()
+        dfmt.dateFormat = "yyyy-MM-dd HH:mm"
+        dfmt.timeZone = TimeZone(identifier: "UTC")
+        let expectedStart = dfmt.date(from: "2024-01-01 17:00")!
+        let expectedEnd = dfmt.date(from: "2024-01-01 18:00")!
+
+        XCTAssertEqual(ev.startDate, expectedStart,
+                       "DTSTART 带 TZID=America/New_York 应按纽约时区解析，而非设备本地时间")
+        XCTAssertEqual(ev.endDate, expectedEnd,
+                       "DTEND 带 TZID=America/New_York 应按纽约时区解析")
+    }
+
+    /// P2 回归：UTC（末尾 Z）与 floating time（无 Z 无 TZID）解析路径仍然正确。
+    func testICSImportUTCAndFloatingTime() {
+        let ics = """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:utc-event
+        DTSTART:20240101T120000Z
+        DTEND:20240101T130000Z
+        SUMMARY:UTC 事件
+        END:VEVENT
+        END:VCALENDAR
+        """
+        let events = DataPortability.importICS(ics)
+        XCTAssertEqual(events.count, 1)
+        let dfmt = DateFormatter()
+        dfmt.dateFormat = "yyyy-MM-dd HH:mm"
+        dfmt.timeZone = TimeZone(identifier: "UTC")
+        XCTAssertEqual(events[0].startDate, dfmt.date(from: "2024-01-01 12:00")!,
+                       "带 Z 的 DTSTART 应按 UTC 解析")
+    }
+
     // merge 基础：无冲突统计正确
     @MainActor
     func testMergeResultCounters() {
@@ -113,5 +167,114 @@ final class DataPortabilityTests: XCTestCase {
         let a = store.events.first { $0.id == id }
         XCTAssertEqual(a?.priority, .urgent)
         XCTAssertEqual(a?.title, "A-v2")
+    }
+
+    // MARK: P3 回归：ICS PRIORITY 对称映射
+    //
+    // 旧实现 exportICS 把 .normal/.low 都写成 9，而 importICS 把 7-9 都解析成 .low，
+    // round-trip 后 .normal 会被降级为 .low（数据损失）。新映射必须严格对称：
+    //   urgent→1  high→3  normal→5  low→7
+
+    func testICSPriorityRoundTripSymmetric() {
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 1; dc.hour = 10
+        let start = cal.date(from: dc)!
+
+        for prio in Priority.allCases {
+            var ev = CalendarEvent(
+                id: UUID(),
+                title: "优先级测试-\(prio.uiLabel)",
+                type: .schedule,
+                startDate: start,
+                endDate: start.addingTimeInterval(3600),
+                priority: prio
+            )
+            let ics = DataPortability.exportICS(from: [ev])
+            let parsed = DataPortability.importICS(ics)
+            XCTAssertEqual(parsed.count, 1)
+            XCTAssertEqual(parsed[0].priority, prio,
+                           "ICS round-trip 优先级不对称：\(prio) → \(parsed[0].priority)")
+        }
+    }
+
+    // MARK: P3 回归：ICS TEXT 转义对 \r\n / \r 的处理
+    //
+    // 旧 escapeICS 只转 \n，标题/备注里带 \r\n 或单独 \r 时：
+    //   - \r\n 会被转成 \r\n（\r 原样），折叠行解析后可能出现残余 \r；
+    //   - round-trip 后字符串出现多余换行或不可见 \r。
+    // RFC 5545 §3.3.11 要求所有行尾归一为字面 \n。
+
+    func testICSTextEscapeNormalizesCRLFAndCR() {
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 1; dc.hour = 10
+        let start = cal.date(from: dc)!
+
+        // 标题含 \r\n，备注含单独 \r
+        var ev = CalendarEvent(
+            id: UUID(),
+            title: "第一行\r\n第二行",
+            type: .note,
+            startDate: start,
+            endDate: start.addingTimeInterval(3600),
+            notes: "备注A\r备注B\r\n备注C"
+        )
+        let ics = DataPortability.exportICS(from: [ev])
+        // 注意：ICS 行分隔符本身是 \r\n（RFC 5545），所以整个 ics 字符串含 \r 是正常的。
+        // 真正的不变量是：SUMMARY/DESCRIPTION 的值中不能含未转义的 \r。
+        // 这里通过 round-trip 后解析结果不含 \r 来间接保证 escapeICS 已归一化行尾。
+
+        let parsed = DataPortability.importICS(ics)
+        XCTAssertEqual(parsed.count, 1)
+        // round-trip 后标题与备注中不应残留 \r
+        XCTAssertFalse(parsed[0].title.contains("\r"),
+                       "标题 round-trip 后不应含残留 \\r，实际：\(parsed[0].title)")
+        XCTAssertFalse((parsed[0].notes ?? "").contains("\r"),
+                       "备注 round-trip 后不应含残留 \\r")
+        // \r\n 应还原为单个 \n
+        XCTAssertEqual(parsed[0].title, "第一行\n第二行")
+    }
+
+    // MARK: P2 回归：ICS 全天事件 DTEND 排他语义
+    //
+    // RFC 5545 §3.8.2.2：DATE 类型 DTEND 是**排他**的（不含当天）。
+    // 旧 bug：
+    //   - 导出：直接把 endDate（inclusive，当日 23:59:59）格式化为 DTEND，
+    //     得到 DTEND == DTSTART → 跨日历导入显示为 0 时长事件。
+    //   - 导入：把排他 DTEND（次日 00:00）直接当 endDate，单日事件被拉成跨两天。
+    // 修复：
+    //   - 导出：DTEND = endDate 日期 + 1 天。
+    //   - 导入：endDate = exclusive DTEND - 1 秒（转回 inclusive 23:59:59）。
+    func testICSAllDayDTENDEndDateExclusiveSemantics() {
+        let cal = Calendar(identifier: .gregorian)
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 6
+        let start = cal.date(from: dc)!
+        // 全天事件：endDate 约定为当日 23:59:59
+        let ev = CalendarEvent(
+            id: UUID(),
+            title: "中秋全天",
+            startDate: start,
+            isAllDay: true
+        )
+
+        // 1) 导出：DTEND 应为次日（排他）
+        let ics = DataPortability.exportICS(from: [ev])
+        XCTAssertTrue(ics.contains("DTSTART;VALUE=DATE:20260906"),
+                      "DTSTART 应为 20260906")
+        XCTAssertTrue(ics.contains("DTEND;VALUE=DATE:20260907"),
+                      "全天事件 DTEND 应为次日（排他），实际 ICS：\n\(ics)")
+
+        // 2) 重新导入：endDate 应回到 inclusive（当日 23:59:59），不应跨到 9/7
+        let parsed = DataPortability.importICS(ics)
+        XCTAssertEqual(parsed.count, 1)
+        let back = parsed[0]
+        XCTAssertTrue(back.isAllDay)
+        let startComps = cal.dateComponents([.year, .month, .day], from: back.startDate)
+        let endComps = cal.dateComponents([.year, .month, .day], from: back.endDate)
+        XCTAssertEqual(startComps.day, 6)
+        XCTAssertEqual(endComps.day, 6,
+                       "导入后全天事件 endDate 不应跨到次日（排他 DTEND 应转回 inclusive）")
     }
 }

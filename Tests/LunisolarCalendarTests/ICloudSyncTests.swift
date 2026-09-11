@@ -147,6 +147,11 @@ final class ICloudSyncTests: XCTestCase {
     }
 
     // MARK: 4. 增量同步：sinceMs 只拉取新变更
+    //
+    // 注（P2 修复后语义变化）：push 不再推进 lastSyncMs（否则会因本地 updatedAt
+    // 时间戳比云端其它设备记录更新而"跳过"拉取那些记录）。水位线统一由
+    // pullAndMerge 基于云端 records 的 updatedAtMs max 推进。所以本测试在
+    // push 第一批后必须 pull 一次才能拿到稳定的 snapshot 水位线。
 
     @MainActor
     func testIncrementalPull() async throws {
@@ -154,25 +159,51 @@ final class ICloudSyncTests: XCTestCase {
         let batchA = sampleEvents(count: 2, prefix: "第一批-增量")
         let r1 = try await coordinator.push(events: batchA)
         XCTAssertEqual(r1.pushed, 2)
-        let snapshot1LastMs = coordinator.lastSyncMs
 
-        // 再推送第二批（updatedAtMs 必须更大）
+        // 必须 pull 一次，让 lastSyncMs 推进到 batchA 的云端记录 max updatedAtMs
+        // （push 不推进水位线，是 P2 修复的核心）
+        let pullA = try await coordinator.pullAndMerge()
+        XCTAssertEqual(pullA.pulled, 0, "本地已有 batchA 且版本相同，LWW 不应重复合并")
+        let snapshot1LastMs = coordinator.lastSyncMs
+        XCTAssertGreaterThan(snapshot1LastMs, 0, "pull 后水位线必须推进")
+
+        // 模拟另一台设备注入第二批（updatedAtMs 更大，且是新 id）
         var batchB = sampleEvents(count: 3, prefix: "第二批-增量")
         for i in batchB.indices {
-            batchB[i].updatedAt = Date().addingTimeInterval(60)  // +1 分钟
+            let rec = try SyncRecord.eventRecord(
+                for: batchB[i], version: 1, originDevice: "OtherDevice"
+            )
+            // 强制 updatedAtMs 晚于 snapshot（模拟"在 snapshot 之后才写入云端"）
+            let newerMs = snapshot1LastMs + 60_000
+            let forced = SyncRecord(
+                id: rec.id, kind: .event,
+                version: 1, originDevice: "OtherDevice",
+                updatedAtMs: newerMs, isDeleted: false,
+                payloadJSON: rec.payloadJSON
+            )
+            await mockProvider.injectServerRecord(forced)
         }
-        let r2 = try await coordinator.push(events: batchB)
-        XCTAssertEqual(r2.pushed, 3)
 
-        // 用 snapshot1LastMs 做增量 pull，返回的只应该是第二批 3 条
-        let recs = try await mockProvider.pull(sinceMs: snapshot1LastMs)
-        // 去重：按 id 只算不重复
-        let ids = Set(recs.map { $0.id })
-        XCTAssertEqual(ids.count, 3, "增量同步应该只返回新增的 3 条")
-        XCTAssertTrue(
-            recs.allSatisfy { $0.updatedAtMs > snapshot1LastMs },
-            "增量记录全部更新时间晚于 snapshot1"
-        )
+        // 再 pull，返回的应该只包含第二批 3 条（batchA 已被水位线过滤）
+        let pullB = try await coordinator.pullAndMerge()
+        XCTAssertEqual(pullB.pulled, 3, "增量同步应该只返回新增的 3 条")
+    }
+
+    // MARK: 4b. P2 回归：push 成功后 lastSyncMs 不应被本地时间戳推进
+    //
+    // 背景：旧逻辑 push 成功后把 lastSyncMs 推进到本地记录 updatedAtMs 的 max。
+    // 这会导致设备 A 用本地较新的时间戳"跳过"拉取设备 B 在更早时间推送、
+    // 但本地时钟后到的更新 → 多设备数据发散。修复：push 不推进水位线。
+
+    @MainActor
+    func testPushDoesNotAdvanceLastSyncMs() async throws {
+        XCTAssertEqual(coordinator.lastSyncMs, 0, "初始水位线为 0")
+        let events = sampleEvents(count: 2, prefix: "P2-水位线")
+        let r = try await coordinator.push(events: events)
+        XCTAssertEqual(r.pushed, 2)
+        // 关键断言：push 后水位线仍为 0（只有 pull 才推进）
+        XCTAssertEqual(coordinator.lastSyncMs, 0,
+                       "P2 修复：push 成功后 lastSyncMs 不应被本地 updatedAt 推进")
     }
 
     // MARK: 5. 先离线本地改一堆 → 再上线 syncBidirectional → 云端和本地合并正确
@@ -267,6 +298,178 @@ final class ICloudSyncTests: XCTestCase {
         // 合并后设备 B 应被删除
         XCTAssertEqual(mergeB.pulled, 1, "应合并 1 条变更（墓碑）")
         XCTAssertEqual(storeB.events.count, 0, "跨设备墓碑删除传播：设备 B 同步后应 0 条")
+    }
+
+    // MARK: 7. P1 回归：syncBidirectional 在 isEnabled=false 时不应该清空 dirty/deleted 标记
+    //
+    // 背景：旧路径 syncBidirectional → push() 在 !isEnabled 时早返回 success(empty failedRecordIDs)，
+    // 然后调 retainDirtyFlags(onlyFailed: []) → formIntersection([]) → 全部 dirty/deleted 标记被清空。
+    // 但本地从未真正推送 → 用户暂时关掉同步、又打开同步后，这段时间的本地编辑被永久丢失。
+    @MainActor
+    func testSyncDisabledPreservesDirtyFlags() async throws {
+        // setUp 里 delete(skipSync:true) 会把样例事件打进 deletedEventIDs；先清空获取干净基线
+        store.clearDirtyFlags()
+
+        // 在本地造 2 条 dirty 事件（skipSync=true 模拟"暂时不推"）
+        let ev1 = sampleEvents(count: 1, prefix: "P1-dirty-1").first!
+        let ev2 = sampleEvents(count: 1, prefix: "P1-dirty-2").first!
+        store.add(ev1, skipSync: true)
+        store.add(ev2, skipSync: true)
+        // 模拟一条本地删除（也应保留 deleted 标记）
+        let ev3 = sampleEvents(count: 1, prefix: "P1-del").first!
+        store.add(ev3, skipSync: true)
+        store.delete(ev3, skipSync: true)
+
+        let (dirtyBefore, deletedBefore) = store.consumeDirtyEvents()
+        XCTAssertEqual(dirtyBefore.count, 2, "P1 前应有 2 条 dirty")
+        XCTAssertEqual(deletedBefore.count, 1, "P1 前应有 1 条 deleted")
+
+        // 关掉同步，触发 syncBidirectional
+        coordinator.isEnabled = false
+        let r = try await coordinator.syncBidirectional()
+        XCTAssertEqual(r.pushed, 0, "关闭同步时不应推送")
+        XCTAssertEqual(r.pulled, 0, "关闭同步时不应拉取")
+        XCTAssertTrue(r.errors.isEmpty, "关闭同步应返回干净结果，不算失败")
+
+        // 关键断言：dirty/deleted 标记必须保留
+        let (dirtyAfter, deletedAfter) = store.consumeDirtyEvents()
+        XCTAssertEqual(dirtyAfter.count, 2, "P1 修复：dirty 标记不应被清空")
+        XCTAssertEqual(deletedAfter.count, 1, "P1 修复：deleted 标记不应被清空")
+    }
+
+    // MARK: 8. P2 回归：pullAndMerge 不应给本地事件打 dirty 标记 / 不应覆盖 remote.updatedAt
+    //
+    // 背景：旧 pullAndMerge 调 eventStore.update(skipSync:true) / add(skipSync:true)，
+    // 这两个方法即便 skipSync=true 也会 dirtyEventIDs.insert(id) → 下一轮 sync 把刚拉下来的
+    // 记录又推回云、version +1，造成"每轮 sync 每条远端记录 version 永久 +1"的版本膨胀；
+    // 同时 update() 把 remote 的 updatedAt 覆盖为 Date()，造成 UI 显示"刚刚更新"误导用户，
+    // 以及 merge(keepLatest) round-trip 误判。修复：pullAndMerge 改走 applyRemote / applyRemoteDelete。
+    @MainActor
+    func testPullAndMergeDoesNotMarkDirtyOrOverrideUpdatedAt() async throws {
+        // setUp 清理：delete(skipSync:true) 污染的 deleted 标记清零
+        store.clearDirtyFlags()
+
+        // 远端注入一条 updatedAt=1 年前的事件
+        var ev = sampleEvents(count: 1, prefix: "P2-remote-updated").first!
+        // 关键点：把事件自身的 updatedAt 设为 1 年前（decodedEvent 从 payloadJSON 解出 updatedAt）
+        let oneYearAgo = Date().addingTimeInterval(-365 * 86400)
+        ev.updatedAt = oneYearAgo
+        let oneYearAgoMs = Int64(oneYearAgo.timeIntervalSince1970 * 1000)
+        let rec = try SyncRecord.eventRecord(for: ev, version: 1, originDevice: "OtherDevice")
+        let forcedOldUpdate = SyncRecord(
+            id: rec.id, kind: .event, version: 1, originDevice: "OtherDevice",
+            updatedAtMs: oneYearAgoMs, isDeleted: false, payloadJSON: rec.payloadJSON
+        )
+        await mockProvider.injectServerRecord(forcedOldUpdate)
+
+        // pull
+        let r = try await coordinator.pullAndMerge()
+        XCTAssertEqual(r.pulled, 1)
+        XCTAssertEqual(store.events.count, 1)
+
+        // 关键断言 1：本地事件不应被打 dirty 标记
+        let (dirty, deleted) = store.consumeDirtyEvents()
+        XCTAssertEqual(dirty.count, 0, "P2 修复：远端合并不应打 dirty 标记")
+        XCTAssertEqual(deleted.count, 0, "P2 修复：远端合并不应打 deleted 标记")
+
+        // 关键断言 2：本地事件的 updatedAt 应保留远端语义（1 年前），而不是 Date() 覆盖
+        let localEv = try XCTUnwrap(store.events.first { $0.id == ev.id })
+        let localMs = Int64(localEv.updatedAt.timeIntervalSince1970 * 1000)
+        XCTAssertLessThan(localMs, Int64(Date().addingTimeInterval(-180 * 86400).timeIntervalSince1970 * 1000),
+                          "P2 修复：远端 updatedAt 应保留为远端语义（约 1 年前），不应被覆盖为 now")
+
+        // 关键断言 3：再调一次 syncBidirectional，云端版本号不应膨胀
+        //   （本地若被打 dirty，syncBidirectional 会把这条推回云，version 从 1 → 2）
+        let cloudVerBefore = await mockProvider.serverGet(id: ev.id.uuidString)?.version
+        _ = try await coordinator.syncBidirectional()
+        let cloudVerAfter = await mockProvider.serverGet(id: ev.id.uuidString)?.version
+        XCTAssertEqual(cloudVerBefore, cloudVerAfter,
+                       "P2 修复：远端合并后下一轮 sync 不应推回云（version 不应膨胀）")
+    }
+
+    // MARK: 9. P2 回归：远端墓碑合并不应把 deleted 标记打回本地
+    //
+    // 背景：旧 pullAndMerge 处理 remoteRec.isDeleted 时调 eventStore.delete(skipSync:true)，
+    // 该方法即便 skipSync=true 也会 deletedEventIDs.insert(id) → 下一轮 sync 把墓碑又推回云、
+    // version +1，造成版本膨胀。修复：pullAndMerge 改走 applyRemoteDelete。
+    @MainActor
+    func testPullRemoteTombstoneDoesNotMarkDeleted() async throws {
+        // setUp 清理：delete(skipSync:true) 污染的 deleted 标记清零
+        store.clearDirtyFlags()
+
+        // 设备 A：先 push 一条建立基础
+        let ev = sampleEvents(count: 1, prefix: "P2-tombstone").first!
+        _ = try await coordinator.push(events: [ev])
+        // 模拟另一台设备在云端把这条变成墓碑
+        let tombMs = Int64(Date().addingTimeInterval(-1000).timeIntervalSince1970 * 1000)
+        let tomb = SyncRecord(
+            id: ev.id.uuidString, kind: .event,
+            version: 5, originDevice: "OtherDevice",
+            updatedAtMs: tombMs, isDeleted: true, payloadJSON: "{}"
+        )
+        await mockProvider.injectServerRecord(tomb)
+
+        // pull：本地应被删除
+        let r = try await coordinator.pullAndMerge()
+        XCTAssertEqual(r.pulled, 1)
+        XCTAssertEqual(store.events.count, 0, "远端墓碑合并后本地应删除")
+
+        // 关键断言：deleted 标记不应被打（墓碑刚从云拿，不应再推回去）
+        let (_, deleted) = store.consumeDirtyEvents()
+        XCTAssertEqual(deleted.count, 0, "P2 修复：远端墓碑合并不应把 deleted 标记打回本地")
+
+        // 下一轮 sync 不应再推墓碑（version 不应在云端膨胀）
+        let cloudRecBefore = await mockProvider.serverGet(id: ev.id.uuidString)
+        XCTAssertEqual(cloudRecBefore?.version, 5, "云端墓碑版本应为远端的 5")
+        _ = try await coordinator.syncBidirectional()
+        let cloudRecAfter = await mockProvider.serverGet(id: ev.id.uuidString)
+        XCTAssertEqual(cloudRecAfter?.version, 5, "P2 修复：墓碑 version 不应膨胀")
+        XCTAssertEqual(cloudRecAfter?.isDeleted, true, "墓碑状态应保持")
+    }
+
+    // MARK: 10. P1 回归：isNotified 设备本地状态不应参与 iCloud 同步
+    //
+    // 背景：isNotified 表示「本机 UNUserNotificationCenter 是否已触发过该通知」，
+    // 是纯设备本地状态。旧代码 SyncRecord.eventRecord 直接 encode 整个 CalendarEvent，
+    // 把 isNotified 带进 payloadJSON → 设备 A 响过后 markNotified=true，
+    // 用户改个标题 push 上去 → 设备 B pull 下来 isNotified=true → rescheduleAllReminders
+    // 跳过 → 设备 B 永远收不到。反向：设备 B 改标题推上去，设备 A pull 后 applyRemote
+    // 整体替换 → 设备 A 的 isNotified 被远端 false 覆盖 → 重新调度 → 重复弹窗。
+    // 修复：eventRecord 编码前强制 isNotified=false；applyRemote 保留本地 isNotified。
+    @MainActor
+    func testIsNotifiedDoesNotSyncAcrossDevices() async throws {
+        // 1) eventRecord 编码时必须剥离 isNotified
+        var ev = sampleEvents(count: 1, prefix: "P1-isNotified").first!
+        ev.isNotified = true  // 模拟本机已响过
+        let rec = try SyncRecord.eventRecord(for: ev, version: 1, originDevice: "device-A")
+        let decoded = try rec.decodedEvent()
+        XCTAssertFalse(decoded.isNotified,
+                       "P1 修复：SyncRecord payload 里 isNotified 必须为 false（设备本地状态不进云）")
+
+        // 2) applyRemote 合并远端事件时，必须保留本地 isNotified
+        //    先 push 一条建立本地记录
+        store.add(ev, skipSync: true)
+        store.markNotified(ev)  // 本地标记已通知
+        XCTAssertEqual(store.eventBy(idString: ev.id.uuidString)?.isNotified, true,
+                       "本地事件 isNotified 应为 true")
+
+        //    模拟远端（另一设备）推送了一个 version 更高的同 ID 事件（比如改了标题）
+        var remoteEv = ev
+        remoteEv.title = "远端改了标题"
+        remoteEv.isNotified = false  // 远端 payload 里 isNotified=false（已被 eventRecord 剥离）
+        let remoteRec = try SyncRecord.eventRecord(for: remoteEv, version: 5, originDevice: "device-B")
+        await mockProvider.injectServerRecord(remoteRec)
+
+        //    pull 合并
+        _ = try await coordinator.pullAndMerge()
+
+        //    关键断言：本地 isNotified 应保留为 true（不被远端 false 覆盖）
+        let localAfter = store.eventBy(idString: ev.id.uuidString)
+        XCTAssertEqual(localAfter?.isNotified, true,
+                       "P1 修复：applyRemote 必须保留本地 isNotified，不能被远端覆盖")
+        //    同时标题应更新为远端的
+        XCTAssertEqual(localAfter?.title, "远端改了标题",
+                       "远端的标题变更应正常合并")
     }
 
     // MARK: - 测试辅助

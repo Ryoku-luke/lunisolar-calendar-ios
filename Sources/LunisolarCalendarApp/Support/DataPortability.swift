@@ -117,7 +117,15 @@ public enum DataPortability {
 
             if event.isAllDay {
                 lines.append("DTSTART;VALUE=DATE:\(dfmtAllDay.string(from: event.startDate))")
-                lines.append("DTEND;VALUE=DATE:\(dfmtAllDay.string(from: event.endDate))")
+                // P2 修复：RFC 5545 §3.8.2.2 规定 DATE 类型的 DTEND 是**排他**的
+                //   （即"不含这一天"）。本 App 内部把全天事件 endDate 存为当日 23:59:59
+                //   （inclusive），若直接格式化导出会得到 DTEND == DTSTART，
+                //   跨日历（Google/Apple/Outlook）导入时显示为 0 时长事件甚至不显示。
+                //   修复：DTEND 取 endDate 所在日期的**次日**，符合 RFC 排他语义。
+                //   例：9/6 全天 → DTSTART=20260906, DTEND=20260907。
+                let exclusiveEnd = Calendar(identifier: .gregorian)
+                    .date(byAdding: .day, value: 1, to: event.endDate) ?? event.endDate
+                lines.append("DTEND;VALUE=DATE:\(dfmtAllDay.string(from: exclusiveEnd))")
             } else {
                 lines.append("DTSTART:\(dfmt.string(from: event.startDate))")
                 lines.append("DTEND:\(dfmt.string(from: event.endDate))")
@@ -131,12 +139,17 @@ public enum DataPortability {
                 lines.append("DESCRIPTION:\(escapeICS(notes))")
             }
 
+            // P3 修复（对称映射）：RFC 5545 PRIORITY 1=最高 5=普通 9=最低。
+            //   旧映射 .normal/.low 都给 9，导入侧 "7,8,9"→.low，
+            //   round-trip 会把 .normal 降级为 .low（数据损失）。
+            //   新映射与 importICS 解析侧严格对称：
+            //     urgent(1)→1   high(2-4)→3   normal(5,6)→5   low(7-9)→7
             let priorityVal: String
             switch event.priority {
             case .urgent: priorityVal = "1"
-            case .high:   priorityVal = "5"
-            case .normal: priorityVal = "9"
-            case .low:    priorityVal = "9"
+            case .high:   priorityVal = "3"
+            case .normal: priorityVal = "5"
+            case .low:    priorityVal = "7"
             }
             lines.append("PRIORITY:\(priorityVal)")
             lines.append("STATUS:\(event.isCompleted ? "COMPLETED" : "CONFIRMED")")
@@ -171,14 +184,14 @@ public enum DataPortability {
         for event in events {
             let row: [String] = [
                 escapeCSV(event.title),
-                event.type.displayTitle,
+                event.type.uiLabel,
                 dfmt.string(from: event.startDate),
                 dfmt.string(from: event.endDate),
                 event.isAllDay ? "是" : "否",
                 escapeCSV(event.location ?? ""),
                 escapeCSV(event.notes ?? ""),
-                event.repeatRule.displayTitle,
-                event.priority.displayTitle,
+                event.repeatRule.uiLabel,
+                event.priority.uiLabel,
                 event.isCompleted ? "是" : "否",
                 dfmt.string(from: event.createdAt)
             ]
@@ -210,11 +223,8 @@ public enum DataPortability {
         }
 
         var idx = 0
-        let dfmtUTC = DateFormatter()
-        dfmtUTC.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
-        dfmtUTC.timeZone = TimeZone(identifier: "UTC")
-        let dfmtLocal = DateFormatter()
-        dfmtLocal.dateFormat = "yyyyMMdd'T'HHmmss"
+        // P2 修复：非全天 DTSTART/DTEND 现在走 parseICSDateTime（支持 TZID/UTC/floating），
+        //   不再需要预先创建 dfmtUTC/dfmtLocal。
         let dfmtAllDay = DateFormatter()
         dfmtAllDay.dateFormat = "yyyyMMdd"
         dfmtAllDay.timeZone = TimeZone(identifier: "UTC")
@@ -231,6 +241,8 @@ public enum DataPortability {
                 var notes: String? = nil
                 var rawUID: String? = nil
                 var parsedRRULE: RepeatRule? = nil
+                var parsedPriority: Priority = .normal
+                var parsedIsCompleted = false
                 var hasStart = false
                 var hasEnd = false
 
@@ -238,7 +250,12 @@ public enum DataPortability {
                     let vline = lines[idx]
                     let parts = vline.split(separator: ":", maxSplits: 1)
                     guard parts.count == 2 else { idx += 1; continue }
-                    let key = parts[0].uppercased()
+                    // P2 修复：TZID 的值是 IANA 时区标识符（大小写敏感，如 "America/New_York"）。
+                    //   key 的参数名（DTSTART/TZID/VALUE）不区分大小写，但 TZID 的值必须保留原始大小写，
+                    //   否则 TimeZone(identifier:) 找不到对应时区 → 回退本地时间 → 跨时区事件时间错误。
+                    //   因此保留 rawKey 用于提取 TZID，keyUpper 仅用于前缀匹配。
+                    let rawKey = String(parts[0])
+                    let key = rawKey.uppercased()
                     let value = String(parts[1])
 
                     if key.hasPrefix("UID") {
@@ -248,13 +265,20 @@ public enum DataPortability {
                     } else if key.hasPrefix("DTSTART") {
                         if key.contains("VALUE=DATE") {
                             if let d = dfmtAllDay.date(from: value) { startDate = d; isAllDay = true; hasStart = true }
-                        } else if let d = dfmtUTC.date(from: value) ?? dfmtLocal.date(from: value) {
+                        } else if let d = parseICSDateTime(value, tzid: tzidFromRawKey(rawKey)) {
                             startDate = d; hasStart = true
                         }
                     } else if key.hasPrefix("DTEND") {
                         if key.contains("VALUE=DATE") {
-                            if let d = dfmtAllDay.date(from: value) { endDate = d; hasEnd = true }
-                        } else if let d = dfmtUTC.date(from: value) ?? dfmtLocal.date(from: value) {
+                            // P2 修复：RFC 5545 DATE 类型 DTEND 是排他的（不含当天）。
+                            //   本 App 全天事件 endDate 存为当日 23:59:59（inclusive）。
+                            //   导入时把排他 DTEND（次日 00:00）转回 inclusive（当日 23:59:59），
+                            //   即 endDate = exclusiveEnd - 1 秒。避免单日事件被拉成跨两天。
+                            if let d = dfmtAllDay.date(from: value) {
+                                endDate = d.addingTimeInterval(-1)
+                                hasEnd = true
+                            }
+                        } else if let d = parseICSDateTime(value, tzid: tzidFromRawKey(rawKey)) {
                             endDate = d; hasEnd = true
                         }
                     } else if key.hasPrefix("LOCATION") {
@@ -263,12 +287,29 @@ public enum DataPortability {
                         notes = unescapeICS(value)
                     } else if key.hasPrefix("RRULE") {
                         parsedRRULE = parseRRULE(value)
+                    } else if key.hasPrefix("PRIORITY") {
+                        // RFC 5545: 1 = 最高优先级，5/undefined = 普通，9 = 最低
+                        if let p = Int(value) {
+                            switch p {
+                            case 1:          parsedPriority = .urgent
+                            case 2, 3, 4:    parsedPriority = .high
+                            case 5, 6:       parsedPriority = .normal
+                            case 7, 8, 9:    parsedPriority = .low
+                            default:         parsedPriority = .normal
+                            }
+                        }
+                    } else if key.hasPrefix("STATUS") {
+                        // COMPLETED / CANCELLED 都视为已完成，不再重复触发提醒
+                        let v = value.uppercased()
+                        parsedIsCompleted = (v == "COMPLETED" || v == "CANCELLED")
                     }
                     idx += 1
                 }
 
                 if hasStart {
-                    if !hasEnd { endDate = startDate.addingTimeInterval(3600) }
+                    // P2 修复：全天事件无 DTEND 时，兜底应为整日（+86399）而非 +3600。
+                    //   否则导入的全天事件 endDate=start+1h，跨日显示/occurs 判断会异常。
+                    if !hasEnd { endDate = startDate.addingTimeInterval(isAllDay ? 86_399 : 3_600) }
                     // ICS 进来的事件没有稳定主键（UID 是对方日历的UUID，且不一定存在）。
                     // 为了让「重复导入不会产生副本」，我们用 (title, start, end, isAllDay) 哈希拼伪 UID
                     // 同时保存导入源 UID 以便 merge 时去重。
@@ -287,8 +328,11 @@ public enum DataPortability {
                         isAllDay: isAllDay,
                         location: location,
                         notes: notes,
-                        repeatRule: parsedRRULE ?? .never
+                        repeatRule: parsedRRULE ?? .never,
+                        priority: parsedPriority
                     )
+                    // STATUS:COMPLETED/CANCELLED → 导入后仍保持已完成，避免重挂提醒
+                    if parsedIsCompleted { event.isCompleted = true }
                     // 把外部的 UID 记到 notes 末尾，便于排查（不覆盖原 notes）
                     if let uid = rawUID, !uid.isEmpty {
                         let suffix = "\n\n[ICS-UID]\(uid)"
@@ -320,7 +364,12 @@ public enum DataPortability {
     // MARK: - ICS 转义
 
     private static func escapeICS(_ text: String) -> String {
+        // P3 修复：RFC 5545 §3.3.11 TEXT 转义要求 \r\n / \r / \n 全部转成字面 \n。
+        //   旧实现只转 \n，遇到 \r\n 或单独 \r 时 round-trip 会出现多余的 \n 或残余 \r。
+        //   顺序：先归一化行尾再走标准转义链，避免 \\\\ 占位被 \n 处理误吞。
         text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: ";", with: "\\;")
             .replacingOccurrences(of: ",", with: "\\,")
@@ -358,18 +407,61 @@ public enum DataPortability {
         if upper.contains("FREQ=MONTHLY") { return .monthly }
         if upper.contains("FREQ=YEARLY") { return .yearly }
         if upper.contains("FREQ=WEEKLY") {
-            // 含 BYDAY=MO,TU,WE,TH,FR（且没其他）→ 工作日
+            // 含 BYDAY=MO,TU,WE,TH,FR（且**正好**是这 5 个，不多不少）→ 工作日
+            // 注意：不能用 isSubset——「周一三五」也是工作日子集，但语义上不是「每个工作日」
             if let byDay = upper.split(separator: ";").first(where: { $0.hasPrefix("BYDAY=") }) {
-                let days = String(byDay).dropFirst("BYDAY=".count)
+                let daysStr = String(byDay).dropFirst("BYDAY=".count)
+                let parts = Set(daysStr.split(separator: ",").map(String.init))
                 let workdaySet: Set<String> = ["MO","TU","WE","TH","FR"]
-                let parts = Set(days.split(separator: ",").map(String.init))
-                if !parts.isEmpty && parts.isSubset(of: workdaySet) {
-                    return .workday
-                }
+                // 精确相等才是 workday；BYDAY 不包含（整个 BYDAY 缺省 = 每周按起始日）也算 weekly
+                if parts == workdaySet { return .workday }
             }
             return .weekly
         }
         return nil
+    }
+
+    // MARK: - ICS 辅助：TZID 时区解析（P2 修复）
+
+    /// 从 ICS 属性原始 key 中提取 TZID 参数值（保留原始大小写）。
+    /// 例：`DTSTART;TZID=America/New_York` → `"America/New_York"`
+    /// IANA 时区标识符大小写敏感，因此必须用未大写化的 rawKey。
+    private static func tzidFromRawKey(_ rawKey: String) -> String? {
+        // 参数名 TZID 不区分大小写；用 caseInsensitive 搜索后精确截取值
+        guard let range = rawKey.range(of: "TZID=", options: .caseInsensitive) else { return nil }
+        var rest = rawKey[range.upperBound...]
+        if let semi = rest.firstIndex(of: ";") {
+            rest = rest[..<semi]
+        }
+        let tzid = String(rest).trimmingCharacters(in: .whitespaces)
+        return tzid.isEmpty ? nil : tzid
+    }
+
+    /// 解析 ICS DATE-TIME 值，正确处理三种时区语义：
+    /// 1) 末尾带 `Z` → UTC（RFC 5545 全局时间）
+    /// 2) 带 `TZID=...` 参数 → 按该 IANA 时区解析
+    /// 3) 既无 Z 也无 TZID → floating time（按设备本地时区解释）
+    ///
+    /// P2 修复：旧实现只尝试 UTC 格式（带 Z）然后直接按本地时间解析，
+    ///   完全忽略 TZID。跨时区日历（如 Google Calendar 导出的纽约会议）
+    ///   导入后时间会错位数小时。
+    private static func parseICSDateTime(_ value: String, tzid: String?) -> Date? {
+        if value.hasSuffix("Z") {
+            let dfmt = DateFormatter()
+            dfmt.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+            dfmt.timeZone = TimeZone(identifier: "UTC")
+            return dfmt.date(from: value)
+        }
+        if let tzid, !tzid.isEmpty, let tz = TimeZone(identifier: tzid) {
+            let dfmt = DateFormatter()
+            dfmt.dateFormat = "yyyyMMdd'T'HHmmss"
+            dfmt.timeZone = tz
+            return dfmt.date(from: value)
+        }
+        // floating time：无 Z 无 TZID，按设备本地时区
+        let dfmt = DateFormatter()
+        dfmt.dateFormat = "yyyyMMdd'T'HHmmss"
+        return dfmt.date(from: value)
     }
 
     /// 为导入的事件生成稳定伪 UUID：优先用 ics UID 做 hash + seed；否则用 (title, start, end, allDay)。

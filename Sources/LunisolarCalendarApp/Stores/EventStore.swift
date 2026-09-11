@@ -29,7 +29,7 @@ public final class EventStore {
 
     /// 查询缓存：按日期首日缓存 occurs(on:) 结果，避免月视图 42 格 × N 事件全量遍历
     private var eventCache: [Date: [CalendarEvent]] = [:]
-    private var statsCache: [Date: (has: Bool, priority: Priority?)] = [:]
+    private var statsCache: [Date: (count: Int, priority: Priority?)] = [:]
 
     // MARK: P6 二级索引（O(1) by-id 定位）
     // events 数组永远按 startDate 升序；此字典维护 id → 下标，
@@ -119,9 +119,12 @@ public final class EventStore {
     private var pushQueue: [() async -> Void] = []
     private var isPushing = false
 
-    /// P5 性能：save debounce work item，合并 0.5s 内的多次 CRUD 的磁盘写入
-    private var pendingSaveWorkItem: DispatchWorkItem?
-    private let saveDebounceInterval: TimeInterval = 0.5
+    /// P5 性能：save debounce Task，合并 0.5s 内多次 CRUD 的磁盘写入。
+    /// - 使用 Swift Concurrency Task（@MainActor）替换 DispatchWorkItem，
+    ///   与 CountdownStore 模式一致，满足 Swift 6 strict concurrency
+    ///   （events/idToIndex/dirtyEventIDs 都是 MainActor 隔离属性）。
+    private var pendingSaveTask: Task<Void, Never>?
+    private let saveDebounceNs: UInt64 = 500_000_000  // 0.5s
 
     private let saveURL: URL
     /// dirtyEventIDs 持久化路径（与 saveURL 同目录，P4 修复）
@@ -288,6 +291,7 @@ public final class EventStore {
     }
 
     /// 删除事件：O(1) by-id 定位，O(1) 字典平移
+    /// ⚠️ 同步取消 pending 通知：否则用户删除的 reminder 到点仍会弹出（P1 级别体验问题）。
     public func delete(_ event: CalendarEvent, skipSync: Bool = false) {
         guard let idx = indexOfEvent(id: event.id) else { return }
         events.remove(at: idx)
@@ -297,6 +301,8 @@ public final class EventStore {
         save()
         dirtyEventIDs.remove(event.id.uuidString)
         deletedEventIDs.insert(event.id.uuidString)
+        // 被删除事件的 pending 本地通知必须立即取消（UNUserNotificationCenter 是跨 App 重启持久的）
+        NotificationManager.shared.cancelNotification(for: event)
         if !skipSync {
             enqueuePush()
         }
@@ -304,11 +310,28 @@ public final class EventStore {
 
     public func toggleCompleted(_ event: CalendarEvent, skipSync: Bool = false) {
         guard let idx = indexOfEvent(id: event.id) else { return }
+        let wasNotCompleted = !events[idx].isCompleted
         events[idx].isCompleted.toggle()
         events[idx].updatedAt = Date()
         invalidateCache()
         save()
         dirtyEventIDs.insert(events[idx].id.uuidString)
+        // 刚被标记为「已完成」的 reminder，要移除其 pending 通知（完成的事不再提醒）
+        if wasNotCompleted && events[idx].isCompleted {
+            NotificationManager.shared.cancelNotification(for: events[idx])
+        }
+        // P2 修复：从「已完成」取消勾选变回「未完成」时，必须重新调度通知。
+        //   旧逻辑只在标记完成时 cancelNotification，但取消完成时不重排 →
+        //   用户取消完成后 pending 通知已被取消、又没有重建 → 提醒到点不响，
+        //   直到下次 App 启动/前台 rescheduleAllReminders 才恢复（可能已错过提醒时间）。
+        //   scheduleNotification 内部会处理：.never && isNotified 不再重复调度；
+        //   repeating 事件正常重排。
+        if !wasNotCompleted && !events[idx].isCompleted {
+            let restored = events[idx]
+            Task { @MainActor in
+                await NotificationManager.shared.scheduleNotification(for: restored)
+            }
+        }
         if !skipSync {
             enqueuePush()
         }
@@ -327,6 +350,68 @@ public final class EventStore {
             dirtyEventIDs.insert(events[idx].id.uuidString)
             enqueuePush()
         }
+    }
+
+    // MARK: - 远端合并专用入口（不污染 dirty/deleted，不覆盖 updatedAt）
+
+    /// 由 EventSyncCoordinator.pullAndMerge 在收到远端记录后调用：
+    /// - 已存在 → 原地（或重新二分插入）替换，**保留** event.updatedAt（远端语义）；
+    /// - 不存在 → 二分插入新增；
+    /// - **不写** dirtyEventIDs，**不入** deletedEventIDs，**不调** enqueuePush。
+    ///
+    /// 之所以独立成专用方法，是因为旧的 `update(_:skipSync:true)` / `add(_:skipSync:true)` 路径
+    /// 即便 skipSync=true，仍然会在 dirtyEventIDs.insert(id) 上把"刚从云拿下来的记录"打为脏。
+    /// 下一轮 syncBidirectional 推送时把这条 id 当作本地变更推回云，version 每次 +1，
+    /// 形成**版本膨胀**（每轮 sync 每条远端记录 version 永久 +1），且会把远端的 updatedAt
+    /// 通过 EventStore.update 中的 `applied.updatedAt = Date()` 覆盖成本地"now"——
+    /// 既误导 UI（远端 1 年前的编辑被显示为"刚刚更新"），也会被 merge(keepLatest)
+    /// 在 round-trip 时误判为"本地更新版本"而拒绝真正更新的远端。
+    public func applyRemote(_ event: CalendarEvent) {
+        if let idx = indexOfEvent(id: event.id) {
+            // 已存在：参照 updateInPlaceFast，但**不改 updatedAt**，
+            // 且**保留本地 isNotified**（设备本地状态，不被远端覆盖）。
+            // 远端 payload 里 isNotified 已被 eventRecord 强制设为 false，
+            // 若直接整体替换会把本机已触发的提醒重置为未触发 → 重复弹窗。
+            var merged = event
+            merged.isNotified = events[idx].isNotified
+            let oldStart = events[idx].startDate
+            if oldStart == merged.startDate {
+                // 位置不变：直接替换，idToIndex 不动
+                events[idx] = merged
+            } else {
+                events.remove(at: idx)
+                idToIndex.removeValue(forKey: merged.id)
+                shiftIndices(from: idx, by: -1)
+                let at = sortedInsertionIndex(for: merged.startDate)
+                events.insert(merged, at: at)
+                shiftIndices(from: at, by: 1)
+                idToIndex[merged.id] = at
+            }
+        } else {
+            // 新事件：二分插入
+            let at = sortedInsertionIndex(for: event.startDate)
+            events.insert(event, at: at)
+            shiftIndices(from: at, by: 1)
+            idToIndex[event.id] = at
+        }
+        invalidateCache()
+        // 防抖保存即可：远端合并批量到达时不需每条立即落盘
+        save()
+    }
+
+    /// 远端墓碑合并专用：按 UUID 删除本地事件；**不写** deletedEventIDs，**不调** enqueuePush。
+    /// 仍然取消 pending 通知（避免幽灵提醒），因为通知是设备本地状态。
+    public func applyRemoteDelete(id: UUID) {
+        guard let idx = idToIndex[id] else { return }
+        let ev = events[idx]
+        events.remove(at: idx)
+        idToIndex.removeValue(forKey: id)
+        shiftIndices(from: idx, by: -1)
+        invalidateCache()
+        save()
+        // 取消 pending 通知（与 delete(_:) 一致；通知是设备本地状态，不应跨墓碑留存）
+        NotificationManager.shared.cancelNotification(for: ev)
+        // 不写 deletedEventIDs / dirtyEventIDs：刚从云拿到墓碑，没必要再推回去。
     }
 
     // MARK: - 同步辅助
@@ -361,16 +446,25 @@ public final class EventStore {
             // 无协调器时保留 dirty 标记，等用户重新启用 iCloud 同步后再推送
             return
         }
-        // 收集脏事件
-        let dirtyEvents = events.filter { dirtyEventIDs.contains($0.id.uuidString) }
-        let deletedIDs = deletedEventIDs
+        // 收集 dirty events / deleted IDs 快照
+        let dirtySnap = dirtyEventIDs
+        let deletedSnap = deletedEventIDs
+        let dirtyEvents: [CalendarEvent] = dirtySnap.compactMap { idStr in
+            guard let uuid = UUID(uuidString: idStr),
+                  let idx = idToIndex[uuid] else { return nil }
+            return events[idx]
+        }.sorted { $0.startDate < $1.startDate }
         do {
-            _ = try await co.push(events: dirtyEvents, deletedIDs: deletedIDs)
-            // 推送成功后清空已推送的 ID
-            dirtyEventIDs.removeAll()
-            deletedEventIDs.removeAll()
+            let result = try await co.push(events: dirtyEvents, deletedIDs: deletedSnap)
+            // P2 修复：只移除推送**真正成功**的事件；失败的保留 dirty/deleted 标记以便下次重推。
+            // 之前无论成功失败一律 removeAll，导致部分失败时失败记录的 dirty 标记永久丢失 →
+            // 多设备数据发散（用户 iPhone 看到改了，iPad 永远收不到）。
+            let failed = result.failedRecordIDs
+            dirtyEventIDs.formIntersection(failed)
+            deletedEventIDs.formIntersection(failed)
+            // 如果 coordinator 为了兼容外部全 clear 路径也调过 clearDirtyFlags，不重复计算。
         } catch {
-            // 推送失败：保留 dirty 标记，下次重试
+            // 整体性失败（网络/不可用）：保留全部 dirty 标记，下次重试
             AppLogger.sync.warning("推送云端失败: \(error)，将在下次同步时重试")
         }
     }
@@ -379,10 +473,19 @@ public final class EventStore {
     /// NOTE：重复声明会与上方 P6 优化版冲突；保留空壳以免外部链接符号变化。此处移除旧实现，
     /// 统一以文件顶部"O(1) 字典路径"版本为准。
 
-    /// 清空脏标记（推送成功后由协调器调用）
+    /// 清空脏标记（推送成功后由协调器调用，仅当全部成功时使用）
     public func clearDirtyFlags() {
         dirtyEventIDs.removeAll()
         deletedEventIDs.removeAll()
+    }
+
+    /// 部分失败后：仅保留 failedIDs 中的脏标记，其余（成功的）移除。
+    /// 返回值 = 剩余的 (dirty 数, deleted 数)，用于调试/UI 提示"还有 N 条待重试"。
+    @discardableResult
+    public func retainDirtyFlags(onlyFailed failedIDs: Set<String>) -> (dirtyLeft: Int, deletedLeft: Int) {
+        dirtyEventIDs.formIntersection(failedIDs)
+        deletedEventIDs.formIntersection(failedIDs)
+        return (dirtyEventIDs.count, deletedEventIDs.count)
     }
 
 
@@ -404,19 +507,19 @@ public final class EventStore {
     }
 
     public func hasEvents(on date: Date) -> Bool {
-        eventStats(on: date).has
+        eventStats(on: date).count > 0
     }
 
-    /// 单次遍历同时返回是否有事件和最高优先级，避免 calendarGrid 里调两次
-    public func eventStats(on date: Date) -> (has: Bool, priority: Priority?) {
+    /// 单次遍历同时返回事件数量和最高优先级，避免 calendarGrid 里调两次
+    public func eventStats(on date: Date) -> (count: Int, priority: Priority?) {
         let cal = Calendar(identifier: .gregorian)
         let key = cal.startOfDay(for: date)
         if let cached = statsCache[key] { return cached }
-        var has = false
+        var count = 0
         var best: Priority? = nil
         for ev in events {
             if ev.occurs(on: date) {
-                has = true
+                count += 1
                 switch (best, ev.priority) {
                 case (nil, let p):          best = p
                 case (.some(let cur), let p) where p > cur: best = p
@@ -424,7 +527,7 @@ public final class EventStore {
                 }
             }
         }
-        let result = (has, best)
+        let result = (count, best)
         statsCache[key] = result
         return result
     }
@@ -540,13 +643,6 @@ public final class EventStore {
 
     // MARK: - 内部辅助
 
-    /// 旧 helper（保留签名但已废弃；新代码一律走 updateInPlaceFast）。
-    @available(*, deprecated, renamed: "updateInPlaceFast")
-    private func updateInPlace(id: UUID, with new: CalendarEvent) {
-        guard let idx = indexOfEvent(id: id) else { return }
-        updateInPlaceFast(oldIndex: idx, with: new)
-    }
-
     /// 合并内路径：直接给定 oldIndex，根据 startDate 是否变化决定原地写 or 删+二分插。
     private func updateInPlaceFast(oldIndex idx: Int, with new: CalendarEvent) {
         var applied = new
@@ -620,18 +716,20 @@ public final class EventStore {
 
     private func save() {
         // P5 性能：防抖写入。单条 CRUD 连续操作（如批量完成事件）合并为 0.5s 一次磁盘写入。
-        pendingSaveWorkItem?.cancel()
-        let wi = DispatchWorkItem { [weak self] in
+        pendingSaveTask?.cancel()
+        let ns = saveDebounceNs
+        pendingSaveTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: ns) }
+            catch { return }   // 被 cancel：新 save 已接手，静默退出
+            guard !Task.isCancelled else { return }
             self?.saveNow()
         }
-        pendingSaveWorkItem = wi
-        DispatchQueue.main.asyncAfter(deadline: .now() + saveDebounceInterval, execute: wi)
     }
 
     /// 立即写盘（不防抖），用于 merge/clearAll/load/init 等需要立即落盘的事务性场景
     private func saveNow() {
-        pendingSaveWorkItem?.cancel()
-        pendingSaveWorkItem = nil
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
         do {
             let data = try JSONEncoder().encode(events)
             try data.write(to: saveURL, options: .atomic)
@@ -642,10 +740,29 @@ public final class EventStore {
         }
     }
 
-    // MARK: 测试辅助：立即触发一次防抖落盘（Linux XCTest 下 DispatchQueue.main.asyncAfter 不保证执行）
+    // MARK: 测试辅助：立即触发一次防抖落盘（Linux XCTest 下 Task.sleep 需要 flush）
     /// 强制把挂起的防抖保存立即执行；仅用于单元测试，生产代码请勿直接调用。
     @MainActor
     public func _testFlushSave() {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
+        saveNow()
+    }
+
+    /// 生产用：把挂起的防抖落盘立即执行。
+    ///
+    /// P2 修复：`save()` 用 0.5s `Task.sleep` 防抖合并连续 CRUD。若用户在防抖窗口内
+    ///   把 App 切到后台（或系统在后台终止进程），`Task.sleep` 不会被唤醒，最新的
+    ///   add/update/delete 就来不及落盘 → 下次启动数据丢失。
+    ///
+    /// 调用时机：App 进入 `.background` / `.inactive`（scenePhase）、用户手动保存
+    ///   后立即 dismiss 等"窗口即将关闭"的节点。
+    ///
+    /// 注：与 CountdownStore.flushPendingSave() 语义一致。
+    @MainActor
+    public func flushPendingSave() {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
         saveNow()
     }
 
@@ -764,9 +881,11 @@ public final class EventStore {
             )
         )
 
-        var comps2 = cal.dateComponents([.year,.month,.day], from: today.addingDays(1))
+        // 公历 +1 天，避免 Calendar.current 被用户非公历设置污染
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today) ?? today
+        var comps2 = cal.dateComponents([.year,.month,.day], from: tomorrow)
         comps2.hour = 9; comps2.minute = 0
-        let s2 = cal.date(from: comps2) ?? today.addingDays(1)
+        let s2 = cal.date(from: comps2) ?? tomorrow
         built.append(
             CalendarEvent(
                 title: "给妈妈打电话",

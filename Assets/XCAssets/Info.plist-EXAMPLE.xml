@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Info.plist 片段：声明备用 App 图标（Alternate App Icons）
+  —— 把下面 <plist> 元素内的 key/dict 整段合并进你工程的 Info.plist ——
+
+  用法：
+    1) 将 Assets/XCAssets/AppIcon.appiconset 与
+       Assets/XCAssets/AppIconSpringFestival.appiconset 作为
+       两个独立 AppIcon Set 加入 Xcode 工程的同一 Assets.xcassets。
+       注意：Xcode 中 App Icon Source 只用来声明 Primary（AppIcon），
+       Alternate 则必须通过本 plist 显式声明。
+    2) 下面两段 key 分别用于 iPhone 与 iPad（~ipad）。若只做 iPhone，
+       去掉 CFBundleIcons~ipad 那一份即可。
+    3) 在 App 中切换图标：
+         UIApplication.shared.setAlternateIconName("SpringFestival") { error in … }
+       切回主图标时传 nil：
+         UIApplication.shared.setAlternateIconName(nil, completionHandler: nil)
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- ============== iPhone ============== -->
+  <key>CFBundleIcons</key>
+  <dict>
+    <key>CFBundlePrimaryIcon</key>
+    <dict>
+      <key>CFBundleIconName</key>
+      <string>AppIcon</string>
+      <key>CFBundleIconFiles</key>
+      <array>
+        <string>AppIcon20x20</string>
+        <string>AppIcon29x29</string>
+        <string>AppIcon40x40</string>
+        <string>AppIcon60x60</string>
+      </array>
+    </dict>
+
+    <key>CFBundleAlternateIcons</key>
+    <dict>
+      <!-- 春节限定 → 代码里用 "SpringFestival" -->
+      <key>SpringFestival</key>
+      <dict>
+        <key>CFBundleIconName</key>
+        <string>AppIconSpringFestival</string>
+        <key>CFBundleIconFiles</key>
+        <array>
+          <string>AppIconSpringFestival20x20</string>
+          <string>AppIconSpringFestival29x29</string>
+          <string>AppIconSpringFestival40x40</string>
+          <string>AppIconSpringFestival60x60</string>
+        </array>
+        <key>UIPrerenderedIcon</key>
+        <false/>
+      </dict>
+    </dict>
+  </dict>
+
+  <!-- ============== iPad ============== -->
+  <key>CFBundleIcons~ipad</key>
+  <dict>
+    <key>CFBundlePrimaryIcon</key>
+    <dict>
+      <key>CFBundleIconName</key>
+      <string>AppIcon</string>
+      <key>CFBundleIconFiles</key>
+      <array>
+        <string>AppIcon20x20</string>
+        <string>AppIcon29x29</string>
+        <string>AppIcon40x40</string>
+        <string>AppIcon76x76</string>
+        <string>AppIcon83.5x83.5</string>
+      </array>
+    </dict>
+
+    <key>CFBundleAlternateIcons</key>
+    <dict>
+      <key>SpringFestival</key>
+      <dict>
+        <key>CFBundleIconName</key>
+        <string>AppIconSpringFestival</string>
+        <key>CFBundleIconFiles</key>
+        <array>
+          <string>AppIconSpringFestival20x20</string>
+          <string>AppIconSpringFestival29x29</string>
+          <string>AppIconSpringFestival40x40</string>
+          <string>AppIconSpringFestival76x76</string>
+          <string>AppIconSpringFestival83.5x83.5</string>
+        </array>
+        <key>UIPrerenderedIcon</key>
+        <false/>
+      </dict>
+    </dict>
+  </dict>
+</dict>
+</plist>

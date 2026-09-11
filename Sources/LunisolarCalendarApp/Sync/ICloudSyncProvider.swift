@@ -29,17 +29,23 @@ public struct SyncResult: Equatable, Hashable, Sendable {
     public let pulled: Int
     public let conflictsResolved: Int
     public let errors: [SyncError]
+    /// push 时 per-record 失败的记录 ID（部分失败场景下 EventStore 要据此保留这些事件的脏标记重推，
+    /// 成功的记录才从 dirty/deleted 里移除，避免"部分成功→脏标记全清→失败事件永久丢失推送"）。
+    /// pull / 无 push 时返回空集合。
+    public let failedRecordIDs: Set<String>
     public let startedAt: Date
     public let finishedAt: Date
 
     public init(direction: SyncDirection, pushed: Int, pulled: Int,
                 conflictsResolved: Int, errors: [SyncError],
+                failedRecordIDs: Set<String> = [],
                 startedAt: Date, finishedAt: Date) {
         self.direction = direction
         self.pushed = pushed
         self.pulled = pulled
         self.conflictsResolved = conflictsResolved
         self.errors = errors
+        self.failedRecordIDs = failedRecordIDs
         self.startedAt = startedAt
         self.finishedAt = finishedAt
     }
@@ -96,7 +102,16 @@ public struct SyncRecord: Equatable, Hashable, Identifiable, Sendable {
         isDeleted: Bool = false,
         encoder: JSONEncoder = SyncCoders.encoder()
     ) throws -> SyncRecord {
-        let data = try encoder.encode(event)
+        // P1 修复：isNotified 是「设备本地状态」（本机 UNUserNotificationCenter 是否已触发），
+        //   绝不能参与 iCloud 同步。否则：
+        //   - 设备 A 响过 markNotified=true → 用户改个标题 push 上去 → payload 里 isNotified=true
+        //   - 设备 B pull 下来 → isNotified=true → rescheduleAllReminders 跳过 → 设备 B 永远不响
+        //   - 反向：设备 B 改标题 push（version 更高）→ 设备 A pull → applyRemote 整体替换 →
+        //     设备 A 的 isNotified 被远端 false 覆盖 → 重新调度 → 重复提醒。
+        //   修复：编码前强制 isNotified=false，设备本地状态不进云端。
+        var syncCopy = event
+        syncCopy.isNotified = false
+        let data = try encoder.encode(syncCopy)
         guard let json = String(data: data, encoding: .utf8) else {
             throw SyncError.invalidPayload("CalendarEvent -> UTF8 失败")
         }

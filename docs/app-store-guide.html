@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>清和日历 · 从 Xcode 到 App Store 全流程图文教程</title>
+<style>
+  :root {
+    --tint: #3d63de;
+    --tint-dark: #2a4bd6;
+    --bg: #f7f7fb;
+    --card: #ffffff;
+    --text: #1c1c1e;
+    --text-2: #3c3c43;
+    --text-3: #8e8e93;
+    --border: #e5e5ea;
+    --green: #34c759;
+    --orange: #ff9500;
+    --red: #ff3b30;
+    --yellow-bg: #fff8e1;
+    --yellow-border: #ffe082;
+    --blue-bg: #e3f2fd;
+    --blue-border: #90caf9;
+    --green-bg: #e8f5e9;
+    --green-border: #a5d6a7;
+    --red-bg: #ffebee;
+    --red-border: #ef9a9a;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 顶部封面 */
+  .cover {
+    position: relative;
+    height: 420px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #2a4bd6 0%, #6a4be0 50%, #e07a3d 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #fff;
+  }
+  .cover img {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    opacity: 0.55;
+  }
+  .cover::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.45) 100%);
+  }
+  .cover-content { position: relative; z-index: 2; padding: 0 24px; }
+  .cover h1 {
+    font-size: 44px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 14px;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  }
+  .cover p {
+    font-size: 18px;
+    opacity: 0.95;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .cover .badge {
+    display: inline-block;
+    margin-top: 18px;
+    padding: 6px 16px;
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(10px);
+    border-radius: 999px;
+    font-size: 13px;
+    border: 1px solid rgba(255,255,255,0.3);
+  }
+
+  /* 导航目录 */
+  .toc {
+    max-width: 900px;
+    margin: -40px auto 40px;
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+    padding: 24px 28px;
+    position: relative;
+    z-index: 5;
+  }
+  .toc h3 { font-size: 16px; color: var(--text-2); margin-bottom: 14px; }
+  .toc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px 20px;
+  }
+  .toc a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--tint);
+    text-decoration: none;
+    font-size: 14px;
+    padding: 6px 0;
+    transition: transform 0.15s;
+  }
+  .toc a:hover { transform: translateX(3px); }
+  .toc .num {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--tint);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* 主体 */
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  .section {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    border: 1px solid var(--border);
+  }
+  .section h2 {
+    font-size: 26px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .section h2 .step-badge {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--tint), #6a4be0);
+    color: #fff;
+    font-size: 18px;
+    font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .section .subtitle {
+    color: var(--text-3);
+    font-size: 15px;
+    margin-bottom: 24px;
+  }
+  .section h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 24px 0 12px;
+    color: var(--text);
+  }
+  .section p { margin-bottom: 14px; color: var(--text-2); }
+  .section ul, .section ol { margin: 12px 0 18px 22px; color: var(--text-2); }
+  .section li { margin-bottom: 8px; }
+
+  /* 流程图 */
+  .flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 24px 0;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .flow-node {
+    flex: 1 1 130px;
+    min-width: 120px;
+    background: linear-gradient(135deg, #eef0ff, #f8f0ff);
+    border: 1.5px solid #d4d8ff;
+    border-radius: 14px;
+    padding: 16px 12px;
+    text-align: center;
+    position: relative;
+  }
+  .flow-node .icon { font-size: 28px; margin-bottom: 6px; }
+  .flow-node .label { font-size: 13px; font-weight: 700; color: var(--tint-dark); }
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--tint);
+    font-size: 22px;
+    font-weight: 700;
+    padding: 0 4px;
+  }
+
+  /* 代码块 */
+  pre {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    padding: 18px 20px;
+    border-radius: 12px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 14px 0;
+    font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+  }
+  pre .comment { color: #6c7086; }
+  pre .kw { color: #cba6f7; }
+  pre .str { color: #a6e3a1; }
+  pre .func { color: #89b4fa; }
+
+  code.inline {
+    background: #f0f0f5;
+    color: var(--tint-dark);
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  /* 提示框 */
+  .callout {
+    padding: 16px 18px;
+    border-radius: 12px;
+    margin: 18px 0;
+    border-left: 4px solid;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .callout .ico { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .callout .body { flex: 1; }
+  .callout .body strong { display: block; margin-bottom: 4px; }
+  .callout.tip { background: var(--blue-bg); border-color: #42a5f5; }
+  .callout.tip .body strong { color: #1565c0; }
+  .callout.warn { background: var(--yellow-bg); border-color: #fdd835; }
+  .callout.warn .body strong { color: #f57f17; }
+  .callout.danger { background: var(--red-bg); border-color: #ef5350; }
+  .callout.danger .body strong { color: #c62828; }
+  .callout.success { background: var(--green-bg); border-color: #66bb6a; }
+  .callout.success .body strong { color: #2e7d32; }
+
+  /* 步骤卡片 */
+  .step-list { counter-reset: step; }
+  .step-item {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 18px;
+    position: relative;
+  }
+  .step-num {
+    counter-increment: step;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--tint);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .step-item::before {
+    content: counter(step);
+    position: absolute;
+    left: 16px; top: 32px;
+    width: 2px; height: calc(100% - 10px);
+    background: var(--border);
+  }
+  .step-item:last-child::before { display: none; }
+  .step-body { flex: 1; padding-bottom: 6px; }
+  .step-body strong { color: var(--text); }
+
+  /* 表格 */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  th, td {
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: #f5f5fa;
+    font-weight: 700;
+    color: var(--text-2);
+  }
+  tr:hover td { background: #fafaff; }
+
+  /* 进度条（可视化阶段） */
+  .progress-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 10px 0 20px;
+  }
+  .progress-bar span {
+    flex: 1;
+    background: var(--border);
+  }
+  .progress-bar span.done { background: var(--green); }
+  .progress-bar span.active { background: var(--tint); }
+
+  /* FAQ */
+  .faq-item {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .faq-q {
+    padding: 16px 18px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fafafa;
+  }
+  .faq-q .arrow { transition: transform 0.2s; color: var(--text-3); }
+  .faq-item.open .faq-q .arrow { transform: rotate(180deg); }
+  .faq-a {
+    padding: 0 18px;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.25s ease;
+    color: var(--text-2);
+  }
+  .faq-item.open .faq-a { padding: 14px 18px; max-height: 300px; }
+
+  /* 底部 */
+  footer {
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--text-3);
+    font-size: 13px;
+  }
+
+  @media (max-width: 700px) {
+    .cover { height: 320px; }
+    .cover h1 { font-size: 28px; }
+    .cover p { font-size: 15px; }
+    .section { padding: 22px; }
+    .flow-arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+
+<!-- 封面 -->
+<div class="cover">
+  <img src="tutorial-cover.jpg" alt="封面" />
+  <div class="cover-content">
+    <h1>清和日历 · 上架全攻略</h1>
+    <p>从打开 Xcode 到真机测试，再到上架 App Store——一份写给非程序员的图文教程</p>
+    <div class="badge">📖 预计阅读 15 分钟 · 9 个步骤 · 零代码基础也能看懂</div>
+  </div>
+</div>
+
+<!-- 目录 -->
+<div class="toc">
+  <h3>📋 目录</h3>
+  <div class="toc-grid">
+    <a href="#prep"><span class="num">0</span> 开始前的准备</a>
+    <a href="#step1"><span class="num">1</span> 下载源代码</a>
+    <a href="#step2"><span class="num">2</span> 用 Xcode 打开项目</a>
+    <a href="#step3"><span class="num">3</span> 配置签名（关键）</a>
+    <a href="#step4"><span class="num">4</span> 模拟器跑起来</a>
+    <a href="#step5"><span class="num">5</span> 连接真机测试</a>
+    <a href="#step6"><span class="num">6</span> 打包 Archive</a>
+    <a href="#step7"><span class="num">7</span> 上传 App Store Connect</a>
+    <a href="#step8"><span class="num">8</span> 填写 App 信息</a>
+    <a href="#step9"><span class="num">9</span> 提交审核 & 发布</a>
+    <a href="#faq"><span class="num">?</span> 常见问题</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- 整体流程图 -->
+  <div class="section">
+    <h2><span class="step-badge">🌊</span> 整体流程一览</h2>
+    <p class="subtitle">先看全景，再走细节。整个过程可以分成 4 个大阶段：</p>
+    <div class="flow">
+      <div class="flow-node"><div class="icon">📦</div><div class="label">获取代码<br>打开项目</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="icon">⚙️</div><div class="label">配置签名<br>模拟器运行</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="icon">📱</div><div class="label">真机测试<br>修复问题</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="icon">🎁</div><div class="label">打包上传<br>提交审核</div></div>
+    </div>
+    <div class="callout tip">
+      <span class="ico">💡</span>
+      <div class="body">
+        <strong>一句话总结</strong>
+        你只需要一台 Mac、一个 Apple ID（上架需付费开发者账号）、一根数据线，跟着本文一步步操作即可。不需要写任何代码。
+      </div>
+    </div>
+  </div>
+
+  <!-- 准备 -->
+  <div class="section" id="prep">
+    <h2><span class="step-badge">0</span> 开始前的准备</h2>
+    <p class="subtitle">磨刀不误砍柴工，先把硬件和账号准备好</p>
+
+    <h3>🧰 你需要的东西</h3>
+    <table>
+      <thead><tr><th>物品</th><th>要求</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td>Mac 电脑</td><td>M1/M2/M3/M4 或 Intel 均可，macOS 14+</td><td>运行 Xcode</td></tr>
+        <tr><td>Xcode</td><td>16.0 或更新版本（App Store 免费下载）</td><td>编译 App</td></tr>
+        <tr><td>iPhone</td><td>iOS 17 或更新</td><td>真机测试</td></tr>
+        <tr><td>数据线</td><td>iPhone 原装 Lightning / USB-C</td><td>连接 Mac 和 iPhone</td></tr>
+        <tr><td>Apple ID</td><td>普通 Apple ID 可真机调试；上架需 <b>付费开发者账号</b>（$99/年）</td><td>签名 & 上架</td></tr>
+      </tbody>
+    </table>
+
+    <h3>💰 关于付费开发者账号</h3>
+    <div class="callout warn">
+      <span class="ico">⚠️</span>
+      <div class="body">
+        <strong>真机调试：免费</strong>
+        用普通 Apple ID 就能在自己的手机上跑 App，有效期 7 天。<br>
+        <strong>上架 App Store：必须付费</strong>
+        需要加入 <b>Apple Developer Program</b>，年费 $99（约 ¥688）。可在 <a href="https://developer.apple.com/programs/" target="_blank">developer.apple.com/programs</a> 注册。
+      </div>
+    </div>
+
+    <h3>⬇️ 安装 Xcode</h3>
+    <div class="step-list">
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">打开 Mac 上的 <strong>App Store</strong>，搜索 <code class="inline">Xcode</code>，点击「获取」下载（约 12GB，耐心等待）。</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">安装完成后打开 Xcode，它会提示安装额外组件（Command Line Tools），点 <strong>Install</strong> 即可。</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">打开 Xcode 菜单 <strong>Xcode → Settings → Accounts</strong>，点左下角 <code class="inline">+</code> 登录你的 Apple ID。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤 1 -->
+  <div class="section" id="step1">
+    <h2><span class="step-badge">1</span> 下载源代码</h2>
+    <p class="subtitle">把「清和日历」的代码拿到你的 Mac 上</p>
+
+    <h3>方式一：从 GitHub 下载（推荐）</h3>
+    <div class="step-list">
+      <div class="step-item"><div class="step-num"></div><div class="step-body">在浏览器打开项目的 GitHub 仓库地址。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">点击绿色的 <strong>Code</strong> 按钮 → 选 <strong>Download ZIP</strong>。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">下载完成后，双击 ZIP 解压，把文件夹拖到「下载」或「文稿」目录。</div></div>
+    </div>
+
+    <h3>方式二：用 git 命令（如果你装过）</h3>
+<pre><span class="comment"># 打开「终端」App，粘贴以下命令回车</span>
+git clone https://github.com/<span class="str">你的用户名</span>/qinghe-calendar.git
+<span class="comment"># 代码会下载到当前目录的 qinghe-calendar 文件夹</span></pre>
+
+    <div class="callout tip">
+      <span class="ico">📂</span>
+      <div class="body">
+        <strong>下载后你会看到这些核心文件</strong>
+        <code class="inline">Package.swift</code>（项目入口）、<code class="inline">Sources/</code>（代码）、<code class="inline">Assets/</code>（图标和资源）、<code class="inline">README.md</code>（说明）。
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤 2 -->
+  <div class="section" id="step2">
+    <h2><span class="step-badge">2</span> 用 Xcode 打开项目</h2>
+    <p class="subtitle">本项目是 Swift Package，没有 .xcodeproj 文件，直接打开 Package.swift 即可</p>
+
+    <div class="step-list">
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">打开 Xcode，菜单 <strong>File → Open…</strong>（快捷键 <code class="inline">⌘O</code>）。</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">找到你下载的文件夹，选择里面的 <strong><code class="inline">Package.swift</code></strong> 文件，点「打开」。</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">Xcode 会自动解析项目，左上角进度条走完（第一次可能需要 1-2 分钟下载依赖，本项目无第三方依赖，很快）。</div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <span class="ico">⚠️</span>
+      <div class="body">
+        <strong>注意：SPM 项目没有可直接运行的 App</strong>
+        直接按 Run 会报错，因为这是一个「库」工程。下一步我们需要创建一个「宿主 App」来承载它。这是本教程最关键的一步，请仔细操作。
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤 3 -->
+  <div class="section" id="step3">
+    <h2><span class="step-badge">3</span> 创建宿主 App & 配置签名</h2>
+    <p class="subtitle">给代码套一个「运行壳」，并让你的 Apple ID 给 App 签名</p>
+
+    <h3>3.1 创建一个空的 iOS App Target</h3>
+    <div class="step-list">
+      <div class="step-item"><div class="step-num"></div><div class="step-body">菜单 <strong>File → New → Target…</strong>。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">左侧选 <strong>iOS</strong>，右侧选 <strong>App</strong>，点 <strong>Next</strong>。</div></div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">填写：
+          <ul>
+            <li><strong>Product Name</strong>：填 <code class="inline">清和日历</code>（或英文名 QingheCalendar）</li>
+            <li><strong>Interface</strong>：选 <code class="inline">SwiftUI</code></li>
+            <li><strong>Language</strong>：选 <code class="inline">Swift</code></li>
+            <li>下方 <strong>Core Data / Tests / UI Tests 全部不要勾</strong></li>
+          </ul>
+          点 <strong>Finish</strong>。
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">Xcode 会生成一些模板文件（<code class="inline">ContentView.swift</code> 等），<strong>全部删掉</strong>（选中按 Delete，选「Move to Trash」）。
+        </div>
+      </div>
+    </div>
+
+    <h3>3.2 把代码库接入宿主 App</h3>
+    <div class="step-list">
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">点左侧导航栏最顶部的蓝色项目图标 → 选中你刚创建的 target（清和日历）→ 顶部切到 <strong>General</strong> 标签。</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">找到 <strong>Frameworks, Libraries, and Embedded Content</strong> 区域，点 <code class="inline">+</code>。</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">在弹出的列表里找到 <strong>Package Products</strong> 分组，勾选 <strong><code class="inline">LunisolarCalendarApp</code></strong>，点 <strong>Add</strong>。</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">在新出现的那行右侧，把 <strong>Embed</strong> 列设为 <code class="inline">Embed & Sign</code>。</div>
+      </div>
+    </div>
+
+    <h3>3.3 替换入口文件</h3>
+    <p>在你的宿主 App 文件夹里新建一个 Swift 文件（<strong>File → New → File… → Swift File</strong>），命名为 <code class="inline">HostApp.swift</code>，内容如下：</p>
+<pre><span class="kw">import</span> SwiftUI
+<span class="kw">import</span> LunisolarCalendarApp
+
+<span class="kw">@main</span>
+<span class="kw">struct</span> HostApp: App {
+    <span class="kw">var</span> body: <span class="kw">some</span> Scene {
+        WindowGroup {
+            AdaptiveRootView()
+                .environment(EventStore.shared)
+        }
+    }
+}</pre>
+
+    <h3>3.4 配置签名</h3>
+    <div class="step-list">
+      <div class="step-item"><div class="step-num"></div><div class="step-body">选中 target → 顶部切到 <strong>Signing & Capabilities</strong> 标签。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body"><strong>Team</strong> 下拉选你的 Apple ID（没登录的回 §0 登录）。</div></div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body"><strong>Bundle Identifier</strong> 改成你自己的唯一标识，例如 <code class="inline">com.你的名字.qinghe</code>。
+          <div class="callout tip" style="margin-top:10px"><span class="ico">💡</span><div class="body"><strong>什么是 Bundle ID？</strong>相当于 App 的「身份证号」，全球唯一。随便取一个，只要不和别人重复即可。</div></div>
+        </div>
+      </div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">勾选 <strong>Automatically manage signing</strong>（自动管理签名），Xcode 会帮你处理证书。</div></div>
+    </div>
+  </div>
+
+  <!-- 步骤 4 -->
+  <div class="section" id="step4">
+    <h2><span class="step-badge">4</span> 在模拟器上跑起来</h2>
+    <p class="subtitle">先在电脑上的虚拟 iPhone 里看看效果</p>
+
+    <div class="step-list">
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">Xcode 顶部工具栏，Scheme 选你刚创建的 <strong>清和日历</strong> target（不是 LunisolarCalendarApp library）。
+        </div>
+      </div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">设备选任意一个模拟器，比如 <strong>iPhone 16</strong>。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">点左上角的 ▶️ 按钮（或按 <code class="inline">⌘R</code>）。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">等待编译（约 30 秒~1 分钟），模拟器自动打开，桌面上出现「清和日历」图标。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">点开 App，浏览日历、查看黄历、添加日程，确认功能正常。</div></div>
+    </div>
+
+    <div class="callout success">
+      <span class="ico">✅</span>
+      <div class="body">
+        <strong>成功标志</strong>
+        模拟器里能看到日历界面，能切换月份、查看当日宜忌、添加事件。
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤 5 -->
+  <div class="section" id="step5">
+    <h2><span class="step-badge">5</span> 连接真机测试</h2>
+    <p class="subtitle">把 App 装到你自己的 iPhone 上</p>
+
+    <div class="step-list">
+      <div class="step-item"><div class="step-num"></div><div class="step-body">用数据线把 iPhone 连到 Mac。iPhone 上会弹出「信任此电脑？」，点<strong>信任</strong>并输入密码。</div></div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">Xcode 顶部设备下拉框选择你的 iPhone（第一次连接可能提示「Preparing iPhone for development」，等待 1-2 分钟）。
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">在 iPhone 上打开 <strong>设置 → 通用 → VPN与设备管理</strong>，找到你的 Apple ID 对应的开发者证书，点<strong>信任</strong>。
+        </div>
+      </div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">回到 Xcode 按 <code class="inline">⌘R</code>，App 自动安装到手机并打开。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">在手机上完整测试：日历、黄历、提醒通知、倒数日、节日主题色、春节图标切换。</div></div>
+    </div>
+
+    <div class="callout warn">
+      <span class="ico">🔔</span>
+      <div class="body">
+        <strong>通知权限</strong>
+        第一次进入「设置」页会弹通知权限请求，选「允许」才能收到提醒。
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <span class="ico">📅</span>
+      <div class="body">
+        <strong>春节图标怎么测？</strong>
+        正常情况下春节图标只在正月初一前后自动切换。想立即看效果，可以把手机日期临时改成正月初一（设置 → 通用 → 日期与时间），重启 App 即可看到春节限定图标。
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤 6 -->
+  <div class="section" id="step6">
+    <h2><span class="step-badge">6</span> 打包（Archive）</h2>
+    <p class="subtitle">把 App 打包成可上传的安装包</p>
+
+    <div class="callout warn">
+      <span class="ico">⚠️</span>
+      <div class="body">
+        <strong>上架前必须确认</strong>
+        你已经有<b>付费 Apple Developer 账号</b>，并且 Bundle ID 已在 <a href="https://developer.apple.com/account/" target="_blank">developer.apple.com/account</a> 注册。
+      </div>
+    </div>
+
+    <div class="step-list">
+      <div class="step-item"><div class="step-num"></div><div class="step-body">在 Xcode 顶部设备下拉框选 <strong>Any iOS Device (arm64)</strong>（不要选模拟器或具体手机）。</div></div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">检查版本号：选中 target → <strong>General</strong> → 找到：
+          <ul>
+            <li><strong>Version</strong>（如 1.0.0）：用户在 App Store 看到的版本号</li>
+            <li><strong>Build</strong>（如 1）：每次上传必须比上一次大 1</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">菜单 <strong>Product → Archive</strong>（或 <code class="inline">⌃⌘⇧B</code>）。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">等待编译完成（2-5 分钟），弹出 <strong>Organizer</strong> 窗口，里面列出你刚打包的 Archive。</div></div>
+    </div>
+  </div>
+
+  <!-- 步骤 7 -->
+  <div class="section" id="step7">
+    <h2><span class="step-badge">7</span> 上传到 App Store Connect</h2>
+    <p class="subtitle">把安装包传到苹果的服务器</p>
+
+    <div class="step-list">
+      <div class="step-item"><div class="step-num"></div><div class="step-body">在 Organizer 窗口选中你刚打的包，点右侧 <strong>Distribute App</strong>。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">选 <strong>App Store Connect</strong> → 点 <strong>Next</strong>。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">选 <strong>Upload</strong>（不是 Export）→ 点 <strong>Next</strong>。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">保持默认勾选（Upload your app's symbols, Manage Version and Build Number 等）→ <strong>Next</strong>。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">确认签名信息 → <strong>Upload</strong>。等待上传完成（看网速，通常 1-5 分钟）。</div></div>
+    </div>
+
+    <div class="callout success">
+      <span class="ico">✅</span>
+      <div class="body">
+        <strong>上传成功</strong>
+        看到绿色对勾「Upload successful」。此时 App 已进入苹果服务器，但还需要在 App Store Connect 填写信息才能提交审核。
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤 8 -->
+  <div class="section" id="step8">
+    <h2><span class="step-badge">8</span> 填写 App Store 信息</h2>
+    <p class="subtitle">在网页后台填写 App 的名称、描述、截图等</p>
+
+    <div class="step-list">
+      <div class="step-item"><div class="step-num"></div><div class="step-body">打开 <a href="https://appstoreconnect.apple.com/" target="_blank">appstoreconnect.apple.com</a>，用你的开发者账号登录。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">点 <strong>我的 App</strong> → 左上角 <code class="inline">+</code> → <strong>新建 App</strong>。</div></div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">填写：
+          <ul>
+            <li><strong>平台</strong>：iOS</li>
+            <li><strong>名称</strong>：清和日历</li>
+            <li><strong>主要语言</strong>：简体中文</li>
+            <li><strong>套装 ID（Bundle ID）</strong>：选你在 Xcode 里填的那个</li>
+            <li><strong>SKU</strong>：随便填一个唯一字符串（如 qinghe2026）</li>
+          </ul>
+          点「创建」。
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body">进入 App 页面，按左侧菜单依次填写：
+          <ul>
+            <li><strong>App 信息</strong>：类别选「生活」或「效率」</li>
+            <li><strong>价格与销售范围</strong>：选「免费」</li>
+            <li><strong>App 隐私</strong>：声明数据收集情况（本 App 不上传用户数据，可声明不收集）</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-num"></div>
+        <div class="step-body"><strong>iOS App 版本</strong> 页面填写：
+          <ul>
+            <li>上传 <strong>App 截图</strong>（需要 6.5 寸和 6.7 寸 iPhone 截图，可用模拟器截图）</li>
+            <li><strong>描述</strong>：介绍 App 功能（农历、黄历、节日、倒数日、日程等）</li>
+            <li><strong>关键词</strong>：日历,农历,黄历,节日,倒数日,日程</li>
+            <li><strong>支持 URL</strong>：你的网站或 GitHub 地址</li>
+            <li><strong>版本号</strong>：与 Xcode 里的 Version 一致</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">在「构建版本」处选择你刚上传的包（上传后需等几分钟才会出现，期间状态显示「正在处理」）。</div></div>
+    </div>
+  </div>
+
+  <!-- 步骤 9 -->
+  <div class="section" id="step9">
+    <h2><span class="step-badge">9</span> 提交审核 & 发布</h2>
+    <p class="subtitle">最后一步：交给苹果审核</p>
+
+    <div class="step-list">
+      <div class="step-item"><div class="step-num"></div><div class="step-body">所有信息填完后，页面右上角点 <strong>添加以供审核</strong>。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">审核信息页：如果 App 需要登录或特殊测试，在「审核备注」里说明。本 App 无需登录，可留空。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">点 <strong>提交以供审核</strong>。状态变为「等待审核」。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">等待审核（通常 24-72 小时，节假日可能更久）。期间会收到邮件通知。</div></div>
+      <div class="step-item"><div class="step-num"></div><div class="step-body">审核通过后，状态变为「准备分发」，点「发布」即可上线 App Store！</div></div>
+    </div>
+
+    <div class="callout warn">
+      <span class="ico">🔄</span>
+      <div class="body">
+        <strong>如果被拒了怎么办？</strong>
+        苹果会在「解决方案中心」写明拒审原因，按要求修改后重新打包上传即可。常见原因：截图不清晰、描述夸大功能、隐私声明不完整。
+      </div>
+    </div>
+
+    <div class="callout success">
+      <span class="ico">🎉</span>
+      <div class="body">
+        <strong>恭喜上架！</strong>
+        全球用户都能在 App Store 搜索「清和日历」下载你的 App 了。
+      </div>
+    </div>
+  </div>
+
+  <!-- FAQ -->
+  <div class="section" id="faq">
+    <h2><span class="step-badge">?</span> 常见问题</h2>
+    <p class="subtitle">遇到问题先看这里</p>
+
+    <div class="faq-item">
+      <div class="faq-q">Xcode 打开 Package.swift 后没有可运行的 App？ <span class="arrow">▼</span></div>
+      <div class="faq-a">这是正常的。本项目是 Swift Package（库），没有可执行入口。按「步骤 3」创建一个宿主 App Target 并接入 <code class="inline">LunisolarCalendarApp</code> 即可。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">真机运行报 "The app identifier cannot be registered"？ <span class="arrow">▼</span></div>
+      <div class="faq-a">Bundle ID 冲突或没选 Team。在 Signing & Capabilities 里选你的 Team，并把 Bundle Identifier 改成一个全球唯一的值（比如加你的名字）。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">模拟器可以跑，真机不行？ <span class="arrow">▼</span></div>
+      <div class="faq-a">检查：1) iPhone 是否信任了这台 Mac；2) 设置 → 通用 → VPN与设备管理 里是否信任了你的开发者证书；3) Team 是否选对。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">免费 Apple ID 装的 App 7 天后闪退？ <span class="arrow">▼</span></div>
+      <div class="faq-a">这是正常的。免费账号签名的 App 有效期只有 7 天，过期后重新用 Xcode 装一次即可。上架 App Store 需要付费开发者账号，就没有这个限制。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">上传后 App Store Connect 一直显示「正在处理」？ <span class="arrow">▼</span></div>
+      <div class="faq-a">正常，苹果服务器处理安装包需要时间，通常 5-30 分钟。期间可以刷新页面，处理完会自动出现在「构建版本」列表里。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">截图尺寸不符合要求？ <span class="arrow">▼</span></div>
+      <div class="faq-a">需要 6.5 寸（如 iPhone 11 Pro Max / 14 Plus 模拟器）和 6.7 寸（iPhone 14 Pro Max / 15 Pro Max 模拟器）的截图。在模拟器里按 <code class="inline">⌘S</code> 截屏。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Widget 小组件怎么装到手机桌面？ <span class="arrow">▼</span></div>
+      <div class="faq-a">真机上长按桌面空白处 → 点左上角 <code class="inline">+</code> → 搜索「清和」→ 选择喜欢的小组件样式添加。</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">iCloud 同步不工作？ <span class="arrow">▼</span></div>
+      <div class="faq-a">需要：1) App ID 绑定了 CloudKit；2) 手机设置里 iCloud Drive 已开启；3) 首次登录 Apple ID 后重启 App。</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  清和日历 · 上架全攻略 &nbsp;|&nbsp; 最后更新：2026-09-04 &nbsp;|&nbsp; 如有疑问请提交 Issue
+</footer>
+
+<script>
+  // FAQ 折叠
+  document.querySelectorAll('.faq-item').forEach(item => {
+    item.querySelector('.faq-q').addEventListener('click', () => {
+      item.classList.toggle('open');
+    });
+  });
+  // 平滑滚动
+  document.querySelectorAll('.toc a').forEach(a => {
+    a.addEventListener('click', e => {
+      const id = a.getAttribute('href').slice(1);
+      const el = document.getElementById(id);
+      if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+  });
+</script>
+</body>
+</html>
