@@ -70,7 +70,7 @@ private struct CountdownRow: View {
                 Text(event.title)
                     .font(AppTheme.Font.bodyBold)
                     .foregroundStyle(Color.label)
-                Text(event.date.formatted(date: .abbreviated, time: .omitted))
+                Text(event.date.formatted(date: .abbreviated, time: .omitted, locale: Locale(identifier: "zh_Hans_CN")))
                     .font(AppTheme.Font.caption)
                     .foregroundStyle(Color.secondaryLabel)
             }
@@ -138,6 +138,7 @@ private struct CountdownEditor: View {
                         }
                     }
                     DatePicker("日期", selection: $date, in: allowedDateRange, displayedComponents: .date)
+                        .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
                 }
                 Section {
                     Label("支持范围：\(ChineseCalendar.minYear) 年 1 月 — \(ChineseCalendar.maxYear) 年 12 月",

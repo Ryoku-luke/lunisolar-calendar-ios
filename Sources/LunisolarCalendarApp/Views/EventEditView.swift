@@ -175,18 +175,18 @@ struct EventEditView: View {
                     DatePicker(selection: $startDate,
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]) {
                         Label("开始", systemImage: "calendar.badge.clock").font(AppTheme.Font.body)
-                    }.environment(\.calendar, gregorian).datePickerStyle(.compact)
+                    }.environment(\.calendar, gregorian).environment(\.locale, Locale(identifier: "zh_Hans_CN")).datePickerStyle(.compact)
                     DatePicker(selection: $endDate,
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]) {
                         Label("结束", systemImage: "clock.badge.checkmark").font(AppTheme.Font.body)
-                    }.environment(\.calendar, gregorian).datePickerStyle(.compact)
+                    }.environment(\.calendar, gregorian).environment(\.locale, Locale(identifier: "zh_Hans_CN")).datePickerStyle(.compact)
                         .onChange(of: startDate, initial: false) { _, newVal in
                             if endDate < newVal { endDate = newVal }
                         }
                 } else {
                     DatePicker(selection: $startDate, displayedComponents: [.date]) {
                         Label("记事日期", systemImage: "calendar").font(AppTheme.Font.body)
-                    }.environment(\.calendar, gregorian).datePickerStyle(.compact)
+                    }.environment(\.calendar, gregorian).environment(\.locale, Locale(identifier: "zh_Hans_CN")).datePickerStyle(.compact)
                 }
                 if type != .note {
                     Toggle(isOn: $reminderEnabled) {
