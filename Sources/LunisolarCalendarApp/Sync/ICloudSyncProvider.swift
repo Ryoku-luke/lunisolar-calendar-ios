@@ -50,7 +50,6 @@ public struct SyncResult: Equatable, Hashable, Sendable {
         self.finishedAt = finishedAt
     }
 
-    public var duration: TimeInterval { finishedAt.timeIntervalSince(startedAt) }
     public var isSuccess: Bool { errors.isEmpty }
 }
 

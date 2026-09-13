@@ -91,6 +91,8 @@ struct EventEditView: View {
             .alert("确认删除", isPresented: $showDeleteConfirm) {
                 Button("删除", role: .destructive) {
                     if let ev = original { store.delete(ev) }
+                    // 同保存路径：删除也要立即落盘，避免防抖窗口内杀进程导致删除被回滚
+                    store.flushPendingSave()
                     dismiss()
                 }
                 Button("取消", role: .cancel) {}
@@ -178,7 +180,7 @@ struct EventEditView: View {
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]) {
                         Label("结束", systemImage: "clock.badge.checkmark").font(AppTheme.Font.body)
                     }.environment(\.calendar, gregorian).datePickerStyle(.compact)
-                        .onChange(of: startDate, initial: false) { newVal in
+                        .onChange(of: startDate, initial: false) { _, newVal in
                             if endDate < newVal { endDate = newVal }
                         }
                 } else {
@@ -349,6 +351,9 @@ struct EventEditView: View {
             NotificationManager.shared.cancelNotification(for: resultingEvent)
             await NotificationManager.shared.scheduleNotification(for: resultingEvent)
         }
+        // 与 CountdownView 保存一致：dismiss 后用户很可能立即上滑杀进程，
+        // 0.5s 防抖保存未必能跑完，先同步落盘防丢数据。
+        store.flushPendingSave()
         dismiss()
     }
 

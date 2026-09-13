@@ -1,8 +1,5 @@
 #if canImport(SwiftUI)
 import SwiftUI
-#if canImport(UniformTypeIdentifiers)
-import UniformTypeIdentifiers
-#endif
 #if canImport(UIKit)
 import UIKit
 #endif

@@ -1,5 +1,4 @@
 import Foundation
-import LunarCore
 
 // MARK: - 二十四节气
 

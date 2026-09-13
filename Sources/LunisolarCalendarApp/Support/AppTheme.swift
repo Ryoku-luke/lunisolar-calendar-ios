@@ -52,7 +52,6 @@ public enum AppTheme {
     }
     public enum Font {
         public static let hero = SwiftUI.Font.system(size: 38, weight: .bold, design: .rounded)
-        public static let title1 = SwiftUI.Font.system(size: 28, weight: .bold, design: .rounded)
         public static let title2 = SwiftUI.Font.system(size: 22, weight: .semibold, design: .rounded)
         public static let title3 = SwiftUI.Font.system(size: 18, weight: .semibold, design: .rounded)
         public static let bodyBold = SwiftUI.Font.system(size: 16, weight: .semibold, design: .rounded)
@@ -97,16 +96,26 @@ extension Color {
         return Color.black.opacity(0.06)
         #endif
     }
-    public static var appBackground: some ShapeStyle {
-        LinearGradient(
-            colors: [Color.systemGroupedBackground, Color.systemGroupedBackground],
-            startPoint: .top, endPoint: .bottom
-        )
-    }
-    public static var appTintSoft: Color { Color.appTint.opacity(0.12) }
-    public static var festiveRedSoft: Color { Color.festiveRed.opacity(0.12) }
     public static var todayCapsule: Color { Color.systemRed.opacity(0.10) }
     public static var hairSeparator: Color { Color.themeSeparator.opacity(0.35) }
+}
+
+/// 跨平台工具条位置：iOS 使用 topBarLeading/topBarTrailing，macOS 回退到语义等价位置。
+extension ToolbarItemPlacement {
+    public static var platformTopBarLeading: ToolbarItemPlacement {
+        #if canImport(UIKit)
+        return .topBarLeading
+        #else
+        return .navigation
+        #endif
+    }
+    public static var platformTopBarTrailing: ToolbarItemPlacement {
+        #if canImport(UIKit)
+        return .topBarTrailing
+        #else
+        return .primaryAction
+        #endif
+    }
 }
 
 extension View {
@@ -182,6 +191,22 @@ extension View {
     public func hideListBackground() -> some View {
         #if canImport(UIKit)
         self.scrollContentBackground(.hidden)
+        #else
+        self
+        #endif
+    }
+    /// 跨平台大标题：iOS 使用 navigationBarTitleDisplayMode(.large)，macOS 无此概念（空操作）。
+    public func largeTitleBar() -> some View {
+        #if canImport(UIKit)
+        self.navigationBarTitleDisplayMode(.large)
+        #else
+        self
+        #endif
+    }
+    /// 跨平台行内标题：iOS 使用 navigationBarTitleDisplayMode(.inline)，macOS 空操作。
+    public func inlineTitleBar() -> some View {
+        #if canImport(UIKit)
+        self.navigationBarTitleDisplayMode(.inline)
         #else
         self
         #endif

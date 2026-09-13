@@ -9,7 +9,8 @@ import SwiftUI
 public struct HuangliOverviewWidget: Widget {
     public let kind: String = "HuangliOverview"
     private let appGroupID: String?
-    public init(appGroupID: String? = nil) { self.appGroupID = appGroupID }
+    public init() { self.appGroupID = nil }
+    public init(appGroupID: String?) { self.appGroupID = appGroupID }
 
     public var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
@@ -27,7 +28,8 @@ public struct HuangliOverviewWidget: Widget {
 public struct LunarCardWidget: Widget {
     public let kind: String = "LunarCard"
     private let appGroupID: String?
-    public init(appGroupID: String? = nil) { self.appGroupID = appGroupID }
+    public init() { self.appGroupID = nil }
+    public init(appGroupID: String?) { self.appGroupID = appGroupID }
 
     public var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
@@ -45,7 +47,8 @@ public struct LunarCardWidget: Widget {
 public struct TodoProgressWidget: Widget {
     public let kind: String = "TodoProgress"
     private let appGroupID: String?
-    public init(appGroupID: String? = nil) { self.appGroupID = appGroupID }
+    public init() { self.appGroupID = nil }
+    public init(appGroupID: String?) { self.appGroupID = appGroupID }
 
     public var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
@@ -75,7 +78,8 @@ public struct TodoProgressWidget: Widget {
 @available(iOSApplicationExtension 17.0, *)
 public struct LunisolarWidgetsBundle: WidgetBundle {
     private let appGroupID: String?
-    public init(appGroupID: String? = nil) { self.appGroupID = appGroupID }
+    public init() { self.appGroupID = nil }
+    public init(appGroupID: String?) { self.appGroupID = appGroupID }
 
     @WidgetBundleBuilder
     public var body: some Widget {

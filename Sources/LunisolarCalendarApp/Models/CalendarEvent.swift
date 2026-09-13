@@ -107,10 +107,6 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         case repeatRule, priority, isCompleted, reminderOffsetMinutes, isNotified, createdAt, updatedAt
     }
 
-    /// 缓存 startDate 的农历转换结果（用引用类型绕过 struct 不可变性，同一事件永远不变）
-    private final class Box<T: Sendable>: @unchecked Sendable { var value: T?; init() {} }
-    private var _lunarBox: Box<LunarDate> = Box()
-
     // MARK: - W2/W3 修复：非隔离 Codable 实现
     // Swift 6 strict mode 下，对 Sendable struct 的 synthesized Encodable/Decodable
     // 有时会被推断为 @MainActor（特别是类型内含有 reference-type cached field 时），
@@ -155,14 +151,11 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         isNotified     = try c.decode(Bool.self, forKey: .isNotified)
         createdAt      = try c.decode(Date.self, forKey: .createdAt)
         updatedAt      = try c.decode(Date.self, forKey: .updatedAt)
-        // 缓存字段重建
-        _lunarBox      = Box()
     }
-    private var startLunarCached: LunarDate? {
-        if let cached = _lunarBox.value { return cached }
-        let lunar = ChineseCalendar.lunarDateSafe(from: startDate)
-        _lunarBox.value = lunar
-        return lunar
+
+    /// 起始日期的农历（按需计算；EventStore 层可注入预计算缓存避免重复转换）
+    var startLunar: LunarDate? {
+        ChineseCalendar.lunarDateSafe(from: startDate)
     }
 
     nonisolated public init(
@@ -203,7 +196,12 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         self.updatedAt = Date()
     }
 
-    public func occurs(on date: Date) -> Bool {
+    /// 判断事件是否在指定日期发生
+    /// - Parameters:
+    ///   - date: 目标公历日
+    ///   - cachedStartLunar: 调用方（EventStore）预计算并缓存的起始日农历，
+    ///     传入后避免重复转换；nil 时内部自行计算（测试/独立调用场景）
+    public func occurs(on date: Date, cachedStartLunar: LunarDate? = nil) -> Bool {
         // 使用公历 Calendar：用户系统日历设置可能是伊斯兰/佛历/和历，
         // 但重复规则的"每月5号/每周三/每年8月15日"语义一律按公历解释（BUG #30 修复）。
         let cal = Calendar(identifier: .gregorian)
@@ -232,9 +230,9 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
             return target >= start && tm.month == sm.month && tm.day == sm.day
         case .lunarAnnually:
             // 农历每年重复：匹配农历月日（父母生日、传统节日等）
-            // startLunar 使用缓存（同一事件永远不变）
+            // 优先使用调用方注入的缓存农历，避免重复转换
             let targetLunar = ChineseCalendar.lunarDateSafe(from: date)
-            guard let tl = targetLunar, let sl = startLunarCached else { return false }
+            guard let tl = targetLunar, let sl = cachedStartLunar ?? startLunar else { return false }
             guard target >= start else { return false }
             // P2 修复：农历"三十"生日 fallback。
             //   农历月份有大小月之分（29 或 30 天）。若用户出生在"腊月三十"，
@@ -298,7 +296,7 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
             let d = max(1, c.day ?? 1)
             return "公历 \(m)月\(d)日 · 每年"
         case .lunarAnnually:
-            if let lunar = startLunarCached {
+            if let lunar = startLunar {
                 return "农历\(lunar.monthName)\(lunar.dayName) · 每年"
             }
             return "农历生日 · 每年"

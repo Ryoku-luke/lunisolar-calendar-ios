@@ -343,8 +343,7 @@ public final class EventSyncCoordinator: @unchecked Sendable {
         // 3. 墓碑 TTL 清理（P3 修复）：默认 30 天 = 30 * 86400 * 1000 ms
         //    失败不影响整体同步结果，只把错误追加（用户可在日志里看到）
         do {
-            let ttlMs: Int64 = 30 * 86400 * 1000
-            let cutoffMs = Int64(Date().timeIntervalSince1970 * 1000) - ttlMs
+            let cutoffMs = Int64(Date().timeIntervalSince1970 * 1000) - Self.tombstoneTTLMs
             _ = try await provider.purgeExpiredTombstones(olderThanMs: cutoffMs)
         } catch {
             allErrors.append(mapError(error))

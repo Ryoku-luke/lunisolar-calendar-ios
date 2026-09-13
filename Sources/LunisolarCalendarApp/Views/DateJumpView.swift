@@ -34,7 +34,7 @@ struct DateJumpView: View {
             Form {
                 Section("选择日期") {
                     Picker("年", selection: $year) {
-                        ForEach(LunarDate.minYear...LunarDate.maxYear, id: \.self) {
+                        ForEach(ChineseCalendar.minYear...ChineseCalendar.maxYear, id: \.self) {
                             Text("\($0) 年").tag($0)
                         }
                     }
@@ -44,16 +44,16 @@ struct DateJumpView: View {
                     Picker("日", selection: $day) {
                         ForEach(1...maxDaysInMonth, id: \.self) { Text("\($0) 日").tag($0) }
                     }
-                    .onChange(of: month, initial: false) { _ in
+                    .onChange(of: month, initial: false) { _, _ in
                         if day > maxDaysInMonth { day = maxDaysInMonth }
                     }
-                    .onChange(of: year, initial: false) { _ in
+                    .onChange(of: year, initial: false) { _, _ in
                         if day > maxDaysInMonth { day = maxDaysInMonth }
                     }
                 }
 
                 Section {
-                    Label("支持范围：\(LunarDate.minYear) 年 1 月 1 日 — \(LunarDate.maxYear) 年 12 月 31 日",
+                    Label("支持范围：\(ChineseCalendar.minYear) 年 1 月 1 日 — \(ChineseCalendar.maxYear) 年 12 月 31 日",
                           systemImage: "calendar.badge.clock")
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
@@ -68,7 +68,7 @@ struct DateJumpView: View {
                 }
             }
             .navigationTitle("跳转到日期")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitleBar()
             .alert("暂不支持该年份",
                    isPresented: $showOutOfRangeAlert) {
                 Button("回到今天", role: .cancel) {
@@ -79,14 +79,14 @@ struct DateJumpView: View {
                     // 用户自行重新调整日期 picker
                 }
             } message: {
-                Text("清和日历支持的日期范围为 \(LunarDate.minYear) 年 1 月至 \(LunarDate.maxYear) 年 12 月。\n请在此范围内选择，或点击上方「回到今天」直接返回。")
+                Text("清和日历支持的日期范围为 \(ChineseCalendar.minYear) 年 1 月至 \(ChineseCalendar.maxYear) 年 12 月。\n请在此范围内选择，或点击上方「回到今天」直接返回。")
             }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .platformTopBarTrailing) {
                     Button("跳转") { jumpToDate() }
                         .font(.body.weight(.semibold))
                 }
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .platformTopBarLeading) {
                     Button("取消") { dismiss() }
                 }
             }
@@ -111,7 +111,7 @@ struct DateJumpView: View {
             return
         }
         // 范围校验：不支持的日期 → 留在弹窗提示，不 apply 假数据
-        guard LunarDate.isSupported(date) else {
+        guard ChineseCalendar.isSupported(date) else {
             showOutOfRangeAlert = true
             return
         }
@@ -122,7 +122,7 @@ struct DateJumpView: View {
     private func jumpTo(_ date: Date) {
         // 快捷跳转同样做范围校验（1900-01 点 上个月→1899，2100 点 一年后→2101
         //   都会越过 LunarDate 的数据边界）。
-        guard LunarDate.isSupported(date) else {
+        guard ChineseCalendar.isSupported(date) else {
             showOutOfRangeAlert = true
             return
         }

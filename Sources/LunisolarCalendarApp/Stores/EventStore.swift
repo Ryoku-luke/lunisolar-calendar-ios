@@ -1,4 +1,5 @@
 import Foundation
+import LunarCore
 // EventStore 里多处 AppLogger.app.error/warning/notice 使用 os.Logger 字符串插值
 // （appendLiteral / appendInterpolation / OSLogInterpolation），这些由 module `os` 提供。
 // 仅 import Foundation 在 iOS SDK 下不自动 transitively 引入 os，Xcode 会级联报 N*6 条
@@ -27,9 +28,29 @@ public final class EventStore {
 
     private(set) var events: [CalendarEvent] = []
 
+    /// 数据版本号：任何会使查询缓存失效的变更（增/删/改/导入/合并/读盘）都 +1。
+    /// 视图层用它判断"月网格派生数据"是否需要重建——横滑手势每帧触发 body 重算时，
+    /// revision 不变即可直接复用 42 格的农历/黄历/节日/事件统计预计算结果。
+    /// 读取它会建立 @Observable 依赖，事件变更时视图自动失效重建。
+    private(set) var revision: Int = 0
+
     /// 查询缓存：按日期首日缓存 occurs(on:) 结果，避免月视图 42 格 × N 事件全量遍历
     private var eventCache: [Date: [CalendarEvent]] = [:]
     private var statsCache: [Date: (count: Int, priority: Priority?)] = [:]
+
+    /// 事件起始日农历缓存（key = event.id）。
+    /// CalendarEvent.startDate 不可变，农历转换结果只依赖 startDate，
+    /// 因此缓存放在 @MainActor 的 EventStore 中，避免在 struct 内用 @unchecked Sendable
+    /// 引用类型做缓存（破坏值语义 + 线程安全隐患）。
+    private var lunarCache: [UUID: LunarDate] = [:]
+
+    /// 获取事件的起始日农历（带缓存）
+    private func lunar(for event: CalendarEvent) -> LunarDate? {
+        if let cached = lunarCache[event.id] { return cached }
+        guard let lunar = ChineseCalendar.lunarDateSafe(from: event.startDate) else { return nil }
+        lunarCache[event.id] = lunar
+        return lunar
+    }
 
     // MARK: P6 二级索引（O(1) by-id 定位）
     // events 数组永远按 startDate 升序；此字典维护 id → 下标，
@@ -223,8 +244,10 @@ public final class EventStore {
 
     /// CRUD 后调用，清空查询缓存（下次查询时按需重建）
     private func invalidateCache() {
+        revision &+= 1
         eventCache.removeAll(keepingCapacity: true)
         statsCache.removeAll(keepingCapacity: true)
+        lunarCache.removeAll(keepingCapacity: true)
     }
 
     // MARK: - CRUD
@@ -496,7 +519,7 @@ public final class EventStore {
         let key = cal.startOfDay(for: date)
         if let cached = eventCache[key] { return cached }
         let result = events
-            .filter { $0.occurs(on: date) }
+            .filter { $0.occurs(on: date, cachedStartLunar: lunar(for: $0)) }
             .sorted { lhs, rhs in
                 if lhs.isAllDay != rhs.isAllDay { return lhs.isAllDay }
                 if lhs.startDate != rhs.startDate { return lhs.startDate < rhs.startDate }
@@ -518,7 +541,7 @@ public final class EventStore {
         var count = 0
         var best: Priority? = nil
         for ev in events {
-            if ev.occurs(on: date) {
+            if ev.occurs(on: date, cachedStartLunar: lunar(for: ev)) {
                 count += 1
                 switch (best, ev.priority) {
                 case (nil, let p):          best = p
@@ -817,7 +840,7 @@ public final class EventStore {
     private func writeWidgetSnapshotIfNeeded() {
         let cal = Calendar(identifier: .gregorian)
         let today = cal.startOfDay(for: Date())
-        let todays = events.filter { $0.occurs(on: today) }
+        let todays = events.filter { $0.occurs(on: today, cachedStartLunar: lunar(for: $0)) }
         let completed = todays.filter(\.isCompleted).count
         let top = todays
             .sorted { (l, r) -> Bool in

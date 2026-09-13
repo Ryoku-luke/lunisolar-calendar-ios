@@ -33,8 +33,6 @@ public struct ImportMergeResult: Equatable, Sendable {
         self.invalid = invalid
     }
 
-    /// 总处理量
-    public var totalProcessed: Int { added + updated + skipped + invalid }
     /// 发生冲突（updated + skipped），用于 UI 判断"是否需要冲突提示"
     public var hasConflicts: Bool { (updated + skipped) > 0 }
 }
@@ -108,7 +106,10 @@ public enum DataPortability {
         dfmt.timeZone = TimeZone(identifier: "UTC")
         let dfmtAllDay = DateFormatter()
         dfmtAllDay.dateFormat = "yyyyMMdd"
-        dfmtAllDay.timeZone = TimeZone(identifier: "UTC")
+        // RFC 5545 VALUE=DATE 是「无时区日期」（floating），表示本地历法上的某一整天。
+        // 本 App 全天事件 startDate 存为本地 00:00，必须按当前时区取 Y/M/D；
+        // 若用 UTC，UTC+8 用户的 9/6 00:00 会被格式化成 9/5，全天事件整体提前一天。
+        dfmtAllDay.timeZone = .current
 
         for event in events {
             lines.append("BEGIN:VEVENT")
@@ -227,7 +228,9 @@ public enum DataPortability {
         //   不再需要预先创建 dfmtUTC/dfmtLocal。
         let dfmtAllDay = DateFormatter()
         dfmtAllDay.dateFormat = "yyyyMMdd"
-        dfmtAllDay.timeZone = TimeZone(identifier: "UTC")
+        // VALUE=DATE 无时区：按当前时区还原为本地 00:00，与全天事件的本地存储约定一致，
+        // 也保证跨时区导入后「日历日」不变（9/6 始终落在 9/6，不会因 UTC 换算漂到 9/5）。
+        dfmtAllDay.timeZone = .current
 
         while idx < lines.count {
             let line = lines[idx]

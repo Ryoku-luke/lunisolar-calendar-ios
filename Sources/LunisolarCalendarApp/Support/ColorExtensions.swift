@@ -134,31 +134,6 @@ extension ShapeStyle where Self == Material {
     static var navBar: Material { .regularMaterial }
     /// iOS 26 卡片/面板背景：iOS 18 更清晰的半透明
     static var cardSurface: Material { .thinMaterial }
-    /// iOS 26 底层面板（如 Sheet 背景）：极度轻薄
-    static var sheetSurface: Material { .ultraThinMaterial }
-    /// iOS 26 浮动按钮 / FAB：毛玻璃感
-    static var fabSurface: Material { .thickMaterial }
-}
-
-// MARK: - 屏幕尺寸辅助 (跨平台)
-// A1-4：UIScreen.main 在 iOS 16 / Xcode 16+ 正式 deprecated（多 Scene 场景下不可靠）。
-// 正确做法：从当前 View 的 `GeometryReader { proxy in proxy.size.width }` /
-// `@Environment(\.displayScale)` 获取 scene 绑定的尺寸。
-// 本项目并未真正引用 ScreenHelper.width（grep 全仓 0 命中），所以把唯一会触发
-// "'UIScreen.main' is deprecated" 警告的 getter 改为：
-//   1) fatalError 调用点时提示使用者改用 GeometryReader；
-//   2) 只提供一个 compile-time 常量 default（390，iPhone 14 参考宽）作为兜底。
-// 若将来真需要恢复，建议改成 View extension：
-//   `func screenWidth(_ bind: Binding<CGFloat>) -> some View { ... .background(GeometryReader...) }`
-
-enum ScreenHelper {
-    #if canImport(UIKit)
-    /// 兜底参考宽度（iPhone 14 逻辑尺寸），仅用于无法访问 GeometryReader 的静态上下文。
-    /// 真正运行时必须通过 GeometryReader / windowScene.screen 获取当前 Scene 宽！
-    static var fallbackWidth: CGFloat { 390 }
-    #else
-    static var fallbackWidth: CGFloat { 390 }
-    #endif
 }
 
 // MARK: - View extension (iOS 26 样式便捷 modifier)
@@ -184,19 +159,6 @@ extension View {
                     radius: shadowOpacity > 0 ? 10 : 0,
                     x: 0, y: 4)
     }
-
-    /// iOS 26 Segmented Picker 样式：外层胶囊 + capsule material 背景
-    func ios26SegmentedBackground() -> some View {
-        self
-            .background(
-                Capsule()
-                    .fill(Color.secondarySystemGroupedBackground)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(Color.separator.opacity(0.4), lineWidth: 0.5)
-            )
-    }
 }
 
 // MARK: - 液态玻璃 (Liquid Glass) — iOS 26+ 原生 glassEffect 封装
@@ -219,21 +181,6 @@ extension View {
             shadowOpacity: shadowOpacity,
             interactive: interactive
         )
-    }
-
-    /// 液态玻璃胶囊：用于按钮、徽标等小尺寸元素
-    /// iOS 26+ 自动获得 glassEffect 折射 + interactive 弹性动画
-    func liquidGlassCapsule(
-        tint: Color? = nil,
-        interactive: Bool = false
-    ) -> some View {
-        glassCapsuleFallback(tint: tint, interactive: interactive)
-    }
-
-    /// 将内容包裹在 GlassEffectContainer 中（iOS 26+）
-    /// 确保容器内多个 glass 元素之间的折射一致性
-    func liquidGlassContainer<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        glassContainerFallback(content)
     }
 }
 
@@ -282,7 +229,6 @@ extension View {
                 .shadow(color: .black.opacity(shadowOpacity),
                         radius: shadowOpacity > 0 ? 8 : 0,
                         x: 0, y: 3)
-                .scaleEffect(interactive ? 1.0 : 1.0) // 占位，未来 interactive 用 animation
         } else {
             self
                 .ios26Card(
@@ -303,71 +249,6 @@ extension View {
                 shadowOpacity: shadowOpacity
             )
         #endif
-    }
-
-    // 胶囊
-    @ViewBuilder
-    fileprivate func glassCapsuleFallback(
-        tint: Color?,
-        interactive: Bool
-    ) -> some View {
-        #if canImport(UIKit)
-        if #available(iOS 26.0, *) {
-            // iOS 26 模拟液态玻璃胶囊：thickMaterial + 顶部折射高光 + tint 混色
-            self
-                .background(
-                    Capsule()
-                        .fill(.thickMaterial)
-                        .overlay(
-                            Capsule()
-                                .fill((tint ?? .clear).opacity(interactive ? 0.20 : 0.12))
-                        )
-                        .overlay(
-                            Capsule()
-                                .stroke(
-                                    LinearGradient(
-                                        colors: [
-                                            .white.opacity(interactive ? 0.40 : 0.22),
-                                            .white.opacity(0.03)
-                                        ],
-                                        startPoint: .top, endPoint: .bottom
-                                    ),
-                                    lineWidth: 0.6
-                                )
-                        )
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(Color.separator.opacity(0.3), lineWidth: 0.5)
-                )
-        } else {
-            self
-                .background(
-                    Capsule()
-                        .fill(tint?.opacity(0.12) ?? Color.quaternarySystemFill)
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(Color.separator.opacity(0.3), lineWidth: 0.5)
-                )
-        }
-        #else
-        self
-            .background(
-                Capsule()
-                    .fill(tint?.opacity(0.12) ?? Color.gray.opacity(0.15))
-            )
-        #endif
-    }
-
-    // 容器
-    @ViewBuilder
-    fileprivate func glassContainerFallback<Content: View>(
-        _ content: () -> Content
-    ) -> some View {
-        // 注：GlassEffectContainer 在当前 Xcode SDK 同样不可用；用 VStack + content shape
-        // 模拟"分组折射容器"，视觉一致、API 稳定。
-        VStack(alignment: .leading, spacing: 8, content: content)
     }
 }
 

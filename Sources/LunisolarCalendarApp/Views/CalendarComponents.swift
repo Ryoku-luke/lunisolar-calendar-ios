@@ -138,4 +138,27 @@ struct DayCellView: View {
         return Color.tertiaryLabel
     }
 }
+
+// Equatable + 调用处 .equatable()：横滑期间父视图每帧重新提交 42 个 cell，
+// 但网格派生数据已缓存、各入参逐帧相同，SwiftUI 可据此整体跳过 cell body 求值。
+// horizontalSizeClass 来自 environment，不参与比较——environment 变化时
+// SwiftUI 会绕过 equatable 短路直接刷新（iPad 分屏旋转不受影响）。
+extension DayCellView: Equatable {
+    // 参与比较的全是不可变 Sendable 值，nonisolated 满足 Swift 6 协议见证隔离要求；
+    // 比较本身也必须是同步的（.equatable() 在视图提交时同步调用）。
+    nonisolated static func == (lhs: DayCellView, rhs: DayCellView) -> Bool {
+        lhs.date == rhs.date
+            && lhs.isCurrentMonth == rhs.isCurrentMonth
+            && lhs.isSelected == rhs.isSelected
+            && lhs.isToday == rhs.isToday
+            && lhs.lunar == rhs.lunar
+            && lhs.huangli == rhs.huangli
+            && lhs.hasEvents == rhs.hasEvents
+            && lhs.eventPriority == rhs.eventPriority
+            && lhs.eventCount == rhs.eventCount
+            && lhs.festivalTint == rhs.festivalTint
+            && lhs.cellAccent == rhs.cellAccent
+            && lhs.holidayType == rhs.holidayType
+    }
+}
 #endif

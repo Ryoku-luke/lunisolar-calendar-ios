@@ -13,19 +13,26 @@ extension Bundle {
     ///
     /// 查找策略：
     ///   1. Bundle.main（App / Widget 运行时上下文，资源在主 bundle）
-    ///   2. Apple 平台：遍历 Bundle.allBundles（SPM 测试时资源在 test bundle）
-    ///   3. Linux：Bundle.allBundles 会 SIGSEGV，改从可执行文件目录扫描 *.resources 目录
+    ///   2. Apple 平台：遍历 Bundle.allBundles / allFrameworks（SPM 测试时资源可能在 test bundle）
+    ///   3. Apple 平台：扫描 main 与所有已加载 bundle 所在目录及其父级下的 *.bundle。
+    ///      `swift test` 时 SPM 把测试资源产物（如 LunisolarCalendar_LunisolarCalendarTests.bundle）
+    ///      放在 LunisolarCalendarPackageTests.xctest 的同级（debug/）目录，该 bundle 不会被
+    ///      自动注册进 allBundles，必须显式按路径加载。
+    ///   4. Linux：Bundle.allBundles 会 SIGSEGV，改从可执行文件目录扫描 *.resources 目录
     static var resources: Bundle {
-        if Bundle.main.url(forResource: "huangli_db", withExtension: "json") != nil {
-            return .main
+        if let hit = bundleContainingResource(in: [.main]) {
+            return hit
         }
 
         #if canImport(Darwin)
         // Apple 平台：Bundle.allBundles 安全可用
-        for bundle in Bundle.allBundles {
-            if bundle.url(forResource: "huangli_db", withExtension: "json") != nil {
-                return bundle
-            }
+        if let hit = bundleContainingResource(in: Bundle.allBundles + Bundle.allFrameworks) {
+            return hit
+        }
+
+        // swift test：SPM 资源 bundle 与 .xctest 同目录，按路径显式发现并加载。
+        if let spmBundle = discoverSPMResourceBundle() {
+            return spmBundle
         }
         #else
         // Linux：Bundle.allBundles 在 swift-corelibs-foundation 上会触发 SIGSEGV，
@@ -49,4 +56,51 @@ extension Bundle {
         // 兜底：找不到也返回 main，调用方自行处理 nil
         return .main
     }
+
+    /// 在给定 bundle 集合中查找直接包含 huangli_db.json 的那个。
+    private static func bundleContainingResource(in bundles: [Bundle]) -> Bundle? {
+        for bundle in bundles
+        where bundle.url(forResource: "huangli_db", withExtension: "json") != nil {
+            return bundle
+        }
+        return nil
+    }
+
+    #if canImport(Darwin)
+    /// 从 main 与所有已加载 bundle 的所在目录开始，向上回溯若干层，
+    /// 寻找直接包含 huangli_db.json 的 *.bundle（SPM 测试资源产物）。
+    private static func discoverSPMResourceBundle() -> Bundle? {
+        var searchRoots: [URL] = [Bundle.main.bundleURL]
+        for b in Bundle.allBundles + Bundle.allFrameworks {
+            searchRoots.append(b.bundleURL)
+        }
+
+        var examined = Set<URL>()
+        for root in searchRoots {
+            var dir = root
+            // 最多向上回溯 5 层：覆盖 .xctest/Contents/MacOS → debug/ 等结构
+            for _ in 0..<5 {
+                if examined.contains(dir) { break }
+                examined.insert(dir)
+
+                if let contents = try? FileManager.default.contentsOfDirectory(
+                    at: dir,
+                    includingPropertiesForKeys: [.isDirectoryKey]
+                ) {
+                    for url in contents where url.pathExtension == "bundle" {
+                        if let candidate = Bundle(url: url),
+                           candidate.url(forResource: "huangli_db", withExtension: "json") != nil {
+                            return candidate
+                        }
+                    }
+                }
+
+                let parent = dir.deletingLastPathComponent()
+                if parent == dir { break }
+                dir = parent
+            }
+        }
+        return nil
+    }
+    #endif
 }
