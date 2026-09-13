@@ -7,14 +7,6 @@ import UIKit
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
 #endif
-// N6 修复：本文件 ToastBannerView 没有 AppLogger，但 Xcode 的"同模块共享"诊断
-// 会把 liquidGlassCard 所在的 ColorExtensions 一起扫；同时我们在
-// CalendarMonthView/DayDetailView 里统一使用 liquidGlassCard 的签名不含 tint。
-// 为避免 SettingsViewComponents 独立编译时也在 UIKit 路径下抛
-// "defining module 'os'" 级联，这里同样显式 import。
-#if canImport(os)
-import os
-#endif
 #endif
 
 // MARK: - 设置页辅助类型与子视图（从 SettingsView.swift 拆分，降低单文件体积与编译器负担）
@@ -95,64 +87,6 @@ struct ToastBannerView: View {
         case .success: return .systemGreen
         case .warning: return .systemOrange
         case .error:   return .systemRed
-        }
-    }
-}
-
-// MARK: - 导入冲突策略选择页
-
-struct ConflictPolicyPicker: View {
-    @Environment(EventStore.self) private var store
-    @Binding var policy: ImportConflictPolicy
-
-    var body: some View {
-        Form {
-            Section {
-                ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
-                    Button {
-                        policy = p
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(p.title).foregroundStyle(Color.primary)
-                                Text(p.subtitle)
-                                    .font(.footnote)
-                                    .foregroundStyle(Color.secondaryLabel)
-                            }
-                            Spacer()
-                            if policy == p {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Color.festiveRed)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                Text("冲突处理策略")
-            } footer: {
-                Text("当导入的事件与本地事件 id 相同时如何处理。若选「保留最新」，会按 updatedAt 时间戳比较。")
-            }
-
-            Section {
-                info(label: "本地事件总数", value: "\(store.events.count)")
-            } header: {
-                Text("预览")
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("导入冲突策略")
-        #if canImport(UIKit)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-    }
-
-    private func info(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(value).foregroundStyle(Color.secondaryLabel)
         }
     }
 }

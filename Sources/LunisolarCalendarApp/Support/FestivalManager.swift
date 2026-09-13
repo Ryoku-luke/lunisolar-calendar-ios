@@ -68,40 +68,58 @@ public enum FestivalManager: Sendable {
         Festival(name: "除夕",   emoji: "🎆", kind: .lunar, month: 12, day: 30, accentHex: "#C41A1A"),
     ]
 
+    // MARK: - 查询索引（性能）
+    //
+    // 月历每屏 42 格、横滑时 body 可能高频重算，若每次线性遍历 13+10 个节日定义，
+    // 每屏要做上千次数组比较。这里按「月*100+日」建静态字典，单次查询 O(1)；
+    // 除夕依赖"当年最后一天"动态判断，单独存放。
+    // static let 由运行时 dispatch_once 惰性初始化，线程安全且只构建一次。
+
+    private static let gregorian = Calendar(identifier: .gregorian)
+    /// 公历节日索引：key = month*100+day（同日可能多个，保留数组与原顺序）
+    private static let solarByMD: [Int: [Festival]] = {
+        var dict: [Int: [Festival]] = [:]
+        for f in solarFestivals {
+            dict[f.month * 100 + f.day, default: []].append(f)
+        }
+        return dict
+    }()
+    /// 农历节日索引（除夕除外，它需要按年最后一天动态判定）
+    private static let lunarByMD: [Int: [Festival]] = {
+        var dict: [Int: [Festival]] = [:]
+        for f in lunarFestivals where f.name != "除夕" {
+            dict[f.month * 100 + f.day, default: []].append(f)
+        }
+        return dict
+    }()
+    private static let chuxi: Festival? = lunarFestivals.first { $0.name == "除夕" }
+
     // MARK: - 查询接口
 
     /// 返回给定公历日期上重合的所有节日（同日可能多个）
     public static func festivals(on date: Date) -> [Festival] {
-        let cal = Calendar(identifier: .gregorian)
-        let norm = cal.startOfDay(for: date)
+        let norm = gregorian.startOfDay(for: date)
         let lunar = ChineseCalendar.lunarDateSafe(from: norm)
         return festivals(on: norm, lunar: lunar)
     }
 
     /// 接受预计算的 LunarDate，避免调用方重复进行农历转换（性能优化）
     public static func festivals(on date: Date, lunar: LunarDate?) -> [Festival] {
-        var result: [Festival] = []
+        let norm = gregorian.startOfDay(for: date)
+        let ymd = gregorian.dateComponents([.year, .month, .day], from: norm)
+        guard let m = ymd.month, let d = ymd.day else { return [] }
 
-        let cal = Calendar(identifier: .gregorian)
-        let norm = cal.startOfDay(for: date)
-        let ymd = cal.dateComponents([.year, .month, .day], from: norm)
-        guard let m = ymd.month, let d = ymd.day else { return result }
+        // 1. 公历节日：O(1) 字典查 month+day
+        var result: [Festival] = solarByMD[m * 100 + d] ?? []
 
-        // 1. 公历节日（精确匹配 month+day）
-        for f in solarFestivals where f.month == m && f.day == d {
-            result.append(f)
-        }
-
-        // 2. 农历节日（通过农历月日匹配，注意除夕特殊：若除夕当天非30，则取对应年最后一天）
-        if let lunar = lunar {
-            for f in lunarFestivals {
-                if f.name == "除夕" {
-                    if isLunarLastDayOfYear(lunar: lunar, in: norm) {
-                        result.append(f)
-                    }
-                } else if lunar.month == f.month && lunar.day == f.day && !lunar.isLeapMonth {
-                    result.append(f)
-                }
+        // 2. 农历节日：月日字典直查；除夕按"当年最后一天"特殊判断。
+        //    普通农历节日闰月不过节；除夕判定本身基于"年内最后一天"，与旧实现一致不查闰月标记。
+        if let lunar {
+            if !lunar.isLeapMonth, let matches = lunarByMD[lunar.month * 100 + lunar.day] {
+                result.append(contentsOf: matches)
+            }
+            if let chuxi, isLunarLastDayOfYear(lunar: lunar, in: norm) {
+                result.append(chuxi)
             }
         }
 

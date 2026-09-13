@@ -32,9 +32,9 @@ struct CountdownView: View {
             }
         }
         .navigationTitle("倒数日")
-        .navigationBarTitleDisplayMode(.large)
+        .largeTitleBar()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .platformTopBarTrailing) {
                 Button { editingEvent = nil; showingEditor = true } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title3)
@@ -111,8 +111,8 @@ private struct CountdownEditor: View {
     // 走到 Gregorian fallback 返回假农历语义；倒计时也给一致边界避免选到极端日期）。
     private let allowedDateRange: ClosedRange<Date> = {
         let cal = Calendar(identifier: .gregorian)
-        var minComps = DateComponents(); minComps.year = LunarDate.minYear; minComps.month = 1; minComps.day = 1
-        var maxComps = DateComponents(); maxComps.year = LunarDate.maxYear; maxComps.month = 12; maxComps.day = 31
+        var minComps = DateComponents(); minComps.year = ChineseCalendar.minYear; minComps.month = 1; minComps.day = 1
+        var maxComps = DateComponents(); maxComps.year = ChineseCalendar.maxYear; maxComps.month = 12; maxComps.day = 31
         let min = cal.date(from: minComps)!
         let max = cal.date(from: maxComps)!
         return min...max
@@ -140,7 +140,7 @@ private struct CountdownEditor: View {
                     DatePicker("日期", selection: $date, in: allowedDateRange, displayedComponents: .date)
                 }
                 Section {
-                    Label("支持范围：\(LunarDate.minYear) 年 1 月 — \(LunarDate.maxYear) 年 12 月",
+                    Label("支持范围：\(ChineseCalendar.minYear) 年 1 月 — \(ChineseCalendar.maxYear) 年 12 月",
                           systemImage: "calendar.badge.clock")
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
@@ -165,19 +165,19 @@ private struct CountdownEditor: View {
                 }
             }
             .navigationTitle(editing == nil ? "新建倒数日" : "编辑倒数日")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitleBar()
             .alert("日期超出支持范围", isPresented: $showOutOfRangeAlert) {
                 Button("好", role: .cancel) { }
             } message: {
-                Text("请将日期调整到 \(LunarDate.minYear) 年 1 月 1 日 — \(LunarDate.maxYear) 年 12 月 31 日之间。")
+                Text("请将日期调整到 \(ChineseCalendar.minYear) 年 1 月 1 日 — \(ChineseCalendar.maxYear) 年 12 月 31 日之间。")
             }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .platformTopBarTrailing) {
                     Button("保存") { save() }
                         .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
                         .font(.body.weight(.semibold))
                 }
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .platformTopBarLeading) {
                     Button("取消") { dismiss() }
                 }
             }

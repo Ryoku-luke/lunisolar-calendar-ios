@@ -11,9 +11,6 @@ private let appGroupID = "group.com.lunisolar.calendar"
 
 @main
 struct HostApp: App {
-    @State private var store = EventStore.shared
-    @State private var countdownStore = CountdownStore.shared
-
     init() {
         // 注入 App Group，让 EventStore 把 Widget 快照写到共享容器。
         EventStore.shared.widgetAppGroupID = appGroupID
@@ -21,9 +18,9 @@ struct HostApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AdaptiveRootView()
-                .environment(store)
-                .environment(countdownStore)
+            // 生命周期接线（iCloud 启动重建/后台落盘/通知续排/外观偏好）
+            // 全部封装在框架内 AppRootView，宿主不重复实现。
+            AppRootView()
         }
     }
 }

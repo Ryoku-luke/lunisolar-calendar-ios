@@ -17,7 +17,6 @@ public struct LunisolarWidgetEntry: TimelineEntry {
     public let completedCount: Int        // 今日完成数
     public let hasFestival: Bool          // 是否有节日（UI 换色）
     public let topTitles: [WidgetTodoTitle] // 今日前 N 条待办（Medium/Large 列表用）
-    public let snapshotUpdatedAt: Date?   // 共享快照生成时间（供调试文案）
 
     public init(
         date: Date,
@@ -28,8 +27,7 @@ public struct LunisolarWidgetEntry: TimelineEntry {
         todaysEventsCount: Int,
         completedCount: Int,
         hasFestival: Bool,
-        topTitles: [WidgetTodoTitle] = [],
-        snapshotUpdatedAt: Date? = nil
+        topTitles: [WidgetTodoTitle] = []
     ) {
         self.date = date
         self.huangli = huangli
@@ -40,7 +38,6 @@ public struct LunisolarWidgetEntry: TimelineEntry {
         self.completedCount = completedCount
         self.hasFestival = hasFestival
         self.topTitles = topTitles
-        self.snapshotUpdatedAt = snapshotUpdatedAt
     }
 
     /// 进度百分比 0...1 (用于待办小组件)
@@ -140,8 +137,7 @@ public struct LunisolarWidgetTimelineProvider: TimelineProvider {
                 todaysEventsCount: snap.todaysEventsCount,
                 completedCount: snap.todaysCompletedCount,
                 hasFestival: !fes.isEmpty,
-                topTitles: snap.topTitles,
-                snapshotUpdatedAt: snap.updatedAt
+                topTitles: snap.topTitles
             )
         }
         return LunisolarWidgetEntry(
@@ -155,13 +151,5 @@ public struct LunisolarWidgetTimelineProvider: TimelineProvider {
             hasFestival: !fes.isEmpty
         )
     }
-}
-
-// MARK: - Widget Kind
-
-public enum LunisolarWidgetKind: String, CaseIterable, Sendable {
-    case huangliOverview      // ① 今日黄历概览（宜忌+冲煞）
-    case lunarCard            // ② 农历日期卡片（月日+节日）
-    case todoProgress         // ③ 今日待办进度
 }
 #endif

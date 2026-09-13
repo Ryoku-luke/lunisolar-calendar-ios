@@ -7,6 +7,15 @@ struct DayDetailView: View {
     @Environment(EventStore.self) private var store
     @State private var showAdd: Bool = false
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    /// 是否由本视图自行包一层 NavigationStack。
+    /// iPhone push 进入 / iPad 右栏均复用外层导航上下文时传 false。
+    private let embedsInNavigationStack: Bool
+
+    init(date: Date, embedsInNavigationStack: Bool = true) {
+        self.date = date
+        self.embedsInNavigationStack = embedsInNavigationStack
+    }
+
     private var isWide: Bool { hSizeClass == .regular }
     /// 节日自适应强调色：整页 tint、按钮、强调线都跟随它
     private var accent: Color {
@@ -15,8 +24,15 @@ struct DayDetailView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        if embedsInNavigationStack {
+            NavigationStack { detailContent }
+        } else {
+            detailContent
+        }
+    }
+
+    private var detailContent: some View {
+        ScrollView {
                 VStack(spacing: AppTheme.Spacing.section) {
                     headerCard.padding(.top, AppTheme.Spacing.lg)
                     almanacCard
@@ -49,7 +65,6 @@ struct DayDetailView: View {
             .sheet(isPresented: $showAdd) {
                 EventEditView(editing: nil, defaultDate: date).environment(store)
             }
-        }
     }
 
     private var headerCard: some View {
@@ -63,7 +78,7 @@ struct DayDetailView: View {
                     Text("\(date.day)")
                         .font(AppTheme.Font.numeralXL)
                         .foregroundStyle(date.isToday ? Color.systemRed : Color.label)
-                    Text("\(date.gregorianYear) 年 \(date.gregorianMonth) 月")
+                    Text("\(date.year) 年 \(date.month) 月")
                         .font(AppTheme.Font.caption).foregroundStyle(Color.secondaryLabel)
                 }
                 .frame(width: 110).padding(.vertical, AppTheme.Spacing.lg)

@@ -24,12 +24,34 @@ public final class NotificationManager {
 
     private let gregorian = Calendar(identifier: .gregorian)
 
+    #if canImport(UserNotifications)
+    /// 返回当前进程的 UNUserNotificationCenter；无合法 App/App Extension 宿主时返回 nil。
+    ///
+    /// 背景：macOS 命令行 `swift test` 跑逻辑测试时，mainBundle 落在
+    /// `.../Xcode.app/Contents/Developer/usr/bin/`（可执行文件所在的裸目录），
+    /// 此时 `UNUserNotificationCenter.current()` 会抛
+    /// `NSInternalInconsistencyException: bundleProxyForCurrentProcess is nil` 直接终止进程，
+    /// 而 ObjC 异常无法被 Swift 的 do/catch 拦截，必须在调用前做环境判定。
+    ///
+    /// 判据：UserNotifications 框架要求进程宿主必须是 `.app` 或 `.appex`。
+    /// 注意不能只看 bundleIdentifier——命令行进程向上回溯会误命中 Xcode.app 的 Info.plist，
+    /// 得到 `com.apple.dt.Xcode`；必须直接校验 bundleURL 的扩展名。
+    private var currentCenterIfAvailable: UNUserNotificationCenter? {
+        let hostExt = Bundle.main.bundleURL.pathExtension.lowercased()
+        guard hostExt == "app" || hostExt == "appex" else {
+            AppLogger.app.notice("宿主不是 .app/.appex（\(Bundle.main.bundleURL.lastPathComponent)），跳过 UNUserNotificationCenter 访问（命令行/逻辑测试环境）")
+            return nil
+        }
+        return UNUserNotificationCenter.current()
+    }
+    #endif
+
     // MARK: - 权限
 
     /// 申请通知权限（首次添加提醒时调用）
     public func requestAuthorization() async -> Bool {
         #if canImport(UserNotifications)
-        let center = UNUserNotificationCenter.current()
+        guard let center = currentCenterIfAvailable else { return false }
         let granted = (try? await center.requestAuthorization(options: [.alert, .badge, .sound])) ?? false
         return granted
         #else
@@ -40,7 +62,8 @@ public final class NotificationManager {
     /// 异步获取授权状态（不阻塞主线程）
     public func authorizationStatusAsync() async -> NotificationAuthStatus {
         #if canImport(UserNotifications)
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        guard let center = currentCenterIfAvailable else { return .unavailable }
+        let settings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional: return .granted
         case .denied: return .denied
@@ -81,7 +104,7 @@ public final class NotificationManager {
         // 单次提醒已经触发过就跳过（防重复弹窗）
         if rule == .never && event.isNotified { return }
 
-        let center = UNUserNotificationCenter.current()
+        guard let center = currentCenterIfAvailable else { return }
         let content = buildContent(for: event)
 
         let identifiers = buildNotificationRequests(for: event, content: content)
@@ -125,14 +148,14 @@ public final class NotificationManager {
     public func cancelNotification(for event: CalendarEvent) {
         #if canImport(UserNotifications)
         let ids = notificationIdentifiers(for: event)
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+        currentCenterIfAvailable?.removePendingNotificationRequests(withIdentifiers: ids)
         #endif
     }
 
     /// 取消所有通知
     public func cancelAll() {
         #if canImport(UserNotifications)
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        currentCenterIfAvailable?.removeAllPendingNotificationRequests()
         #endif
     }
 

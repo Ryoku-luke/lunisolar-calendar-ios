@@ -28,8 +28,17 @@ public final class AlternateIconManager: ObservableObject {
     public static let shared = AlternateIconManager()
 
     public enum Icon: String, CaseIterable, Hashable {
-        case primary          = nil   // nil → 主图标 AppIcon
+        case primary          = "primary"   // 主图标 AppIcon
         case springFestival   = "SpringFestival"
+
+        /// 传给 `UIApplication.setAlternateIconName` 的值：
+        /// 主图标返回 nil（重置为默认图标），备用图标返回其 rawValue。
+        var alternateIconName: String? {
+            switch self {
+            case .primary:        return nil
+            case .springFestival: return rawValue
+            }
+        }
 
         public var uiLabel: String {
             switch self {
@@ -68,7 +77,7 @@ public final class AlternateIconManager: ObservableObject {
         syncFromSystem()
         guard current != icon else { return .success(()) }
         do {
-            try await UIApplication.shared.setAlternateIconName(icon.rawValue)
+            try await UIApplication.shared.setAlternateIconName(icon.alternateIconName)
             current = icon
             return .success(())
         } catch {

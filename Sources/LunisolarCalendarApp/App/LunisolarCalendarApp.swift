@@ -10,10 +10,15 @@ import Observation
 import os
 #endif
 
-// MARK: - App 入口
-
-@main
-struct LunisolarCalendarApp: App {
+// MARK: - App 根视图（宿主复用）
+//
+// ⚠️ 本模块不声明 @main（避免 swift test 链接时与测试 runner 的 main 冲突，
+// 真实进程入口在 LunisolarHostApp/HostApp.swift）。
+//
+// 宿主 App 必须使用本 `AppRootView` 作为 WindowGroup 根视图——
+// iCloud 协调器启动重建、防抖保存后台落盘、通知续排、外观偏好等全部生命周期
+// 接线都挂在这里；宿主只负责 @main、WindowGroup 与 App Group ID 注入。
+public struct AppRootView: View {
 
     @State private var store = EventStore.shared
     @State private var countdownStore = CountdownStore.shared
@@ -30,42 +35,42 @@ struct LunisolarCalendarApp: App {
         AppAppearance(rawValue: appearanceRaw) ?? .system
     }
 
-    var body: some Scene {
-        WindowGroup {
-            AdaptiveRootView()
-                .environment(store)
-                .environment(countdownStore)
-                .preferredColorScheme(appearance.colorScheme)
-                .tint(Color.appTint)
-                .task {
-                    // ⚠️ 启动即重排所有本地提醒：
-                    // - 重新安装后 UNUserNotificationCenter 为全新空态，没有任何 pending request
-                    // - iOS 系统升级/还原后也可能清掉原有 requests
-                    // - 导入/合并非通知调度的冷路径（iCloud pull）需要启动时补位
-                    // 放在独立的 task 里（不和 CloudKit setup 串行，避免受 entitlement 阻塞）
-                    await NotificationManager.shared.rescheduleAllReminders(in: store)
-                }
-                .task {
-                    await setupCloudSyncIfNeeded()
-                }
-                // P2 修复：App 进入后台/失活时，把 EventStore + CountdownStore 的防抖
-                //   保存立即落盘，避免 0.5s 防抖窗口内系统终止进程导致最新 CRUD 丢失。
-                // P1 修复：App 回到前台（.active）时重排所有提醒——
-                //   农历每年提醒用 repeats:false 的 timeInterval trigger，依赖 rescheduleAllReminders
-                //   每年续排。若用户长期不重启 App（iOS 上 App 常驻后台很常见），
-                //   仅靠启动时的 reschedule 会导致农历生日/纪念日第二年漏排。
-                //   前台是最自然的"续排时机"（用户打开 App 时检查），开销可接受（O(N) 取消+重建）。
-                .onChange(of: scenePhase, initial: false) { newPhase in
-                    if newPhase == .background || newPhase == .inactive {
-                        store.flushPendingSave()
-                        countdownStore.flushPendingSave()
-                    } else if newPhase == .active {
-                        Task { @MainActor in
-                            await NotificationManager.shared.rescheduleAllReminders(in: store)
-                        }
+    public init() {}
+
+    public var body: some View {
+        AdaptiveRootView()
+            .environment(store)
+            .environment(countdownStore)
+            .preferredColorScheme(appearance.colorScheme)
+            .tint(Color.appTint)
+            .task {
+                // ⚠️ 启动即重排所有本地提醒：
+                // - 重新安装后 UNUserNotificationCenter 为全新空态，没有任何 pending request
+                // - iOS 系统升级/还原后也可能清掉原有 requests
+                // - 导入/合并非通知调度的冷路径（iCloud pull）需要启动时补位
+                // 放在独立的 task 里（不和 CloudKit setup 串行，避免受 entitlement 阻塞）
+                await NotificationManager.shared.rescheduleAllReminders(in: store)
+            }
+            .task {
+                await setupCloudSyncIfNeeded()
+            }
+            // P2 修复：App 进入后台/失活时，把 EventStore + CountdownStore 的防抖
+            //   保存立即落盘，避免 0.5s 防抖窗口内系统终止进程导致最新 CRUD 丢失。
+            // P1 修复：App 回到前台（.active）时重排所有提醒——
+            //   农历每年提醒用 repeats:false 的 timeInterval trigger，依赖 rescheduleAllReminders
+            //   每年续排。若用户长期不重启 App（iOS 上 App 常驻后台很常见），
+            //   仅靠启动时的 reschedule 会导致农历生日/纪念日第二年漏排。
+            //   前台是最自然的"续排时机"（用户打开 App 时检查），开销可接受（O(N) 取消+重建）。
+            .onChange(of: scenePhase, initial: false) { _, newPhase in
+                if newPhase == .background || newPhase == .inactive {
+                    store.flushPendingSave()
+                    countdownStore.flushPendingSave()
+                } else if newPhase == .active {
+                    Task { @MainActor in
+                        await NotificationManager.shared.rescheduleAllReminders(in: store)
                     }
                 }
-        }
+            }
     }
 
     // MARK: - iCloud 同步装配（延迟到用户在设置里开启时才真正创建 CloudKit 容器）
@@ -120,10 +125,12 @@ struct LunisolarCalendarApp: App {
 
 /// iPad (regular sizeClass) 用双栏 SplitView：左月历 + 右详情
 /// iPhone (compact) 保留单栏 NavigationStack
-struct AdaptiveRootView: View {
+public struct AdaptiveRootView: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         Group {
             if hSizeClass == .regular {
                 // iPad：双栏布局
@@ -135,7 +142,9 @@ struct AdaptiveRootView: View {
         }
         .onAppear {
             // 启动时根据日期自动切换主/春节图标（仅在窗口内切换，否则回主图标）
+            #if canImport(UIKit)
             AlternateIconManager.shared.applyTodayIfNeeded()
+            #endif
         }
     }
 }
@@ -148,26 +157,15 @@ struct iPadRootView: View {
 
     var body: some View {
         NavigationSplitView {
-            // 左栏：月历
-            CalendarMonthView(selectedDate: $selectedDate)
+            // 左栏：月历（复用 SplitView 侧栏导航，不自包 NavigationStack）
+            CalendarMonthView(selectedDate: $selectedDate, embedsInNavigationStack: false)
+                .navigationSplitViewColumnWidth(min: 320, ideal: 372, max: 470)
         } detail: {
-            // 右栏：当日详情
-            DayDetailView(date: selectedDate)
+            // 右栏：当日详情（复用 detail 列导航，不自包 NavigationStack）
+            DayDetailView(date: selectedDate, embedsInNavigationStack: false)
         }
-    }
-}
-
-// MARK: - SwiftPM 宿主入口 (兼容调用)
-
-@available(iOS 17.0, *)
-public struct CalendarAppRootView: View {
-    @State private var store = EventStore.shared
-
-    public init() {}
-
-    public var body: some View {
-        CalendarMonthView()
-            .environment(store)
+        // balanced：iPad 横屏时左右两栏并排常驻，不轻易折叠成单栏 push
+        .navigationSplitViewStyle(.balanced)
     }
 }
 

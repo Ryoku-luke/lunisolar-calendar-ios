@@ -319,11 +319,6 @@ public extension Date {
         ChineseCalendar.lunarDate(from: self)
     }
 
-    /// 安全版农历（越界返回 nil）
-    var lunarSafe: LunarDate? {
-        ChineseCalendar.lunarDateSafe(from: self)
-    }
-
     /// 当天 00:00（统一公历，避免非公历系统日历导致日界偏移）。
     var startOfDay: Date {
         Calendar(identifier: .gregorian).startOfDay(for: self)
@@ -382,58 +377,5 @@ public extension Date {
         // weekday 返回 1-7 (Sun-Sat)，数组下标 0-6
         let idx = max(0, min(6, weekday - 1))
         return symbols[idx]
-    }
-
-    // MARK: - 公历（Gregorian）语义版工具方法
-    // 说明：CalendarMonthView 绘制月历网格、农历/黄历查表都要求"月"和"日"按公历解释。
-    //      如果用户系统日历是伊斯兰历/佛历/和历，Calendar.current 给出的 month/day
-    //      与公历完全不同，会导致月视图结构错乱、农历日期映射错位。
-    //      因此凡涉及"月视图结构 / 农历查表 / 黄历计算"的地方，统一使用以下 gregorianXxx。
-    //      参考 BUG #33 修复。
-
-    /// 公历版：取该日期所在公历年的 1 号 00:00
-    var gregorianFirstDayOfMonth: Date {
-        let cal = Calendar(identifier: .gregorian)
-        var comps = cal.dateComponents([.year, .month], from: self)
-        comps.day = 1
-        return cal.date(from: comps) ?? self
-    }
-
-    /// 公历版：该公历月份的天数（28/29/30/31）
-    var gregorianDaysInMonth: Int {
-        let cal = Calendar(identifier: .gregorian)
-        return cal.range(of: .day, in: .month, for: self)?.count ?? 30
-    }
-
-    /// 公历版：按公历日历加减若干天
-    func gregorianAddingDays(_ days: Int) -> Date {
-        let cal = Calendar(identifier: .gregorian)
-        return cal.date(byAdding: .day, value: days, to: self) ?? self
-    }
-
-    /// 公历版：按公历日历加减若干月
-    func gregorianAddingMonths(_ months: Int) -> Date {
-        let cal = Calendar(identifier: .gregorian)
-        return cal.date(byAdding: .month, value: months, to: self) ?? self
-    }
-
-    /// 公历版：公历年号（4 位数）
-    var gregorianYear: Int {
-        Calendar(identifier: .gregorian).component(.year, from: self)
-    }
-
-    /// 公历版：公历月份（1-12）
-    var gregorianMonth: Int {
-        Calendar(identifier: .gregorian).component(.month, from: self)
-    }
-
-    /// 公历版：公历日（1-31）
-    var gregorianDay: Int {
-        Calendar(identifier: .gregorian).component(.day, from: self)
-    }
-
-    /// 公历版：周几（1=周日 ... 7=周六），用于月视图 6x7 网格首日偏移计算
-    var gregorianWeekday: Int {
-        Calendar(identifier: .gregorian).component(.weekday, from: self)
     }
 }
