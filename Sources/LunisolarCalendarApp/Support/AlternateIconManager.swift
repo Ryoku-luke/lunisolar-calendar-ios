@@ -6,11 +6,11 @@ import LunarCore
 // MARK: - 备用图标管理器 · AlternateIconManager
 ///
 /// 使用说明
-///   1) 把 `Assets/XCAssets/AppIcon.appiconset` 和
-///      `Assets/XCAssets/AppIconSpringFestival.appiconset` 拖入
+///   1) 把 `Assets/Assets.xcassets/AppIcon.appiconset` 和
+///      `Assets/Assets.xcassets/AppIconSpringFestival.appiconset` 拖入
 ///      工程的 Assets.xcassets。
-///   2) 将 `Assets/XCAssets/Info.plist-EXAMPLE.xml` 中的
-///      CFBundleIcons / CFBundleIcons~ipad 片段合并到 App 目标的 Info.plist。
+///   2) 将 `Sources/LunisolarCalendarApp/Info.plist` 中的
+///      CFBundleIcons / CFBundleIcons~ipad 片段保留（已内置春节限定声明）。
 ///   3) 在 App 入口（LunisolarCalendarApp.swift）追加：
 ///
 ///         LunisolarCalendarApp()

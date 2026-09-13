@@ -16,7 +16,7 @@
 ### 2. App Icon
 
 - 主图标 1024×1024 PNG，**无透明通道**（App Store 强制要求）
-- 运行 `bash Tools/gen-app-icons.sh` 生成全部尺寸
+- 运行 `python3 Tools/gen-icons-flat-blue.py` 生成全部尺寸
 - 春节限定备用图标同样需要全尺寸 PNG
 
 ### 3. 截图
