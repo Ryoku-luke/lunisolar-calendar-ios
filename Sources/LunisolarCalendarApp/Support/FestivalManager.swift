@@ -129,6 +129,20 @@ public enum FestivalManager: Sendable {
     /// 是否为"大节日"（决定是否触发主题色 banner）
     public static func primaryFestival(on date: Date) -> Festival? {
         let all = festivals(on: date)
+        return primaryFrom(all)
+    }
+
+    /// 接受预计算 LunarDate 的重载，避免 WidgetProvider 等调用方重复农历转换。
+    /// P2 修复：旧 primaryFestival(on:) 只接受 date，内部调 festivals(on:) 做农历转换；
+    ///   WidgetProvider 先调 festivals(on: now) 再调 primaryFestival(on: now) → 重复转换。
+    ///   新增 lunar 重载后 WidgetProvider 可复用同一次转换结果。
+    public static func primaryFestival(on date: Date, lunar: LunarDate?) -> Festival? {
+        let all = festivals(on: date, lunar: lunar)
+        return primaryFrom(all)
+    }
+
+    /// 从节日列表中按优先级选出主节日
+    private static func primaryFrom(_ all: [Festival]) -> Festival? {
         // 按优先级：农历节日优先于公历节日。
         // P2 修复：旧 primaryNames 用了 "元宵/端午/七夕/中秋/重阳"（无"节"后缀），
         //   但 lunarFestivals 里的 name 全部带"节"后缀（"元宵节/端午节/..."），
@@ -147,11 +161,19 @@ public enum FestivalManager: Sendable {
         primaryFestival(on: date)?.accentHex
     }
 
+    /// 接受预计算 LunarDate 的重载
+    public static func accentColorHex(on date: Date, lunar: LunarDate?) -> String? {
+        primaryFestival(on: date, lunar: lunar)?.accentHex
+    }
+
     // MARK: - 辅助
 
     /// 判断给定农历日期是否为除夕（农历年最后一天）
     private static func isLunarLastDayOfYear(lunar: LunarDate, in date: Date) -> Bool {
-        guard lunar.month == 12 else { return false }
+        // P3 修复：旧代码只 guard lunar.month == 12，未排除闰十二月。
+        //   闰十二月的最后一天不是除夕（除夕是正常十二月的最后一天）。
+        //   闰十二月极其罕见（上一个 1984 年），但逻辑必须正确。
+        guard lunar.month == 12, !lunar.isLeapMonth else { return false }
         // 农历十二月三十 或 该月只有29天（即廿九为最后一天）
         let daysIn12 = ChineseCalendar.daysInLunarMonth(year: lunar.year, month: 12, isLeap: false)
         return daysIn12 > 0 && lunar.day == daysIn12

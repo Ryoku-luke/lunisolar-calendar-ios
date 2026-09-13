@@ -69,8 +69,10 @@ public struct LunisolarWidgetTimelineProvider: TimelineProvider {
     public func placeholder(in context: Context) -> LunisolarWidgetEntry {
         let now = Date()
         let resolved = HuangliDBProvider.resolve(date: now)
-        let fes = FestivalManager.festivals(on: now)
-        let hex = FestivalManager.primaryFestival(on: now)?.accentHex ?? "#C41A1A"
+        // P2 优化：复用同一次农历转换，避免 festivals + primaryFestival 各转一次
+        let lunar = ChineseCalendar.lunarDateSafe(from: now)
+        let fes = FestivalManager.festivals(on: now, lunar: lunar)
+        let hex = FestivalManager.primaryFestival(on: now, lunar: lunar)?.accentHex ?? "#C41A1A"
         return LunisolarWidgetEntry(
             date: now,
             huangli: resolved.huangliDay,
@@ -123,8 +125,10 @@ public struct LunisolarWidgetTimelineProvider: TimelineProvider {
 
     private func makeEntry(for day: Date, useSharedSnapshot: Bool) -> LunisolarWidgetEntry {
         let r = HuangliDBProvider.resolve(date: day)
-        let fes = FestivalManager.festivals(on: day)
-        let hex = FestivalManager.primaryFestival(on: day)?.accentHex ?? "#C41A1A"
+        // P2 优化：复用同一次农历转换，避免 festivals + primaryFestival 各转一次
+        let lunar = ChineseCalendar.lunarDateSafe(from: day)
+        let fes = FestivalManager.festivals(on: day, lunar: lunar)
+        let hex = FestivalManager.primaryFestival(on: day, lunar: lunar)?.accentHex ?? "#C41A1A"
 
         if useSharedSnapshot,
            let snap = WidgetSnapshotStore.read(appGroupID: appGroupID) {

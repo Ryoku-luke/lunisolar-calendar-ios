@@ -174,6 +174,26 @@ final class CalendarEventTests: XCTestCase {
         var dcNational = DateComponents(); dcNational.year = 2025; dcNational.month = 10; dcNational.day = 1
         let national = cal.date(from: dcNational)!
         XCTAssertEqual(FestivalManager.primaryFestival(on: national)?.name, "国庆节")
+
+        // P2 回归：lunar 重载与无 lunar 版本结果一致
+        let lunarMid = ChineseCalendar.lunarDateSafe(from: midAutumn)
+        XCTAssertEqual(
+            FestivalManager.primaryFestival(on: midAutumn, lunar: lunarMid)?.name,
+            FestivalManager.primaryFestival(on: midAutumn)?.name,
+            "lunar 重载应与无 lunar 版本结果一致"
+        )
+        XCTAssertEqual(
+            FestivalManager.accentColorHex(on: midAutumn, lunar: lunarMid),
+            FestivalManager.accentColorHex(on: midAutumn),
+            "accentColorHex lunar 重载应与无 lunar 版本结果一致"
+        )
+
+        // P3 回归：HolidayProvider 2026-10-10 补班名称应为"国庆节"（与其他补班日一致）
+        var dcWorkday = DateComponents(); dcWorkday.year = 2026; dcWorkday.month = 10; dcWorkday.day = 10
+        let workday = cal.date(from: dcWorkday)!
+        let workdayInfo = HolidayProvider.info(for: workday)
+        XCTAssertEqual(workdayInfo.type, .workday, "2026-10-10 应为调休补班日")
+        XCTAssertEqual(workdayInfo.name, "国庆节", "P3 修复：补班名称应与假期名称一致，不带'调休'后缀")
     }
 
     func testICSExportImport() {
