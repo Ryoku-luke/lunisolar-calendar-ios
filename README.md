@@ -34,9 +34,9 @@
 1. Xcode → File → New → Project → **iOS App**（Interface: SwiftUI, Minimum Deployments: iOS 17+）
 2. 删除自动生成的 `ContentView.swift` 与 `<项目名>App.swift`
 3. 将 `Sources/LunisolarCalendarApp/` 整个目录拖入工程（勾选 Copy items if needed）
-4. 将 `Assets/XCAssets/` 拖入工程作为 Asset Catalog
+4. 将 `Assets/Assets.xcassets/` 拖入工程作为 Asset Catalog
 5. 将 `Sources/LunisolarCalendarApp/Info.plist` 配置到 Target → Info → Info.plist File
-6. 运行 `bash Tools/gen-app-icons.sh` 生成全部图标 PNG（需 macOS）
+6. 运行 `python3 Tools/gen-icons-flat-blue.py` 生成全部图标 PNG（跨平台，需 Pillow）
 7. ⌘R 运行
 
 ### Swift Package
@@ -71,8 +71,8 @@ struct YourApp: App {
 
 ### App 图标配置
 
-1. 在 macOS 上运行 `bash Tools/gen-app-icons.sh`，从 `Assets/Brand/` 下的 1024×1024 原图生成全部 iOS 图标尺寸 PNG
-2. 将 `Assets/XCAssets/` 拖入 Xcode 工程的 Asset Catalog
+1. 运行 `python3 Tools/gen-icons-flat-blue.py`，生成扁平化淡蓝渐变风格的全部 iOS 图标尺寸 PNG（15 档位 + 1024 源图）
+2. 将 `Assets/Assets.xcassets/` 拖入 Xcode 工程的 Asset Catalog
 3. TARGETS → General → App Icons and Launch Screen → App Icon Source 选 `AppIcon`
 4. 将 `Info.plist` 中的 `CFBundleIcons` / `CFBundleIcons~ipad` 声明春节限定备用图标
 5. App 运行时 `AlternateIconManager.shared.applyTodayIfNeeded()` 自动按春节窗口切换
@@ -139,17 +139,16 @@ Sources/LunisolarCalendarApp/
     └── SettingsViewComponents.swift         # Toast 悬浮玻璃卡
 
 Assets/
-├── Brand/
-│   ├── app-icon-primary.jpg                # 主图标 1024×1024（撕历 + 朱砂印）
-│   └── app-icon-spring-festival.jpg        # 春节限定 1024×1024（金福 + 灯笼）
-└── XCAssets/
-    ├── AppIcon.appiconset/Contents.json     # 主图标 Asset Catalog 配置
-    ├── AppIconSpringFestival.appiconset/    # 春节限定 Asset Catalog 配置
-    └── Info.plist-EXAMPLE.xml               # CFBundleIcons 合并样例
+├── Assets.xcassets/                         # Asset Catalog（主图标 + 春节限定）
+│   ├── AppIcon.appiconset/                  # 15 档位扁平化淡蓝渐变主图标
+│   └── AppIconSpringFestival.appiconset/    # 15 档位红金渐变福字春节限定
+└── Brand/
+    ├── app-icon-primary.png                 # 主图标 1024×1024 源图
+    └── app-icon-spring-festival.png         # 春节限定 1024×1024 源图
 
 Tools/
 ├── gen_huangli_db/main.swift                # 黄历数据库生成工具
-└── gen-app-icons.sh                         # macOS sips 一键批量缩图脚本
+└── gen-icons-flat-blue.py                   # 跨平台 Python 图标生成脚本
 
 Tests/LunisolarCalendarTests/                # 80 个单元测试
 ```
