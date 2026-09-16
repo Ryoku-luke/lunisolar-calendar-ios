@@ -146,27 +146,30 @@ final class DataPortabilityTests: XCTestCase {
     }
 
     // merge 基础：无冲突统计正确
-    @MainActor
-    func testMergeResultCounters() {
-        let id = UUID()
-        let s = Date()
-        var existing = CalendarEvent(id: id, title: "A", startDate: s, priority: .normal)
-        existing.updatedAt = Date.distantPast
-        let store = makeIsolatedEventStore()
-        store.merge([existing], policy: .keepLatest, skipSync: true)
+    // 注：CI Swift 6 严格并发下，@MainActor 同步测试方法在派生入口报
+    // "implicitly asynchronous"，改为 async + MainActor 闭包规避派生限制。
+    func testMergeResultCounters() async {
+        await MainActor.run {
+            let id = UUID()
+            let s = Date()
+            var existing = CalendarEvent(id: id, title: "A", startDate: s, priority: .normal)
+            existing.updatedAt = Date.distantPast
+            let store = makeIsolatedEventStore()
+            store.merge([existing], policy: .keepLatest, skipSync: true)
 
-        var incoming = CalendarEvent(id: id, title: "A-v2", startDate: s, priority: .urgent)
-        incoming.updatedAt = Date.distantFuture
-        // 新增 1 个（新UUID）+ 更新 1 个（id 相同 + 更远 updatedAt）
-        let brandNew = CalendarEvent(title: "B", startDate: s.addingTimeInterval(3600))
-        let result = store.merge([incoming, brandNew], policy: .keepLatest, skipSync: true)
-        XCTAssertEqual(result.added, 1)
-        XCTAssertEqual(result.updated, 1)
-        XCTAssertEqual(result.skipped, 0)
-        // 现在"A"的优先级应该升为 urgent（被 incoming 覆盖了）
-        let a = store.events.first { $0.id == id }
-        XCTAssertEqual(a?.priority, .urgent)
-        XCTAssertEqual(a?.title, "A-v2")
+            var incoming = CalendarEvent(id: id, title: "A-v2", startDate: s, priority: .urgent)
+            incoming.updatedAt = Date.distantFuture
+            // 新增 1 个（新UUID）+ 更新 1 个（id 相同 + 更远 updatedAt）
+            let brandNew = CalendarEvent(title: "B", startDate: s.addingTimeInterval(3600))
+            let result = store.merge([incoming, brandNew], policy: .keepLatest, skipSync: true)
+            XCTAssertEqual(result.added, 1)
+            XCTAssertEqual(result.updated, 1)
+            XCTAssertEqual(result.skipped, 0)
+            // 现在"A"的优先级应该升为 urgent（被 incoming 覆盖了）
+            let a = store.events.first { $0.id == id }
+            XCTAssertEqual(a?.priority, .urgent)
+            XCTAssertEqual(a?.title, "A-v2")
+        }
     }
 
     // MARK: P3 回归：ICS PRIORITY 对称映射

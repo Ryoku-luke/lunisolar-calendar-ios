@@ -73,37 +73,40 @@ final class WidgetSnapshotTests: XCTestCase {
     }
 
     // EventStore.save 后会自动写一份快照：今日统计能真实反映 events 状态
-    @MainActor
-    func testEventStoreAutoWritesSnapshotTodayCounts() {
-        let store = makeIsolatedEventStore()
-        // 先清空，避免示例数据干扰
-        _ = store.clearAll(skipSync: true)
+    // 注：CI Swift 6 严格并发下，@MainActor 同步测试方法在派生入口报
+    // "implicitly asynchronous"，改为 async + MainActor 闭包规避派生限制。
+    func testEventStoreAutoWritesSnapshotTodayCounts() async {
+        await MainActor.run {
+            let store = makeIsolatedEventStore()
+            // 先清空，避免示例数据干扰
+            _ = store.clearAll(skipSync: true)
 
-        let cal = Calendar(identifier: .gregorian)
-        let today = cal.startOfDay(for: Date())
-        guard let t1 = cal.date(byAdding: .hour, value: 10, to: today),
-              let t2 = cal.date(byAdding: .hour, value: 14, to: today) else {
-            XCTFail("构造今日时间失败"); return
+            let cal = Calendar(identifier: .gregorian)
+            let today = cal.startOfDay(for: Date())
+            guard let t1 = cal.date(byAdding: .hour, value: 10, to: today),
+                  let t2 = cal.date(byAdding: .hour, value: 14, to: today) else {
+                XCTFail("构造今日时间失败"); return
+            }
+
+            var a = CalendarEvent(id: UUID(), title: "晨会", startDate: t1, isAllDay: false, priority: .urgent)
+            a.isCompleted = true
+            let b = CalendarEvent(id: UUID(), title: "评审", startDate: t2, isAllDay: false, priority: .high)
+            store.add(a, skipSync: true)
+            store.add(b, skipSync: true)
+
+            // EventStore.save() 内部做了 debounced，Linux XCTest 下 DispatchQueue.main.asyncAfter 不保证执行
+            // 所以用测试专用 flush 接口强制立即落盘 → writeWidgetSnapshotIfNeeded
+            store._testFlushSave()
+
+            // EventStore.saveNow → writeWidgetSnapshotIfNeeded 写了快照，直接读
+            let got = WidgetSnapshotStore.read(appGroupID: nil, fileName: "widget_snapshot.json", maxAge: 60)
+            XCTAssertNotNil(got, "EventStore.save 后应已写出 widget_snapshot.json")
+            XCTAssertEqual(got?.todaysEventsCount, 2)
+            XCTAssertEqual(got?.todaysCompletedCount, 1)
+            // 优先级排序：urgent 晨会应该排第一
+            XCTAssertEqual(got?.topTitles.first?.title, "晨会")
+            XCTAssertEqual(got?.topTitles.first?.isCompleted, true)
+            XCTAssertEqual(got?.topTitles.first?.priorityHex, Priority.urgent.widgetHex)
         }
-
-        var a = CalendarEvent(id: UUID(), title: "晨会", startDate: t1, isAllDay: false, priority: .urgent)
-        a.isCompleted = true
-        let b = CalendarEvent(id: UUID(), title: "评审", startDate: t2, isAllDay: false, priority: .high)
-        store.add(a, skipSync: true)
-        store.add(b, skipSync: true)
-
-        // EventStore.save() 内部做了 debounced，Linux XCTest 下 DispatchQueue.main.asyncAfter 不保证执行
-        // 所以用测试专用 flush 接口强制立即落盘 → writeWidgetSnapshotIfNeeded
-        store._testFlushSave()
-
-        // EventStore.saveNow → writeWidgetSnapshotIfNeeded 写了快照，直接读
-        let got = WidgetSnapshotStore.read(appGroupID: nil, fileName: "widget_snapshot.json", maxAge: 60)
-        XCTAssertNotNil(got, "EventStore.save 后应已写出 widget_snapshot.json")
-        XCTAssertEqual(got?.todaysEventsCount, 2)
-        XCTAssertEqual(got?.todaysCompletedCount, 1)
-        // 优先级排序：urgent 晨会应该排第一
-        XCTAssertEqual(got?.topTitles.first?.title, "晨会")
-        XCTAssertEqual(got?.topTitles.first?.isCompleted, true)
-        XCTAssertEqual(got?.topTitles.first?.priorityHex, Priority.urgent.widgetHex)
     }
 }
