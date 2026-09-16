@@ -5,9 +5,12 @@ on:
     branches: [ main, master, develop ]
   pull_request:
 
+# 项目为纯 iOS App：UI 视图使用 topBarLeading / insetGrouped / navigationBarTitleDisplayMode
+# 等 iOS-only API，SwiftPM 在 macOS 上会编译失败。CI 只在 Linux 容器内跑 SwiftPM 单测，
+# iOS 端 UI/Widget 依赖 Xcode + 模拟器，由开发者本地 Xcode 验证，不进 CI。
 jobs:
   linux-tests:
-    name: Linux · SwiftPM 单测
+    name: SwiftPM 单测（Linux）
     runs-on: ubuntu-latest
     container: swift:6.0
     steps:
@@ -15,19 +18,4 @@ jobs:
       - name: Build
         run: swift build
       - name: Test
-        run: swift test
-
-  ios-tests:
-    name: iOS · SwiftPM 单测（macOS runner）
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Swift 版本
-        run: swift --version
-      - name: Build
-        run: swift build
-      - name: Test
-        # 项目测试用例全部为纯逻辑测试（无 UI/WidgetKit 依赖），
-        # SwiftPM 测试 target 由 Package.swift 声明，不需要 xcodeproj 测试 target。
-        # macOS runner 上 swift test 会用本机 XCTest 运行所有 LunisolarCalendarTests 用例。
         run: swift test
