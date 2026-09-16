@@ -164,6 +164,12 @@ public enum SolarTermProvider: Sendable {
         return nil
     }
 
+    /// 指定年份、指定节气序号（0-23）的精确时刻；无数据返回 nil。
+    /// 用于立春换年柱等依赖节气交节的算法（2029+ 无数据时由调用方近似兜底）。
+    public static func termDate(year: Int, index: Int) -> Date? {
+        entries.first { $0.year == year && $0.index == index }?.date
+    }
+
     /// 返回给定年份的所有节气。
     public static func terms(in year: Int) -> [(name: String, date: Date)] {
         entries.filter { $0.year == year }.sorted { $0.date < $1.date }

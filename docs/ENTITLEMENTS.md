@@ -11,11 +11,17 @@
 | Capability | 用途 | 必需 | 配置项 |
 |---|---|---|---|
 | **App Groups** | 主 App 与 Widget Extension 共享数据快照 | ✅ | `group.com.lunisolar.calendar` |
-| **iCloud** | CloudKit 私有数据库同步 | ✅ | 勾选 CloudKit，Container ID：`iCloud.com.lunisolar.calendar` |
+| **iCloud** | CloudKit 私有数据库同步 | ⚠️ 仅付费账号 | 勾选 CloudKit，Container ID：`iCloud.com.lunisolar.calendar` |
 | **Push Notifications** | 未来支持远端推送通知（当前本地通知不需要） | ⚪ 可选 | — |
 | **Background Modes** | 后台刷新（可选，用于农历提醒续排） | ⚪ 可选 | Background fetch |
 
 > ⚠️ **重要**：Widget Extension Target 也必须勾选 **App Groups**，且与主 App 使用**完全相同**的 Group ID，否则 Widget 无法读取主 App 写入的快照。
+
+> ⚠️ **个人开发团队（Personal Team）说明**：免费的个人团队账号**不支持 iCloud 能力**（Xcode 会报
+> "Personal development teams do not support the iCloud capability"，导致无法创建 provisioning profile）。
+> 因此当前工程文件**已移除 iCloud 两个 key**，仅保留 App Groups（免费账号支持）。
+> 代码侧已做完整降级：启动延迟装配 + `isAvailable` 探测 + 不可用时静默关闭开关，不会崩溃。
+> 需要 CloudKit 同步时，改用付费开发者账号（$99/年）并按下文"四、CloudKit Container 配置"重新启用。
 
 ---
 
@@ -28,7 +34,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- App Group：主 App ↔ Widget 共享 -->
+    <!-- App Group：主 App ↔ Widget 共享（个人团队免费支持） -->
     <key>com.apple.security.application-groups</key>
     <array>
         <string>group.com.lunisolar.calendar</string>
@@ -36,6 +42,17 @@
 </dict>
 </plist>
 ```
+
+> ⚠️ 2026-09-14 更新：此前文件含 iCloud 两个 key（`icloud-services` / `icloud-container-identifiers`），
+> 但**个人开发团队（Personal Team）不支持 iCloud 能力**，Xcode 报错无法创建 provisioning profile。
+> 现已移除 iCloud key、保留 App Groups，个人团队可正常自动签名与运行。
+>
+> **付费账号启用 CloudKit 同步的完整步骤**：
+> 1. 主 App Target → Signing & Capabilities → 添加 **iCloud**，勾选 CloudKit；
+> 2. 确认 Container 显示为 `iCloud.com.lunisolar.calendar`（Xcode 会同步刷新 pbxproj 的 SystemCapabilities 段），
+>    并自动把 iCloud 两 key 加回 entitlements 文件；
+> 3. 在 [Apple Developer](https://developer.apple.com/account/) 的 Identifiers 中为该 Bundle ID 勾选 iCloud 并注册同一 Container；
+> 4. 真机首次运行后，在 CloudKit Dashboard 将开发环境 Schema Deploy 到生产。
 
 ### Widget Extension (`LunisolarWidget/LunisolarWidget.entitlements`)
 
@@ -70,6 +87,9 @@
 ---
 
 ## 四、CloudKit Container 配置
+
+> ⚠️ 本节仅适用于**付费开发者账号**（$99/年）。个人开发团队不支持 iCloud，跳过本节即可；
+> 当前工程已按个人团队配置（无 iCloud key），CloudKit 同步在设置页会显示"不可用"提示。
 
 ### 1. 创建 Container
 

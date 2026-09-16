@@ -1,0 +1,224 @@
+#if canImport(ActivityKit) && canImport(WidgetKit)
+// @preconcurrency：iOS 26 SDK 中 Activity 类型实例（来自 @MainActor 的
+// `Activity.activities`）传给 @concurrent 的 `end(_:dismissalPolicy:)` 时，
+// Swift 6 严格并发会报 "Sending 'activity' risks causing data races"。
+// 该类型为系统框架类型且生命周期由系统托管，@preconcurrency import 是
+// Swift 6 迁移对系统框架的标准放宽手段。
+@preconcurrency import ActivityKit
+import SwiftUI
+import WidgetKit
+
+// MARK: - 灵动岛 · 倒计时 Live Activity
+//
+// iOS 16.1+ Live Activities：把「倒数日 / 纪念日」挂到灵动岛与锁屏。
+// 剩余时间用系统原生 `Text(date, style: .timer)` 渲染，由系统每秒自动刷新，
+// App 无需常驻计时器（零后台耗电、零 Timer 泄漏）。
+//
+// ⚠️ iOS 26/27 SDK（Xcode 26+）API 变更适配：
+// 1. `ActivityAttributes.ContentState` 必须直接命名为嵌套类型 `ContentState`，
+//    不能再通过 `typealias ContentState = XxxContentState` 满足协议（否则
+//    "does not conform to protocol 'ActivityAttributes'"）。
+// 2. `ActivityConfiguration` 新签名 `for:content:dynamicIsland:`——第一个闭包
+//    是锁屏/配对手表卡（label: `content`），第二个是 `dynamicIsland:` 闭包，
+//    返回 `DynamicIsland { } compactLeading: { } compactTrailing: { } minimal: { }`；
+//    旧的独立 `lockScreen:` 标签已被移除。
+//
+// 本文件位于 Widgets/ 共享目录，主 App target 与 Widget 扩展 target 同时编译：
+// - Widget 扩展：注册 ActivityConfiguration 负责灵动岛/锁屏渲染
+// - 主 App：CountdownActivityManager 负责开启 / 结束 / 恢复活动
+
+@available(iOS 16.1, *)
+public struct CountdownActivityAttributes: ActivityAttributes {
+    /// 渲染状态：结束时间（倒计时终点）；系统按 staleDate 提示刷新
+    public struct ContentState: Codable, Hashable, Sendable {
+        public var endDate: Date
+        public init(endDate: Date) { self.endDate = endDate }
+    }
+
+    public var eventID: UUID
+    public var title: String
+    public var emoji: String
+
+    public init(eventID: UUID, title: String, emoji: String) {
+        self.eventID = eventID
+        self.title = title
+        self.emoji = emoji
+    }
+}
+
+// MARK: - 锁屏 / 配对手表卡渲染
+
+@available(iOS 16.1, *)
+struct CountdownLiveActivityView: View {
+    let context: ActivityViewContext<CountdownActivityAttributes>
+
+    var body: some View {
+        HStack(spacing: AppTheme.Spacing.md) {
+            // 自定义 emoji 图标：独创性 —— 用户选择的倒数日图标直接上岛
+            Text(context.attributes.emoji)
+                .font(.system(size: 26, weight: .semibold))
+                .frame(width: 40, height: 40)
+                .background(Color.themeQuaternaryFill)
+                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(context.attributes.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text("倒计时 · \(context.state.endDate.formatted(.dateTime.month().day()))")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            // 系统原生倒计时样式：每秒自动刷新、monospaced 防跳动
+            Text(context.state.endDate, style: .timer)
+                .font(.system(.title3, design: .rounded).weight(.bold))
+                .monospacedDigit()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, AppTheme.Spacing.sm)
+    }
+}
+
+/// 灵动岛 / 锁屏注册（WidgetBundle 成员）
+@available(iOS 16.1, *)
+public struct CountdownLiveActivityWidget: Widget {
+    public let kind: String = "CountdownLiveActivity"
+
+    public init() {}
+
+    public var body: some WidgetConfiguration {
+        ActivityConfiguration(for: CountdownActivityAttributes.self) { context in
+            // 锁屏完整卡片 / 配对手表 macOS（iOS 26 的 content 闭包）
+            CountdownLiveActivityView(context: context)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                // 展开态：左侧 emoji（圆角容器）、右侧剩余时间、底部标题+目标日期
+                DynamicIslandExpandedRegion(.leading) {
+                    Text(context.attributes.emoji)
+                        .font(.system(size: 24, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .background(Color.themeQuaternaryFill)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("剩余")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(context.state.endDate, style: .timer)
+                            .font(.system(.title2, design: .rounded).weight(.bold))
+                            .monospacedDigit()
+                    }
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    HStack(spacing: 6) {
+                        Text(context.attributes.title)
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                        Text("· \(context.state.endDate.formatted(.dateTime.month().day()))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } compactLeading: {
+                // 紧凑态（左侧）：仅 emoji 图标
+                Text(context.attributes.emoji)
+                    .font(.system(size: 20, weight: .semibold))
+            } compactTrailing: {
+                // 紧凑态（右侧）：仅剩余时间（灵动岛紧凑区建议"一元素一数字"）
+                Text(context.state.endDate, style: .timer)
+                    .font(.system(.caption, design: .rounded).weight(.bold))
+                    .monospacedDigit()
+            } minimal: {
+                // 最小态（与其他活动并排时）：仅 emoji 图标
+                Text(context.attributes.emoji)
+                    .font(.system(size: 18, weight: .semibold))
+            }
+            .keylineTint(Color(red: 0.30, green: 0.55, blue: 0.52))
+        }
+        .contentMarginsDisabled()
+    }
+}
+
+// MARK: - 主 App 侧管理（开启 / 结束 / 恢复）
+
+@available(iOS 16.1, *)
+@MainActor
+public enum CountdownActivityManager {
+    /// [eventID.uuidString : activityID]，跨启动恢复用
+    private static let idsKey = "Lunisolar.liveActivity.ids"
+
+    /// 为某个倒数日开始灵动岛活动（已有则先结束旧的）
+    /// 返回 Result：成功给 activityID；失败给具体 Error（便于 UI 如实提示定位根因）
+    @discardableResult
+    public static func start(event: CountdownEvent) -> Result<String, Error> {
+        if let old = activeActivityID(for: event.id) {
+            end(id: old)
+            remove(eventID: event.id)
+        }
+        let attrs = CountdownActivityAttributes(eventID: event.id,
+                                                title: event.title,
+                                                emoji: event.emoji)
+        let state = CountdownActivityAttributes.ContentState(endDate: event.date)
+        let content = ActivityContent(state: state, staleDate: event.date)
+        do {
+            let activity = try Activity<CountdownActivityAttributes>.request(
+                attributes: attrs,
+                content: content
+            )
+            save(activityID: activity.id, for: event.id)
+            return .success(activity.id)
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    /// 结束指定活动（立即撤离灵动岛）
+    public static func end(id: String) {
+        guard let activity = Activity<CountdownActivityAttributes>.activities
+            .first(where: { $0.id == id }) else { return }
+        Task {
+            await activity.end(nil, dismissalPolicy: .immediate)
+        }
+    }
+
+    /// 当前是否已有该事件的活跃活动
+    public static func activeActivityID(for eventID: UUID) -> String? {
+        let dict = UserDefaults.standard.dictionary(forKey: idsKey) as? [String: String] ?? [:]
+        guard let id = dict[eventID.uuidString] else { return nil }
+        // 若系统已结束该活动（用户从灵动岛手动移除等），清除记录
+        if Activity<CountdownActivityAttributes>.activities.contains(where: { $0.id == id }) {
+            return id
+        } else {
+            remove(eventID: eventID)
+            return nil
+        }
+    }
+
+    /// 结束某事件对应的活动（若在岛上）
+    public static func end(for eventID: UUID) {
+        if let id = activeActivityID(for: eventID) {
+            end(id: id)
+        }
+        remove(eventID: eventID)
+    }
+
+    // MARK: 内部
+
+    private static func save(activityID: String, for eventID: UUID) {
+        var dict = UserDefaults.standard.dictionary(forKey: idsKey) as? [String: String] ?? [:]
+        dict[eventID.uuidString] = activityID
+        UserDefaults.standard.set(dict, forKey: idsKey)
+    }
+
+    private static func remove(eventID: UUID) {
+        var dict = UserDefaults.standard.dictionary(forKey: idsKey) as? [String: String] ?? [:]
+        dict.removeValue(forKey: eventID.uuidString)
+        UserDefaults.standard.set(dict, forKey: idsKey)
+    }
+}
+
+#endif

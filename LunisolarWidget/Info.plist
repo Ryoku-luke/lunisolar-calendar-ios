@@ -17,9 +17,13 @@
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>1.0.1</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<!-- 灵动岛 Live Activities：渲染由 Widget 扩展负责，扩展自身必须声明支持
+	     （主 App Info.plist 已声明，缺此键 → 系统不启用 Live Activities → 上岛无效） -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

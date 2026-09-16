@@ -36,7 +36,7 @@ public final class EventStore {
 
     /// 查询缓存：按日期首日缓存 occurs(on:) 结果，避免月视图 42 格 × N 事件全量遍历
     private var eventCache: [Date: [CalendarEvent]] = [:]
-    private var statsCache: [Date: (count: Int, priority: Priority?)] = [:]
+    private var statsCache: [Date: (count: Int, priority: Priority?, priorities: [Priority])] = [:]
 
     /// 事件起始日农历缓存（key = event.id）。
     /// CalendarEvent.startDate 不可变，农历转换结果只依赖 startDate，
@@ -253,7 +253,13 @@ public final class EventStore {
     // MARK: - CRUD
 
     /// 单条插入：二分定位 + 索引平移，O(log N)。
+    /// P3-6 修复：同 id 已存在时直接忽略（防御性——当前调用方均以 UUID() 新建，
+    /// 但避免未来某路径误用 add 覆盖已有事件，导致数组内重复 id、idToIndex 被覆盖的数据损坏）。
     public func add(_ event: CalendarEvent, skipSync: Bool = false) {
+        guard indexOfEvent(id: event.id) == nil else {
+            AppLogger.app.warning("add 忽略重复 id：\(event.id.uuidString)（已存在，如需修改请用 update）")
+            return
+        }
         let at = sortedInsertionIndex(for: event.startDate)
         events.insert(event, at: at)
         // idToIndex 维护：新项 at，所有>=at 的下标 +1
@@ -533,16 +539,19 @@ public final class EventStore {
         eventStats(on: date).count > 0
     }
 
-    /// 单次遍历同时返回事件数量和最高优先级，避免 calendarGrid 里调两次
-    public func eventStats(on date: Date) -> (count: Int, priority: Priority?) {
+    /// 单次遍历同时返回事件数量、最高优先级与全部优先级（按事件顺序），
+    /// 供月视图格子事件点逐点按各自优先级着色（与"当日安排"列表竖线颜色对应）
+    public func eventStats(on date: Date) -> (count: Int, priority: Priority?, priorities: [Priority]) {
         let cal = Calendar(identifier: .gregorian)
         let key = cal.startOfDay(for: date)
         if let cached = statsCache[key] { return cached }
         var count = 0
         var best: Priority? = nil
+        var list: [Priority] = []
         for ev in events {
             if ev.occurs(on: date, cachedStartLunar: lunar(for: ev)) {
                 count += 1
+                list.append(ev.priority)
                 switch (best, ev.priority) {
                 case (nil, let p):          best = p
                 case (.some(let cur), let p) where p > cur: best = p
@@ -550,7 +559,7 @@ public final class EventStore {
                 }
             }
         }
-        let result = (count, best)
+        let result = (count, best, list)
         statsCache[key] = result
         return result
     }

@@ -4,6 +4,14 @@ import SwiftUI
 import UIKit
 #endif
 
+// MARK: - 新建 / 编辑日程（iOS 27 原生化改造）
+//
+// 设计对齐系统「日历 / 提醒事项」：Form + insetGrouped 分组列表、
+// 行内 LabeledContent + Menu（替代旧版横向 chip 按钮）、
+// 原生 segmented 类型切换、toolbar 取消/保存、编辑态底部红色删除。
+// 说明：EventEditView 不再自包 NavigationStack（push 场景继承外层导航；
+// sheet 场景由调用方包 NavigationStack，见 DayDetailView）。
+
 struct EventEditView: View {
     @Environment(EventStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -21,10 +29,9 @@ struct EventEditView: View {
     @State private var reminderMinutesBefore: Int = 10
     @State private var isCompleted: Bool = false
     @State private var showDeleteConfirm = false
-    @Environment(\.horizontalSizeClass) private var hSizeClass
-    private var isWide: Bool { hSizeClass == .regular }
     private var isEditing: Bool { original != nil }
     private var gregorian: Calendar { Calendar(identifier: .gregorian) }
+    private var reminderOptions: [Int] { [0, 5, 10, 15, 30, 60, 1440] }
     /// 节日自适应强调色（与月/日/设置页一致）
     private var accent: Color {
         let fs = FestivalManager.festivals(on: defaultDate, lunar: defaultDate.lunar)
@@ -56,184 +63,189 @@ struct EventEditView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: AppTheme.Spacing.section) {
-                    titleBlock
-                    timeBlock
-                    repeatBlock
-                    priorityBlock
-                    detailBlock
-                    if isEditing { statusBlock }
-                    Color.clear.frame(height: AppTheme.Spacing.xxl)
-                }
-                .padding(.horizontal, isWide ? AppTheme.Spacing.xxl : AppTheme.Spacing.lg)
-                .padding(.top, AppTheme.Spacing.lg)
-                .frame(maxWidth: isWide ? 760 : .infinity)
-                .frame(maxWidth: .infinity)
-            }
-            .festiveWallpaper(accent: accent)
-            .safeAreaInset(edge: .bottom, spacing: 0) { bottomActions }
-            .navigationTitle(isEditing ? "编辑\(type.uiLabel)" : "新建\(type.uiLabel)")
-            #if canImport(UIKit)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.navBar, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
-                        .font(.subheadline.weight(.medium))
-                        .touchTarget(min: AppTheme.Touch.minTarget)
-                }
-            }
-            #endif
-            .tint(accent)
-            .alert("确认删除", isPresented: $showDeleteConfirm) {
-                Button("删除", role: .destructive) {
-                    if let ev = original { store.delete(ev) }
-                    // 同保存路径：删除也要立即落盘，避免防抖窗口内杀进程导致删除被回滚
-                    store.flushPendingSave()
-                    dismiss()
-                }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("确定要删除这个\(type.uiLabel)吗？删除后无法恢复。")
-            }
-        }
-    }
-
-    private var bottomActions: some View {
-        let accent = self.accent
-        return VStack(spacing: AppTheme.Spacing.sm) {
-            if isEditing {
-                Button {
-                    showDeleteConfirm = true
-                } label: {
-                    Label("删除此\(type.uiLabel)", systemImage: "trash.fill")
-                }
-                .buttonStyle(DestructiveActionButtonStyle())
-                .pressableFeedback()
-            }
-            Button {
-                save()
-            } label: {
-                Label(isEditing ? "保存修改" : "添加\(type.uiLabel)", systemImage: "checkmark.circle.fill")
-            }
-            .buttonStyle(PrimaryActionButtonStyle(accent: accent))
-            .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
-        }
-        .padding(.horizontal, AppTheme.Spacing.lg)
-        .padding(.top, AppTheme.Spacing.md)
-        .padding(.bottom, AppTheme.Spacing.lg)
-        .background(
-            UnevenRoundedRectangle(cornerRadii: .init(topLeading: 24, topTrailing: 24))
-                .fill(.ultraThinMaterial).ignoresSafeArea(edges: .bottom)
-        )
-        .overlay(
-            UnevenRoundedRectangle(cornerRadii: .init(topLeading: 24, topTrailing: 24))
-                .stroke(Color.separator.opacity(0.22), lineWidth: AppTheme.Stroke.hair)
-        )
-    }
-
-    private var titleBlock: some View {
-        _EditSectionCard(
-            header: sectionHeader("内容", icon: "pencil.and.scribble", tint: accent),
-            tint: accent
-        ) {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-                TextField("请输入标题", text: $title, axis: .vertical)
-                    .font(AppTheme.Font.title2.weight(.semibold))
+        Form {
+            // 标题 + 类型（系统日历：无 section header 的第一组）
+            Section {
+                TextField("标题", text: $title, axis: .vertical)
+                    .font(.title2.weight(.semibold))
                     .lineLimit(1...3)
-                    .frame(minHeight: 36)
-                FlexibleGrid(horizontalSpacing: AppTheme.Spacing.sm, verticalSpacing: AppTheme.Spacing.sm) {
+                    .padding(.vertical, 2)
+                Picker("类型", selection: $type) {
                     ForEach(EventType.allCases) { t in
-                        Button { withAnimation(AppTheme.Motion.pressInOut) { type = t } } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: t.iconName).font(AppTheme.Font.caption.weight(.semibold))
-                                Text(t.uiLabel)
-                            }
-                        }
-                        .buttonStyle(SelectChipStyle(isSelected: type == t, tint: t.tintColor))
-                        .pressableFeedback()
+                        Text(t.uiLabel).tag(t)
                     }
                 }
+                .pickerStyle(.segmented)
             }
-        }
-    }
 
-    private var timeBlock: some View {
-        _EditSectionCard(
-            header: sectionHeader("时间", icon: "clock.fill", tint: Color.systemOrange),
-            tint: Color.systemOrange
-        ) {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+            // 时间
+            Section("时间") {
                 if type != .note {
-                    Toggle(isOn: $isAllDay) {
-                        Label("全天", systemImage: "sun.max").font(AppTheme.Font.bodyBold)
-                    }.tint(accent)
-                    DatePicker(selection: $startDate,
-                               displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]) {
-                        Label("开始", systemImage: "calendar.badge.clock").font(AppTheme.Font.body)
-                    }.environment(\.calendar, gregorian).environment(\.locale, Locale(identifier: "zh_Hans_CN")).datePickerStyle(.compact)
-                    DatePicker(selection: $endDate,
-                               displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute]) {
-                        Label("结束", systemImage: "clock.badge.checkmark").font(AppTheme.Font.body)
-                    }.environment(\.calendar, gregorian).environment(\.locale, Locale(identifier: "zh_Hans_CN")).datePickerStyle(.compact)
+                    Toggle("全天", isOn: $isAllDay)
+                    DatePicker("开始", selection: $startDate,
+                               displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute])
+                        .environment(\.calendar, gregorian)
+                        .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
+                        .datePickerStyle(.compact)
+                    DatePicker("结束", selection: $endDate,
+                               displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute])
+                        .environment(\.calendar, gregorian)
+                        .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
+                        .datePickerStyle(.compact)
                         .onChange(of: startDate, initial: false) { _, newVal in
                             if endDate < newVal { endDate = newVal }
                         }
                 } else {
-                    DatePicker(selection: $startDate, displayedComponents: [.date]) {
-                        Label("记事日期", systemImage: "calendar").font(AppTheme.Font.body)
-                    }.environment(\.calendar, gregorian).environment(\.locale, Locale(identifier: "zh_Hans_CN")).datePickerStyle(.compact)
+                    DatePicker("日期", selection: $startDate, displayedComponents: [.date])
+                        .environment(\.calendar, gregorian)
+                        .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
+                        .datePickerStyle(.compact)
                 }
                 if type != .note {
-                    Toggle(isOn: $reminderEnabled) {
-                        Label("开启提醒", systemImage: "bell.badge.fill").font(AppTheme.Font.bodyBold)
-                    }.tint(Color.systemOrange)
-                    if reminderEnabled {
-                        HStack(alignment: .center, spacing: AppTheme.Spacing.md) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous)
-                                    .fill(Color.systemOrange.opacity(0.14))
-                                Image(systemName: "timer")
-                                    .font(AppTheme.Font.caption.weight(.semibold))
-                                    .foregroundStyle(Color.systemOrange)
+                    LabeledContent("提醒") {
+                        Menu {
+                            Button {
+                                reminderEnabled = false
+                            } label: {
+                                if !reminderEnabled {
+                                    Label("无", systemImage: "checkmark")
+                                } else {
+                                    Text("无")
+                                }
                             }
-                            .frame(width: 24, height: 24)
-                            Text("提前").font(AppTheme.Font.body)
-                            Spacer()
-                            Picker("提前", selection: $reminderMinutesBefore) {
-                                Text("准时").tag(0); Text("5 分钟").tag(5)
-                                Text("10 分钟").tag(10); Text("15 分钟").tag(15)
-                                Text("30 分钟").tag(30); Text("1 小时").tag(60)
-                                Text("1 天").tag(1440)
-                            }.pickerStyle(.menu).tint(Color.systemOrange)
+                            Divider()
+                            ForEach(reminderOptions, id: \.self) { m in
+                                Button {
+                                    reminderEnabled = true
+                                    reminderMinutesBefore = m
+                                } label: {
+                                    if reminderEnabled && reminderMinutesBefore == m {
+                                        Label(reminderLabel(m), systemImage: "checkmark")
+                                    } else {
+                                        Text(reminderLabel(m))
+                                    }
+                                }
+                            }
+                        } label: {
+                            menuValueLabel(reminderEnabled ? reminderLabel(reminderMinutesBefore) : "无")
                         }
-                        .padding(AppTheme.Spacing.md)
-                        .softChipBackground(radius: AppTheme.Radius.md,
-                                             fill: Color.quaternarySystemFill)
+                    }
+                }
+            }
+
+            // 重复 + 优先级（Menu 行替代旧 chip 横排）
+            Section("重复与优先级") {
+                LabeledContent("重复") {
+                    Menu {
+                        ForEach(repeatOptions) { rule in
+                            Button {
+                                withAnimation(AppTheme.Motion.pressInOut) { repeatRule = rule }
+                            } label: {
+                                if repeatRule == rule {
+                                    Label(rule.uiLabel, systemImage: "checkmark")
+                                } else {
+                                    Text(rule.uiLabel)
+                                }
+                            }
+                        }
+                    } label: {
+                        menuValueLabel(repeatRule.uiLabel)
+                    }
+                }
+                LabeledContent("优先级") {
+                    Menu {
+                        ForEach(Priority.allCases) { p in
+                            Button {
+                                withAnimation(AppTheme.Motion.pressInOut) { priority = p }
+                            } label: {
+                                if priority == p {
+                                    Label(p.uiLabel, systemImage: "checkmark")
+                                } else {
+                                    Text(p.uiLabel)
+                                }
+                            }
+                        }
+                    } label: {
+                        menuValueLabel(priority.uiLabel)
+                    }
+                }
+            }
+
+            // 备注
+            Section("备注") {
+                TextField("备注内容（可选）", text: $notes, axis: .vertical)
+                    .font(.body)
+                    .lineLimit(3...8)
+                    .frame(minHeight: 88, alignment: .top)
+            }
+
+            // 状态（仅编辑态）
+            if isEditing {
+                Section("状态") {
+                    Toggle("已完成", isOn: $isCompleted)
+                        .tint(.green)
+                    if let ev = original {
+                        LabeledContent("创建时间", value: formatStamp(ev.createdAt))
+                            .font(.caption)
+                        LabeledContent("更新时间", value: formatStamp(ev.updatedAt))
+                            .font(.caption)
                     }
                 }
             }
         }
+        .navigationTitle(isEditing ? "编辑\(type.uiLabel)" : "新建\(type.uiLabel)")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("取消") { dismiss() }
+                    .font(.subheadline.weight(.medium))
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(isEditing ? "保存" : "添加") { save() }
+                    .fontWeight(.semibold)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityIdentifier(AccessibilityID.editSave)
+            }
+        }
+        .tint(accent)
+        // 编辑态底部红色删除（系统日历同款布局）
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isEditing {
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Text("删除此\(type.uiLabel)")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.plain)
+                .background(.bar)
+                .accessibilityIdentifier(AccessibilityID.editDelete)
+            }
+        }
+        .alert("确认删除", isPresented: $showDeleteConfirm) {
+            Button("删除", role: .destructive) {
+                if let ev = original { store.delete(ev) }
+                // 同保存路径：删除也要立即落盘，避免防抖窗口内杀进程导致删除被回滚
+                store.flushPendingSave()
+                dismiss()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("确定要删除这个\(type.uiLabel)吗？删除后无法恢复。")
+        }
     }
 
-    private var repeatBlock: some View {
-        _EditSectionCard(
-            header: sectionHeader("重复规则", icon: "repeat", tint: Color.systemPurple),
-            tint: Color.systemPurple
-        ) {
-            FlexibleGrid(horizontalSpacing: 6, verticalSpacing: 6) {
-                ForEach(repeatOptions) { rule in
-                    Button { withAnimation(AppTheme.Motion.pressInOut) { repeatRule = rule } } label: {
-                        Text(rule.uiLabel)
-                    }
-                    .buttonStyle(SelectChipStyle(isSelected: repeatRule == rule, tint: accent))
-                    .pressableFeedback()
-                }
-            }
+    /// Menu 右侧值：次要文字 + 上下箭头（原生样式）
+    private func menuValueLabel(_ text: String) -> some View {
+        HStack(spacing: 4) {
+            Text(text)
+                .foregroundStyle(.secondary)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
     }
 
@@ -243,76 +255,16 @@ struct EventEditView: View {
         return base
     }
 
-    private var priorityBlock: some View {
-        _EditSectionCard(
-            header: sectionHeader("优先级", icon: "exclamationmark.3", tint: Color.systemRed),
-            tint: Color.systemRed
-        ) {
-            FlexibleGrid(horizontalSpacing: 6, verticalSpacing: 6) {
-                ForEach(Priority.allCases) { p in
-                    Button { withAnimation(AppTheme.Motion.pressInOut) { priority = p } } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: p == .urgent ? "exclamationmark.octagon.fill" :
-                                            p == .high ? "flame.fill" :
-                                            p == .normal ? "flag.fill" : "flag")
-                                .font(AppTheme.Font.caption)
-                            Text(p.uiLabel)
-                        }
-                    }
-                    .buttonStyle(SelectChipStyle(isSelected: priority == p, tint: p.tintColor))
-                    .pressableFeedback()
-                }
-            }
-        }
-    }
-
-    private var detailBlock: some View {
-        _EditSectionCard(
-            header: sectionHeader("备注", icon: "note.text", tint: Color.systemTeal),
-            tint: Color.systemTeal
-        ) {
-            TextField("备注内容（可选）", text: $notes, axis: .vertical)
-                .font(AppTheme.Font.body).lineLimit(3...8)
-                .frame(minHeight: 96, alignment: .top)
-                .padding(AppTheme.Spacing.md)
-                .softChipBackground(radius: AppTheme.Radius.md,
-                                     fill: Color.quaternarySystemFill)
-        }
-    }
-
-    private var statusBlock: some View {
-        _EditSectionCard(
-            header: sectionHeader("状态", icon: "checkmark.circle.trianglebadge.exclamationmark", tint: Color.systemGreen),
-            tint: Color.systemGreen
-        ) {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-                Toggle(isOn: $isCompleted) {
-                    Label("已完成", systemImage: "checkmark.seal.fill").font(AppTheme.Font.bodyBold)
-                }.tint(Color.systemGreen)
-                if let ev = original {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("创建时间：\(formatStamp(ev.createdAt))")
-                            .font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
-                        Text("更新时间：\(formatStamp(ev.updatedAt))")
-                            .font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func sectionHeader(_ title: String, icon: String, tint: Color) -> some View {
-        HStack(spacing: 6) {
-            ZStack {
-                RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous)
-                    .fill(tint.opacity(0.14))
-                Image(systemName: icon)
-                    .font(AppTheme.Font.caption.weight(.semibold))
-                    .foregroundStyle(tint)
-            }
-            .frame(width: 24, height: 24)
-            Text(title).font(AppTheme.Font.subheadline.weight(.semibold)).foregroundStyle(Color.secondaryLabel)
+    private func reminderLabel(_ minutes: Int) -> String {
+        switch minutes {
+        case 0: return "准时"
+        case 5: return "5 分钟前"
+        case 10: return "10 分钟前"
+        case 15: return "15 分钟前"
+        case 30: return "30 分钟前"
+        case 60: return "1 小时前"
+        case 1440: return "1 天前"
+        default: return "\(minutes) 分钟前"
         }
     }
 
@@ -361,50 +313,6 @@ struct EventEditView: View {
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd HH:mm"
         return fmt.string(from: date)
-    }
-}
-
-private struct FlexibleGrid<Content: View>: View {
-    var horizontalSpacing: CGFloat = 8
-    var verticalSpacing: CGFloat = 8
-    @ViewBuilder var content: () -> Content
-
-    // 流式布局简化实现：单行放不下时换行。
-    // 使用 FlowLayout (Layout 协议) + FallbackFlowLayout (iOS 16 以下)，
-    // FlexibleGrid 只是个壳，真正的布局在 FlowLayout/FallbackFlowLayout 内。
-    //
-    // Layout 协议要求容器直接持有多个子视图（不是 Group 或单一 View），
-    // 所以我们让 ForEach 的结果直接成为 FlowLayout 的 subviews。
-    #if canImport(SwiftUI)
-    var body: some View {
-        if #available(iOS 16.0, macOS 13.0, *) {
-            FlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing) {
-                content()
-            }
-        } else {
-            FallbackFlowLayout(spacing: horizontalSpacing, lineSpacing: verticalSpacing, content: content)
-        }
-    }
-    #endif
-}
-
-/// 编辑页通用分区卡：液态玻璃 + 顶部 section header + tint 浸染
-private struct _EditSectionCard<Header: View, Content: View>: View {
-    let header: Header
-    let tint: Color
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            header
-            content()
-        }
-        .padding(AppTheme.Spacing.lg)
-        .liquidCard(radius: AppTheme.Radius.xl,
-                    material: .thinMaterial,
-                    tint: tint,
-                    shadow: AppTheme.Shadow.card,
-                    highlight: 0.09)
     }
 }
 

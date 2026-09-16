@@ -3,16 +3,20 @@ import SwiftUI
 import LunarCore
 
 struct WeekHeaderView: View {
+    /// 每周起始日（Calendar weekday 语义：1=周日，2=周一）
+    var weekStart: Int = 1
     private let weekdays = ["日","一","二","三","四","五","六"]
     @Environment(\.horizontalSizeClass) private var hSizeClass
     private var isRegular: Bool { hSizeClass == .regular }
     var body: some View {
         HStack(spacing: 0) {
             ForEach(0..<7, id: \.self) { idx in
-                Text(weekdays[idx])
+                // 按起始日旋转顺序；weekday 1=周日 / 7=周六 恒为红色（周末语义与起始日无关）
+                let wd = ((idx + weekStart - 1) % 7) + 1
+                Text(weekdays[wd - 1])
                     // 复用 AppTheme.Font 阶梯（caption/caption2），避免散落硬编码
                     .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
-                    .foregroundStyle(idx == 0 || idx == 6
+                    .foregroundStyle(wd == 1 || wd == 7
                                      ? Color.systemRed.opacity(0.65)
                                      : Color.secondaryLabel.opacity(0.85))
                     .frame(maxWidth: .infinity)
@@ -48,78 +52,142 @@ struct HolidayBadge: View {
 struct DayCellView: View {
     let date: Date, isCurrentMonth: Bool, isSelected: Bool, isToday: Bool
     let lunar: LunarDate, huangli: HuangliDay
-    let hasEvents: Bool, eventPriority: Priority?, eventCount: Int
-    /// 节日强调色（优先）；选中态下与外层节日强调色联动
+    let hasEvents: Bool, eventPriorities: [Priority], eventCount: Int
+    /// 节日强调色（选中节日日的实心框颜色；常态不再染背景）
     var festivalTint: Color? = nil
     var cellAccent: Color? = nil
+    /// 节假日名（如"中秋节"）：节日当天格内只显示节日名，不显示农历
+    var festivalName: String? = nil
+    /// 节气名（如"秋分"）：格内只显示节气名，不显示农历
+    var solarTermName: String? = nil
+    /// 节气主题色（绿色系）
+    var solarTermTint: Color? = nil
     /// 法定假日/调休标记
     var holidayType: HolidayType = .normal
     @Environment(\.horizontalSizeClass) private var hSizeClass
     private var isRegular: Bool { hSizeClass == .regular }
     private var numeralFont: Font { isRegular ? AppTheme.Font.numeralL : AppTheme.Font.numeralM }
-    /// 节日染色强度：节日态 12% / 选中态使用 cellAccent
+    /// 底色：仅「选中」实心填充；今日态红描边区分；**节日/节气不再浅染背景**
+    /// （用户要求：除点击选择的日期外都不要"选择框"式展示）
     private var fillTint: Color? {
         if isSelected { return cellAccent ?? Color.appTint }
-        if let festivalTint { return festivalTint }
-        if isToday { return Color.systemRed.opacity(0.12) }
         return nil
     }
     var body: some View {
-        VStack(spacing: isRegular ? 4 : 2) {
-            ZStack {
-                if let fill = fillTint {
-                    let shape = RoundedRectangle(cornerRadius: isRegular ? 14 : 10, style: .continuous)
-                    ZStack {
-                        shape.fill(isSelected ? fill : fill.opacity(0.14))
-                        if isSelected {
-                            shape
-                                .stroke(Color.white.opacity(0.28), lineWidth: AppTheme.Stroke.hair)
-                        } else if festivalTint != nil {
-                            shape
-                                .stroke(fill.opacity(0.45), lineWidth: AppTheme.Stroke.hair)
-                        } else if isToday {
-                            shape
-                                .stroke(Color.systemRed.opacity(0.35), lineWidth: AppTheme.Stroke.hair)
-                        }
-                    }
-                    .shadow(color: isSelected
-                            ? (cellAccent ?? Color.appTint).opacity(0.28)
-                            : Color.black.opacity(0.0),
-                            radius: isSelected ? 8 : 0, x: 0, y: isSelected ? 3 : 0)
-                }
+        // 选中/今日背景挂在整个格子（公历 + 农历 + 事件行）外层：
+        // 农历与公历同框，选中框内农历/名称白字可见；节日/节气以格内文字标注区分。
+        // 休/班徽章改为日期**右上角**显示（用户要求：从底部移到右上角）。
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: isRegular ? 4 : 2) {
                 Text("\(date.day)")
                     .font(numeralFont)
                     .foregroundStyle(foregroundForDay)
-            }
-            .frame(height: isRegular ? 40 : 34).frame(maxWidth: .infinity)
-            Text(lunar.shortDisplayString)
-                .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
-                .foregroundStyle(foregroundForLunar)
-                .lineLimit(1).minimumScaleFactor(0.6)
-            if hasEvents {
-                HStack(spacing: 2) {
-                    ForEach(0..<min(eventCount, 3), id: \.self) { _ in
-                        Capsule().fill(eventPriority?.tintColor ?? Color.appTint)
-                            .frame(width: isRegular ? 12 : 9, height: isRegular ? 5 : 4)
+                if lunar.isUnsupported {
+                    // 越界（1900 前 / 2100 后）：不显示农历，避免假农历误导
+                    Color.clear.frame(height: isRegular ? 14 : 12)
+                } else if let festivalName, let term = solarTermName {
+                    // 节气与节日同日并存：同行显示"节日名 ·节气名"（节日色 + 绿色）
+                    HStack(spacing: 2) {
+                        Text(festivalName == term ? term : festivalName)
+                            .foregroundStyle(
+                                isSelected
+                                    ? Color.white.opacity(0.95)
+                                    : (festivalTint ?? Color.festiveRed)
+                            )
+                        if festivalName != term {
+                            Text("·\(term)")
+                                .foregroundStyle(
+                                    isSelected
+                                        ? Color.white.opacity(0.95)
+                                        : (solarTermTint ?? Color.systemGreen)
+                                )
+                        }
                     }
-                    if holidayType != .normal {
-                        HolidayBadge(type: holidayType, isRegular: isRegular)
-                    }
+                    .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                } else if let festivalName {
+                    // 节假日当天：只显示节日名（节日色），不显示农历
+                    Text(festivalName)
+                        .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
+                        .foregroundStyle(
+                            isSelected
+                                ? Color.white.opacity(0.95)
+                                : (festivalTint ?? Color.festiveRed)
+                        )
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                } else if let term = solarTermName {
+                    // 节气日：只显示节气名（绿色），不显示农历
+                    Text(term)
+                        .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
+                        .foregroundStyle(
+                            isSelected
+                                ? Color.white.opacity(0.95)
+                                : (solarTermTint ?? Color.systemGreen)
+                        )
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                } else {
+                    Text(lunar.shortDisplayString)
+                        .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
+                        .foregroundStyle(foregroundForLunar)
+                        .lineLimit(1).minimumScaleFactor(0.6)
                 }
-                .frame(height: isRegular ? 6 : 5)
-            } else if holidayType != .normal {
+                if hasEvents {
+                    HStack(spacing: 2) {
+                        ForEach(0..<min(eventCount, 3), id: \.self) { i in
+                            // 事件点逐个按各自事件优先级着色，与"当日安排"列表竖线颜色对应
+                            Capsule().fill(i < eventPriorities.count
+                                           ? eventPriorities[i].tintColor
+                                           : Color.appTint)
+                                .frame(width: isRegular ? 12 : 9, height: isRegular ? 5 : 4)
+                        }
+                    }
+                    .frame(height: isRegular ? 6 : 5)
+                } else {
+                    Color.clear.frame(height: isRegular ? 6 : 5)
+                }
+            }
+            .padding(.vertical, isRegular ? 6 : 4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(dayCellBackground)
+
+            // 休/班徽章：日期右上角（随格子整体淡显）
+            if holidayType != .normal {
                 HolidayBadge(type: holidayType, isRegular: isRegular)
-            } else {
-                Color.clear.frame(height: isRegular ? 6 : 5)
+                    .padding(.top, isRegular ? 6 : 4)
+                    .padding(.trailing, isRegular ? 6 : 4)
             }
         }
-        .padding(.vertical, isRegular ? 6 : 4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .opacity(isCurrentMonth ? 1 : 0.32)
+        // 选中弹簧回弹：切换瞬间轻微放大（1.05）并带阻尼振荡，增强"选中物理感"；
+        // 值动画只作用于 isSelected 变化时刻，非选中格不受影响
+        .scaleEffect(isSelected ? 1.05 : 1.0)
+        .animation(.spring(response: 0.34, dampingFraction: 0.52, blendDuration: 0.12),
+                   value: isSelected)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(date.day)日 \(lunar.shortDisplayString)\(hasEvents ? " \(eventCount)项日程" : "")\(isToday ? " 今天" : "")")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// 格子背景（整格包裹公历+农历+事件行）：
+    /// 仅「选中」实心填充；今日红色描边；节日/节气以格内文字标注区分，不再浅染背景。
+    @ViewBuilder
+    private var dayCellBackground: some View {
+        if let fill = fillTint {
+            // fillTint 仅在选中态非空；选中节日日沿用节日色实心框
+            let shape = RoundedRectangle(cornerRadius: isRegular ? 14 : 10, style: .continuous)
+            shape
+                .fill(fill)
+                .overlay {
+                    shape.stroke(Color.white.opacity(0.28), lineWidth: AppTheme.Stroke.hair)
+                }
+                .shadow(color: (cellAccent ?? Color.appTint).opacity(0.22),
+                        radius: 5, x: 0, y: 2)
+        } else if isToday {
+            // 今日：红色描边圆角（无填充），与「选中实心」区分
+            RoundedRectangle(cornerRadius: isRegular ? 14 : 10, style: .continuous)
+                .stroke(Color.systemRed.opacity(0.55), lineWidth: isRegular ? 2 : 1.5)
+        }
     }
     private var foregroundForDay: Color {
         if isSelected { return .white }
@@ -153,8 +221,10 @@ extension DayCellView: Equatable {
             && lhs.isToday == rhs.isToday
             && lhs.lunar == rhs.lunar
             && lhs.huangli == rhs.huangli
+            && lhs.festivalName == rhs.festivalName
+            && lhs.solarTermName == rhs.solarTermName
             && lhs.hasEvents == rhs.hasEvents
-            && lhs.eventPriority == rhs.eventPriority
+            && lhs.eventPriorities == rhs.eventPriorities
             && lhs.eventCount == rhs.eventCount
             && lhs.festivalTint == rhs.festivalTint
             && lhs.cellAccent == rhs.cellAccent

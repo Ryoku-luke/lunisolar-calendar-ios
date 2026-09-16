@@ -458,7 +458,7 @@ public struct LunarCardWidgetView: View {
                     Text("\(lunar.monthName)\(lunar.dayName)")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.9))
-                    Text("\(entry.date.year) 年 \(entry.date.month) 月 \(entry.date.day) 日 · \(entry.date.weekdaySymbol)")
+                    Text(verbatim: "\(entry.date.year) 年 \(entry.date.month) 月 \(entry.date.day) 日 · \(entry.date.weekdaySymbol)")
                         .font(.system(size: WidgetUI.meta, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.6))
                 } else {
@@ -542,7 +542,7 @@ public struct LunarCardWidgetView: View {
                         .foregroundStyle(Color.white.opacity(0.92))
                     WidgetGhostCapsule(text: "\(lunar.yearGanZhi)年 · 生肖\(lunar.yearAnimal)",
                                        icon: "moon.stars.fill")
-                    Text("\(entry.date.year) 年 \(entry.date.month) 月 \(entry.date.day) 日 · \(entry.date.weekdaySymbol)")
+                    Text(verbatim: "\(entry.date.year) 年 \(entry.date.month) 月 \(entry.date.day) 日 · \(entry.date.weekdaySymbol)")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.62))
                 } else {

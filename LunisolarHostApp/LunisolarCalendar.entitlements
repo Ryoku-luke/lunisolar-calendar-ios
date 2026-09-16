@@ -2,6 +2,21 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!--
+		2026-09-14：移除 iCloud 两 key（个人开发团队 Personal Team 不支持 iCloud 能力，
+		会导致 provisioning profile 无法创建："Personal development teams do not support the iCloud capability"）。
+		保留 App Groups（免费账号支持，Widget 共享数据依赖它）。
+
+		如需启用 CloudKit 同步（需付费开发者账号 $99/年）：
+		1. 在开发者后台创建 iCloud Container：iCloud.com.lunisolar.calendar
+		2. 把以下两段加回本文件，并重新生成 Provisioning Profile：
+		   <key>com.apple.developer.icloud-container-identifiers</key>
+		   <array><string>iCloud.com.lunisolar.calendar</string></array>
+		   <key>com.apple.developer.icloud-services</key>
+		   <array><string>CloudKit</string></array>
+		3. 在 Xcode → Signing & Capabilities 确认 iCloud + CloudKit 已勾选
+		代码侧已做完整降级（启动延迟装配 + isAvailable 探测 + 静默关闭开关），无 entitlement 也不会崩溃。
+	-->
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.com.lunisolar.calendar</string>

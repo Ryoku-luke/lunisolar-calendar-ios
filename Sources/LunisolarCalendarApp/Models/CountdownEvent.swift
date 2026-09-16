@@ -60,7 +60,10 @@ public struct CountdownEvent: Identifiable, Codable, Equatable, Hashable, Sendab
     /// 纪念日的下次周年日期（非闰年 2/29 会落到 2/28，避免闰日生日跳过 2-3 年）
     public func nextAnniversary(from today: Date) -> Date? {
         guard kind == .anniversary else { return nil }
-        let cal = Calendar(identifier: .gregorian)
+        var cal = Calendar(identifier: .gregorian)
+        // 使用当前时区构造周年日期：避免 Linux/UTC 下 date(from:) 返回 UTC 午夜，
+        // 与 UI 显示（本地午夜）错位 8 小时。
+        cal.timeZone = .current
         let nowComps = cal.dateComponents([.year, .month, .day], from: today)
         let origComps = cal.dateComponents([.month, .day], from: date)
         let yearNow = nowComps.year ?? 2026
@@ -70,16 +73,18 @@ public struct CountdownEvent: Identifiable, Codable, Equatable, Hashable, Sendab
             c.month = origComps.month
             c.day   = origComps.day
             c.year  = year
-            if let d = cal.date(from: c) { return d }
-            // 闰日 2/29 在非闰年返回 nil → 退到 2/28
-            if origComps.month == 2 && origComps.day == 29 {
+            c.timeZone = .current
+            // 闰日 2/29 在非闰年显式落到 2/28（不同平台对 date(from:) 处理不一：
+            // 部分会"滚动"到 3/1 而非返回 nil，必须显式判断闰年）
+            if origComps.month == 2 && origComps.day == 29, !Self.isLeapYear(year) {
                 var fallback = DateComponents()
                 fallback.month = 2
                 fallback.day   = 28
                 fallback.year  = year
+                fallback.timeZone = .current
                 return cal.date(from: fallback)
             }
-            return nil
+            return cal.date(from: c)
         }
 
         if let thisYear = resolve(year: yearNow),
@@ -87,6 +92,11 @@ public struct CountdownEvent: Identifiable, Codable, Equatable, Hashable, Sendab
             return thisYear
         }
         return resolve(year: yearNow + 1)
+    }
+
+    /// 公历闰年判定（4 的倍数；100 的倍数需为 400 的倍数）。
+    private static func isLeapYear(_ year: Int) -> Bool {
+        (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
     }
 }
 

@@ -1,8 +1,10 @@
 #if canImport(SwiftUI)
 import SwiftUI
 import LunarCore
+#if canImport(UIKit)
+import UIKit
+#endif
 
-fileprivate final class _Box<T>: @unchecked Sendable { var value: T; init(_ v: T) { self.value = v } }
 fileprivate struct DaySlot: Identifiable, Hashable {
     let date: Date
     let inCurrentMonth: Bool
@@ -21,9 +23,16 @@ fileprivate struct GridCellModel: Identifiable {
     let lunar: LunarDate
     let huangli: HuangliDay
     let festivalTint: Color?
+    /// 节假日名（如"中秋节"）：节日当天格内只显示节日名，不显示农历
+    let festivalName: String?
+    /// 节气名（如"秋分"）：节气日格内只显示节气名，不显示农历
+    let solarTermName: String?
+    /// 节气主题色（绿色系），用于格内"·秋分"小字
+    let solarTermTint: Color?
     let holidayType: HolidayType
     let eventCount: Int
-    let eventPriority: Priority?
+    /// 当日全部事件优先级（按事件顺序），格子事件点逐个着色
+    let eventPriorities: [Priority]
     var id: Date { date }
 }
 
@@ -31,13 +40,20 @@ fileprivate struct MonthGridModel {
     let monthKey: Date
     let revision: Int
     let cells: [GridCellModel]
+    /// 缓存键：月份时间戳 + 事件版本（用于多月份网格缓存字典）
+    var cacheKey: String { "\(monthKey.timeIntervalSince1970)-\(revision)" }
 }
 
 struct CalendarMonthView: View {
     @State private var currentMonth: Date = Date().firstDayOfMonth
-    @Binding private var selectedDate: Date
+    /// 本地选中日期（唯一真相，@State 保证点击后必然重绘）。
+    /// 外部传入 binding 时（iPad 双栏）通过 onChange 双向同步，不在 init 里手动接线，
+    /// 彻底规避"点击日期无反应"（此前 @Binding←局部引用/投影接线的运行时失效问题）。
+    @State private var selectedDate: Date = Date()
     @State private var isPanelExpanded: Bool = false
     @State private var showDateJump = false
+    /// 月份卡片滑动的进入方向：.trailing=下月从右侧滑入，.leading=上月从左侧滑入
+    @State private var monthSlideEdge: Edge = .trailing
     #if canImport(UIKit)
     @GestureState private var dragOffsetX: CGFloat = 0
     @State private var isDragging: Bool = false
@@ -46,7 +62,11 @@ struct CalendarMonthView: View {
     /// 月网格派生数据缓存：仅当月份或事件版本变化时重建。
     /// 横滑期间 dragOffsetX 每帧令 body 重算，但命中此缓存后 42 格的
     /// 农历转换/黄历生成/节日遍历/事件统计全部 O(1) 复用，不再每帧重算。
-    @State private var gridCache: MonthGridModel?
+    /// 月网格派生数据缓存（多月份字典）：key = "月份-版本"。
+    /// 滑动切换月份时相邻月份已预填充 → 动画期间零同步重算，消除卡顿。
+    @State private var gridCache: [String: MonthGridModel] = [:]
+    /// 每周起始日（Calendar weekday 语义：1=周日，2=周一；设置页可改）
+    @AppStorage("Lunisolar.weekStart") private var weekStart: Int = 1
     @Environment(EventStore.self) private var store
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
@@ -54,17 +74,18 @@ struct CalendarMonthView: View {
     /// - iPhone 根页：true（自身即导航根）
     /// - iPad 双栏侧栏：false（由 NavigationSplitView 的列提供导航上下文，避免侧栏内嵌栈）
     private let embedsInNavigationStack: Bool
+    /// 可选外部绑定（iPad 双栏与 DayDetailView 联动）；本地 @State 为唯一真相，onChange 双向同步
+    private var externalSelectedDate: Binding<Date>?
     // iPad 侧栏内「倒数日 / 设置」改用 sheet 弹出（push 会挤在窄列里）
     @State private var showCountdown = false
     @State private var showSettings = false
 
     init(selectedDate: Binding<Date>? = nil, embedsInNavigationStack: Bool = true) {
         self.embedsInNavigationStack = embedsInNavigationStack
+        self.externalSelectedDate = selectedDate
         if let binding = selectedDate {
-            self._selectedDate = binding
-        } else {
-            let localBox = _Box(Date())
-            self._selectedDate = Binding(get: { localBox.value }, set: { localBox.value = $0 })
+            // 外部绑定存在时以它的当前值作为初始选中（@State 显式初始化是官方支持模式）
+            self._selectedDate = State(initialValue: binding.wrappedValue)
         }
     }
 
@@ -91,45 +112,17 @@ struct CalendarMonthView: View {
                 .ignoresSafeArea()
 
             // iPhone：当日卡片内容可能超过一屏，允许纵向滚动；
-            // iPad 侧栏只有标题+网格，固定不滚动。
-            if isIPadSplit {
+            // iPad 侧栏：同样包 ScrollView，防止内容超高被裁切（网格 7 列在窄栏自适应）
+            ScrollView(showsIndicators: false) {
                 monthColumn(accent: accent)
-            } else {
-                ScrollView(showsIndicators: false) {
-                    monthColumn(accent: accent)
-                }
-            }
-
-            if !isIPadSplit {
-                VStack { Spacer(); HStack {
-                    Spacer()
-                    NavigationLink {
-                        EventEditView(editing: nil, defaultDate: selectedDate).environment(store)
-                    } label: {
-                        // 液态玻璃 FAB：节日色自动切换，克制装饰（去除顶部高光 overlay 叠加层）
-                        Image(systemName: "plus")
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .frame(width: 60, height: 60)
-                            .background(
-                                Circle().fill(LinearGradient(
-                                    colors: [accent, accent.opacity(0.80)],
-                                    startPoint: .topLeading, endPoint: .bottomTrailing
-                                ))
-                            )
-                            .overlay(Circle().stroke(Color.white.opacity(0.22), lineWidth: AppTheme.Stroke.hair))
-                            .shadow(color: accent.opacity(0.30), radius: 18, x: 0, y: 8)
-                    }
-                    .buttonStyle(.plain)
-                    .pressableFeedback()
-                    .padding(.trailing, AppTheme.Spacing.xl)
-                    .padding(.bottom, AppTheme.Spacing.xl)
-                }}
             }
         }
         .navigationTitle("日历")
         #if canImport(UIKit)
-        .navigationBarTitleDisplayMode(.large)
+        // inline 模式：导航栏紧凑（减少头部大块空白）、标题必然渲染、
+        // 无 large↔inline 折叠动画（过渡更稳定）。月视图内容本身是网格+卡片，
+        // 不需要 large title 的空间感。
+        .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.navBar, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
@@ -142,9 +135,22 @@ struct CalendarMonthView: View {
                     Label("今天", systemImage: "sparkles")
                         .font(.subheadline.weight(.semibold))
                         .touchTarget(min: AppTheme.Touch.minTarget)
+                        .accessibilityIdentifier(AccessibilityID.todayJump)
                 }
                     .tint(accent)
                     .pressableFeedback()
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                // 原生 iOS 风格：系统「+」进入新建日程（替代原自定义渐变 FAB）
+                NavigationLink {
+                    EventEditView(editing: nil, defaultDate: selectedDate).environment(store)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 17, weight: .semibold))
+                        .touchTarget(min: AppTheme.Touch.minTarget)
+                }
+                .accessibilityLabel("新建日程")
+                .accessibilityIdentifier(AccessibilityID.monthNewEvent)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -187,8 +193,37 @@ struct CalendarMonthView: View {
             NavigationStack { CountdownView() }
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView().environment(store)
+            // SettingsView 自身不再包导航栈，sheet 场景补一层（push 场景继承外层导航）
+            NavigationStack { SettingsView().environment(store) }
         }
+        // 本地选中 → 同步外部（iPad 双栏联动 DayDetailView）
+        .onChange(of: selectedDate) { _, newValue in
+            externalSelectedDate?.wrappedValue = newValue
+        }
+        // 外部选中变化（DateJumpView / 双栏联动）→ 同步本地
+        .onChange(of: externalSelectedDate?.wrappedValue) { _, newValue in
+            guard let nv = newValue, !nv.isSameDay(as: selectedDate) else { return }
+            selectedDate = nv
+            currentMonth = nv.firstDayOfMonth
+        }
+        // 月份变化 → 预填充相邻两个月网格（滑动动画期间直接命中缓存，零同步重算）
+        .onChange(of: currentMonth) { _, newMonth in
+            prefetchGrid(for: newMonth.addingMonths(-1))
+            prefetchGrid(for: newMonth)
+            prefetchGrid(for: newMonth.addingMonths(1))
+        }
+        // 网格缓存填充（SwiftUI 未定义行为警告修复）：
+        // 在 body 求值之外异步重建缓存；期间 body 命中缓存或临时纯计算，不再写 @State
+        .task(id: gridCacheKey) {
+            let model = buildGridModel(for: currentMonth)
+            gridCache[model.cacheKey] = model
+        }
+    }
+
+    /// 预构建某月网格模型写入缓存（滑动切换零卡顿的关键）
+    private func prefetchGrid(for month: Date) {
+        let model = buildGridModel(for: month)
+        gridCache[model.cacheKey] = model
     }
 
     /// 月历纵向列：月份标题 + 节气条 + 网格（iPhone 下方还有当日卡片）。
@@ -196,11 +231,19 @@ struct CalendarMonthView: View {
         VStack(spacing: 0) {
             monthHeader()
                 .padding(.horizontal, AppTheme.Spacing.xl)
-                .padding(.top, 12).padding(.bottom, AppTheme.Spacing.sm)
+                .padding(.top, 8).padding(.bottom, AppTheme.Spacing.sm)
             solarTermBar(accent: accent)
                 .padding(.horizontal, AppTheme.Spacing.xl)
                 .padding(.bottom, AppTheme.Spacing.xs)
-            calendarShell(accent: accent)
+            // 卡片式月份滑动：ZStack 中旧网格随方向滑出、新网格滑入（.id 变化触发 transition）
+            ZStack {
+                calendarShell(accent: accent)
+                    .id(currentMonth)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: monthSlideEdge),
+                        removal: .move(edge: monthSlideEdge == .trailing ? .leading : .trailing)
+                    ))
+            }
                 .padding(.horizontal, AppTheme.Spacing.md)
                 #if canImport(UIKit)
                 // 拖拽视差 + 轻微缩放，增强手势感（仅在判定为水平拖拽时）
@@ -232,47 +275,52 @@ struct CalendarMonthView: View {
         return Color.appTint
     }
 
-    /// 全屏柔和渐变背景：节日强调色弱染色，平日保持 SystemGrouped
+    /// 原生风格背景：系统分组背景 + 极淡节日染色（去掉 iOS 26 模糊色斑壁纸特效）
     @ViewBuilder
     private func festiveBackground(accent: Color) -> some View {
         ZStack {
             Color.systemGroupedBackground
             LinearGradient(
-                colors: [accent.opacity(0.08), accent.opacity(0.02), Color.clear],
-                startPoint: .topLeading, endPoint: .bottomTrailing
+                colors: [accent.opacity(0.04), Color.clear],
+                startPoint: .top, endPoint: .bottom
             )
-            // 两个模糊的色斑，增强 iOS 26 壁纸感
-            Circle()
-                .fill(accent.opacity(0.06))
-                .frame(width: 380, height: 380)
-                .blur(radius: 80)
-                .offset(x: -140, y: -160)
-            Circle()
-                .fill(accent.opacity(0.05))
-                .frame(width: 320, height: 320)
-                .blur(radius: 72)
-                .offset(x: 120, y: 340)
         }
     }
 
     private func monthHeader() -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.md) {
-            Text("\(currentMonth.month)月")
-                .font(AppTheme.Font.hero).foregroundStyle(Color.label)
-            Text("\(currentMonth.year)")
-                .font(AppTheme.Font.title3).foregroundStyle(Color.tertiaryLabel)
+            // 月份标题可点击 → 弹出日期跳转（主流日历交互：点标题选月份/年份）
+            Button {
+                showDateJump = true
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
+                    // verbatim：避免 LocalizedStringKey 对 Int 插值按系统 locale 加千位分隔
+                    // （英文 locale 下 2026 会渲染成 "2,026"）；numericText 让月/年数字滚动过渡更自然
+                    Text(verbatim: "\(currentMonth.month)月")
+                        .font(AppTheme.Font.hero).foregroundStyle(Color.label)
+                        .contentTransition(.numericText())
+                    Text(verbatim: "\(currentMonth.year)")
+                        .font(AppTheme.Font.title3).foregroundStyle(Color.tertiaryLabel)
+                        .contentTransition(.numericText())
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.tertiaryLabel)
+                        .padding(.bottom, 6)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pressableFeedback()
+            .accessibilityLabel("选择月份或年份")
+            .accessibilityHint("打开日期跳转面板")
             Spacer()
             HStack(spacing: AppTheme.Spacing.sm) {
                 Button {
-                    withAnimation(AppTheme.Motion.screen) {
-                        currentMonth = currentMonth.addingMonths(-1)
-                    }
+                    changeMonth(by: -1)
                 } label: { chevronButton("chevron.left") }
                     .pressableFeedback()
                 Button {
-                    withAnimation(AppTheme.Motion.screen) {
-                        currentMonth = currentMonth.addingMonths(1)
-                    }
+                    changeMonth(by: 1)
                 } label: { chevronButton("chevron.right") }
                     .pressableFeedback()
             }
@@ -310,16 +358,36 @@ struct CalendarMonthView: View {
     }
 
     private func chevronButton(_ name: String) -> some View {
-        Image(systemName: name).font(.title2.weight(.semibold)).foregroundStyle(Color.secondaryLabel)
+        Image(systemName: name).font(.title2.weight(.semibold)).foregroundStyle(Color.systemBlue)
             .frame(width: AppTheme.Touch.minTarget, height: AppTheme.Touch.minTarget)
-            .background(
-                ZStack {
-                    Circle().fill(.ultraThinMaterial)
-                    Circle().stroke(Color.white.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
-                }
-            )
-            .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
             .contentShape(Circle())
+    }
+
+    /// 卡片式月份切换：设置滑动进入方向后用 withAnimation 变更 currentMonth，
+    /// 触发 ZStack 中日历网格的 .id + .transition 滑动转场（旧网格滑出、新网格滑入）。
+    /// 同时把选中日期联动到新月份（同日存在则保持，否则取月末），
+    /// 避免"切月后日期卡仍显示上月内容"的逻辑不通。
+    private func changeMonth(by offset: Int) {
+        monthSlideEdge = offset > 0 ? .trailing : .leading
+        withAnimation(AppTheme.Motion.screen) {
+            currentMonth = currentMonth.addingMonths(offset)
+            selectedDate = Self.clampedToMonth(selectedDate, in: currentMonth)
+        }
+    }
+
+    /// 将日期钳制到目标月份：同日存在则保持原日，否则取目标月最后一天（如 1/31 → 2/28）。
+    private static func clampedToMonth(_ date: Date, in month: Date) -> Date {
+        let cal = Calendar(identifier: .gregorian)
+        var comps = cal.dateComponents([.year, .month, .day], from: date)
+        let target = cal.dateComponents([.year, .month], from: month)
+        comps.year = target.year
+        comps.month = target.month
+        if let day = comps.day,
+           let dayCount = cal.range(of: .day, in: .month, for: month)?.count,
+           day > dayCount {
+            comps.day = dayCount
+        }
+        return cal.date(from: comps) ?? date
     }
 
     #if canImport(UIKit)
@@ -339,33 +407,43 @@ struct CalendarMonthView: View {
                 let dx = value.translation.width
                 let dy = value.translation.height
                 guard abs(dx) > swipeThreshold && abs(dx) > 1.5 * abs(dy) else { return }
-                withAnimation(AppTheme.Motion.screen) {
-                    currentMonth = dx < 0
-                        ? currentMonth.addingMonths(1)
-                        : currentMonth.addingMonths(-1)
-                }
+                // 卡片式滑动切换：左滑下月（从右滑入）、右滑上月（从左滑入）
+                changeMonth(by: dx < 0 ? 1 : -1)
             }
     }
     #endif
 
     /// 返回当前月的网格派生数据；月份/事件版本未变时直接复用缓存。
-    /// 注意：这里在 body 求值期间条件性回写 @State 是 SwiftUI 允许的模式
-    /// （仅在 key 失配时写一次，写入后下一帧即命中，不构成更新循环）。
-    private func gridModel() -> MonthGridModel {
-        if let cached = gridCache,
-           cached.monthKey == currentMonth,
-           cached.revision == store.revision {
-            return cached
-        }
-        let slots = daysForMonth()
+    /// SwiftUI 未定义行为警告修复：body 求值期间**不再回写 @State gridCache**
+    /// （Xcode 报 "Modifying state during view update, this will cause undefined behavior"，
+    ///  调用栈直指本方法）。未命中时直接构建返回（纯计算无副作用），
+    /// 缓存由 `.task(id: gridCacheKey)` 在 body 外异步填充。
+    private func gridModel(for month: Date) -> MonthGridModel {
+        // body 求值期间只读缓存，不写 @State（避免 SwiftUI 未定义行为警告）；
+        // 缓存写入统一由 .task(id:) 与 onChange 预填充负责
+        if let cached = gridCache[cacheKey(month: month)] { return cached }
+        return buildGridModel(for: month)
+    }
+
+    /// 纯计算构建网格模型（无副作用，可在 body 与 .task 中安全调用）。
+    private func buildGridModel(for month: Date) -> MonthGridModel {
+        let slots = daysForMonth(month)
         var cells: [GridCellModel] = []
         cells.reserveCapacity(slots.count)
         for slot in slots {
             let d = slot.date
             // 农历转换 → 节日查询（复用预计算 lunar）→ 颜色解析，每月只做一次
             let lunar = d.lunar
-            let festivalTint = FestivalManager.festivals(on: d, lunar: lunar).first
-                .map { Color(hex: $0.accentHex) }
+            let festivals = FestivalManager.festivals(on: d, lunar: lunar)
+            // 节气与节日可同日并存（如清明既是节气也是祭祖日）：
+            // 节气 → 格内绿色"节气名"文字标注，不染色背景；
+            // 节日 → 格内节日名文字 + 节日色（不再浅染背景，除选中外无"选择框"）
+            let solarTermFest = festivals.first { $0.kind == .solarTerm }
+            let otherFest = festivals.first { $0.kind != .solarTerm }
+            let festivalTint = otherFest.map { Color(hex: $0.accentHex) }
+            let festivalName = otherFest?.name
+            let solarTermName = solarTermFest?.name
+            let solarTermTint = solarTermFest.map { Color(hex: $0.accentHex) }
             let stats = store.eventStats(on: d)
             cells.append(GridCellModel(
                 date: d,
@@ -373,22 +451,33 @@ struct CalendarMonthView: View {
                 lunar: lunar,
                 huangli: HuangliGenerator.generate(for: d),
                 festivalTint: festivalTint,
+                festivalName: festivalName,
+                solarTermName: solarTermName,
+                solarTermTint: solarTermTint,
                 holidayType: HolidayProvider.info(for: d).type,
                 eventCount: stats.count,
-                eventPriority: stats.priority
+                eventPriorities: stats.priorities
             ))
         }
-        let model = MonthGridModel(monthKey: currentMonth, revision: store.revision, cells: cells)
-        gridCache = model
-        return model
+        return MonthGridModel(monthKey: month, revision: store.revision, cells: cells)
+    }
+
+    /// 缓存键：月份时间戳 + 事件版本
+    private func cacheKey(month: Date) -> String {
+        "\(month.timeIntervalSince1970)-\(store.revision)"
+    }
+
+    /// 缓存失效键：月份或事件版本变化时重建（用于 .task(id:) 触发）。
+    private var gridCacheKey: String {
+        "\(currentMonth.timeIntervalSince1970)-\(store.revision)"
     }
 
     private func calendarShell(accent: Color) -> some View {
-        let grid = gridModel()
+        let grid = gridModel(for: currentMonth)
         let columns = [GridItem](repeating: GridItem(.flexible(), spacing: 0), count: 7)
         return VStack(alignment: .leading, spacing: 0) {
-            WeekHeaderView()
-            LazyVGrid(columns: columns, spacing: 2) {
+            WeekHeaderView(weekStart: weekStart)
+            LazyVGrid(columns: columns, spacing: 4) {
                 ForEach(grid.cells) { cell in
                     let d = cell.date
                     DayCellView(date: d, isCurrentMonth: cell.inCurrentMonth,
@@ -397,11 +486,14 @@ struct CalendarMonthView: View {
                                 lunar: cell.lunar,
                                 huangli: cell.huangli,
                                 hasEvents: cell.eventCount > 0,
-                                eventPriority: cell.eventPriority,
+                                eventPriorities: cell.eventPriorities,
                                 eventCount: cell.eventCount,
                                 festivalTint: cell.festivalTint,
                                 cellAccent: cell.festivalTint
                                     ?? (d.isSameDay(as: selectedDate) ? accent : nil),
+                                festivalName: cell.festivalName,
+                                solarTermName: cell.solarTermName,
+                                solarTermTint: cell.solarTermTint,
                                 holidayType: cell.holidayType)
                         .equatable()
                         .frame(minHeight: AppTheme.Touch.minCellHeight)
@@ -409,22 +501,49 @@ struct CalendarMonthView: View {
                         .onTapGesture {
                             withAnimation(AppTheme.Motion.pressInOut) { selectedDate = d }
                         }
+                        // 原生上下文菜单：长按日期格 → 快捷操作（原创，克制不加额外功能）
+                        .contextMenu {
+                            Button {
+                                withAnimation(AppTheme.Motion.pressInOut) { selectedDate = d }
+                            } label: {
+                                Label("选中此日", systemImage: "checkmark.circle")
+                            }
+                            Button {
+                                copyDateText(d)
+                            } label: {
+                                Label("复制日期", systemImage: "doc.on.doc")
+                            }
+                        }
                 }
             }
+            // 原生选中触觉反馈：选中日期轻震（iOS 17+ 系统 sensoryFeedback，无自定义引擎）
+            .sensoryFeedback(.selection, trigger: selectedDate)
             .padding(.horizontal, isIPadSplit ? AppTheme.Spacing.lg : AppTheme.Spacing.md)
             .padding(.bottom, AppTheme.Spacing.lg)
         }
         .padding(.top, AppTheme.Spacing.xs)
-        .liquidCard(radius: AppTheme.Radius.xxl, material: .regularMaterial,
-                     shadow: AppTheme.Shadow.card)
+        // 原生化：液态玻璃卡片 → 系统次要分组背景卡片（去自定义阴影）
+        .background(
+            Color.secondarySystemGroupedBackground,
+            in: RoundedRectangle(cornerRadius: AppTheme.Radius.xxl, style: .continuous)
+        )
         .contentShape(Rectangle())
         // 月份横滑手势统一在 monthColumn 以 simultaneousGesture 挂载（避免拦截日期点按与纵向滚动）
     }
 
-    private func daysForMonth() -> [DaySlot] {
-        let first = currentMonth.firstDayOfMonth
-        let leading = first.weekday - 1
-        let totalDays = currentMonth.daysInMonth
+    /// 复制选中日期的中文长格式到剪贴板（上下文菜单动作）
+    private func copyDateText(_ date: Date) {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = date.formatted(
+            Date.FormatStyle(date: .long, time: .omitted, locale: Locale(identifier: "zh_Hans_CN")))
+        #endif
+    }
+
+    private func daysForMonth(_ month: Date) -> [DaySlot] {
+        let first = month.firstDayOfMonth
+        // 按每周起始日计算前置空位：weekStart=1(周日) → (wd-1)；weekStart=2(周一) → (wd+5)%7
+        let leading = (first.weekday - weekStart + 7) % 7
+        let totalDays = month.daysInMonth
         var result: [DaySlot] = []
         for i in 0..<leading {
             result.append(DaySlot(date: first.addingDays(-(leading - i)), inCurrentMonth: false))
@@ -447,7 +566,7 @@ struct CalendarMonthView: View {
         let accent: Color = todayFestivals.first.map { Color(hex: $0.accentHex) } ?? Color.appTint
         let todaysEvents = store.events(on: selectedDate)
 
-        return VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
+        return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: AppTheme.Spacing.lg) {
                 VStack(spacing: 2) {
                     Text("\(selectedDate.day)")
@@ -465,7 +584,18 @@ struct CalendarMonthView: View {
                 }
 
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                    Text(selLunar.displayString).font(AppTheme.Font.title3).foregroundStyle(Color.label)
+                    if selLunar.isUnsupported {
+                        // 越界（1900 前 / 2100 后）：隐藏农历与干支/生肖
+                        Text("农历数据暂不支持此日期")
+                            .font(AppTheme.Font.title3).foregroundStyle(Color.secondaryLabel)
+                    } else {
+                        Text(selLunar.displayString).font(AppTheme.Font.title3).foregroundStyle(Color.label)
+                        HStack(spacing: AppTheme.Spacing.xs) {
+                            // 年干支/生肖按农历春节为界（与离散黄历库口径一致；立春口径 API 已提供备用）
+                            ChipLabel(title: "\(selLunar.yearGanZhi)", tint: Color.systemIndigo)
+                            ChipLabel(title: selLunar.yearAnimal, systemImage: "pawprint.circle.fill", tint: Color.systemOrange)
+                        }
+                    }
                     if !todayFestivals.isEmpty {
                         HStack(spacing: AppTheme.Spacing.xs) {
                             ForEach(Array(todayFestivals.prefix(2)), id: \.name) { f in
@@ -477,12 +607,15 @@ struct CalendarMonthView: View {
                             }
                         }
                     }
-                    HStack(spacing: AppTheme.Spacing.xs) {
-                        ChipLabel(title: "\(selLunar.yearGanZhi)", tint: Color.systemIndigo)
-                        ChipLabel(title: selLunar.yearAnimal, systemImage: "pawprint.circle.fill", tint: Color.systemOrange)
-                    }
                 }
                 Spacer(minLength: 0)
+                // 日期卡片右上：大天气图标（随天气码直观切换）+ 图标下方文字块（温度大字），
+                // 整体底部与左侧日期块对齐（Spacer 撑开）
+                VStack(alignment: .trailing, spacing: 6) {
+                    WeatherIconView(selectedDate: selectedDate)
+                    WeatherCardView(selectedDate: selectedDate, alignment: .trailing)
+                    Spacer(minLength: 0)
+                }
             }
 
             if !huangli.yi.isEmpty || !huangli.ji.isEmpty {
@@ -491,8 +624,15 @@ struct CalendarMonthView: View {
                     Divider().frame(maxHeight: .infinity)
                     jiBlock(huangli.ji, maxShown: 6)
                 }
-                .padding(AppTheme.Spacing.md)
+                // 顶部/横向/底部 padding 都在背景内：背景框撑满块状感，同时
+                // 让「宜/勿」标题距离背景顶边 8pt 呼吸，不贴边缘（外部 12pt 间隙不变）
+                .padding(.top, AppTheme.Spacing.sm)
+                .padding(.horizontal, AppTheme.Spacing.sm)
+                .padding(.bottom, AppTheme.Spacing.sm)
                 .softChipBackground(material: .thinMaterial)
+                // 顶部 12pt 固定间隙放在背景框之外：与日期天气卡片之间始终是
+                // 固定的透明间距（不随日期内容、天气行数变化）
+                .padding(.top, AppTheme.Spacing.md)
             }
 
             VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
@@ -504,12 +644,11 @@ struct CalendarMonthView: View {
                     }
                 }
                 if todaysEvents.isEmpty {
-                    // 空态插画：柔和色图标 + 渐变底框，引导点击
+                    // 空态插画：扁平纯色圆底图标（去渐变，符合 iOS 扁平风格）
                     HStack(spacing: AppTheme.Spacing.md) {
                         ZStack {
                             Circle()
-                                .fill(LinearGradient(colors: [accent.opacity(0.18), accent.opacity(0.06)],
-                                                     startPoint: .top, endPoint: .bottom))
+                                .fill(accent.opacity(0.10))
                                 .frame(width: 48, height: 48)
                             Image(systemName: "sparkles")
                                 .font(.system(size: 22, weight: .semibold))
@@ -556,6 +695,8 @@ struct CalendarMonthView: View {
                     }
                 }
             }
+            // 今日安排与上方宜忌块之间保留正常区块间距（VStack 已 spacing 0）
+            .padding(.top, AppTheme.Spacing.md)
 
             HStack(spacing: AppTheme.Spacing.sm) {
                 NavigationLink {
@@ -572,10 +713,12 @@ struct CalendarMonthView: View {
                 }
                 .buttonStyle(PrimaryActionButtonStyle(accent: accent))
             }
+            // 与上方今日安排内容之间固定 12pt 间距（不随日程条数变化）
+            .padding(.top, AppTheme.Spacing.md)
         }
         .padding(AppTheme.Spacing.xl)
-        .liquidCard(radius: 28, material: .regularMaterial,
-                     tint: accent, shadow: AppTheme.Shadow.raised, highlight: 0.14)
+        .glassCard(radius: 28, material: .regularMaterial,
+                   tint: accent, shadow: AppTheme.Shadow.raised)
     }
 
     private func foregroundForDayNumber() -> Color {
@@ -628,6 +771,8 @@ struct TagCloudView: View {
                 Text("—").font(font).foregroundStyle(Color.quaternaryLabel)
             }
         }
+        // 宜/忌标签是整体展示信息：VoiceOver 一次性读出全部，避免逐个标签打断
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -225,16 +225,11 @@ extension View {
         self.background {
             ZStack {
                 Color.systemGroupedBackground
+                // 原生风格：极淡节日染色（去掉模糊色斑壁纸特效）
                 LinearGradient(
-                    colors: [accent.opacity(0.09), accent.opacity(0.02), Color.clear],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
+                    colors: [accent.opacity(0.05), Color.clear],
+                    startPoint: .top, endPoint: .bottom
                 )
-                Circle().fill(accent.opacity(0.06))
-                    .frame(width: 380, height: 380).blur(radius: 80)
-                    .offset(x: -140, y: -160)
-                Circle().fill(accent.opacity(0.05))
-                    .frame(width: 320, height: 320).blur(radius: 72)
-                    .offset(x: 120, y: 340)
             }.ignoresSafeArea()
         }
     }
@@ -327,6 +322,8 @@ public struct ChipLabel: View {
         }
         .foregroundStyle(tint)
         .capsuleTag(fill: tint.opacity(0.12))
+        // 信息胶囊整体作为一个无障碍元素读出（图标 + 标题）
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -447,41 +444,6 @@ public struct SelectChipStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
             .animation(AppTheme.Motion.pressInOut, value: configuration.isPressed)
             .contentShape(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous))
-    }
-}
-
-// MARK: - 浮动操作按钮（FAB）· 抽取月视图/日详情的复用
-//
-// 替代 CalendarMonthView 内 30+ 行的 FAB 内联实现（渐变 + 边框 + 顶部高光 overlay + 阴影）
-
-public struct FloatingActionButton: View {
-    public let systemImage: String
-    public let accent: Color
-    public let action: () -> Void
-
-    public init(systemImage: String, accent: Color, action: @escaping () -> Void) {
-        self.systemImage = systemImage
-        self.accent = accent
-        self.action = action
-    }
-
-    public var body: some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .frame(width: 60, height: 60)
-                .background(
-                    Circle().fill(LinearGradient(
-                        colors: [accent, accent.opacity(0.80)],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    ))
-                )
-                .overlay(Circle().stroke(Color.white.opacity(0.22), lineWidth: AppTheme.Stroke.hair))
-                .shadow(color: accent.opacity(0.30), radius: 18, x: 0, y: 8)
-        }
-        .buttonStyle(.plain)
-        .pressableFeedback()
     }
 }
 

@@ -119,4 +119,77 @@ final class NotificationLunarAnniversaryTests: XCTestCase {
         XCTAssertTrue(nextLunar?.day == 29 || nextLunar?.day == 30,
                        "腊月三十生日应回退到廿九或保持三十，实际 day=\(nextLunar?.day ?? -1)")
     }
+
+    /// 闰月源事件：目标年「无同闰月」→ 回退普通同月同日（与 occurs(on:) 语义一致）。
+    func testLeapMonthSourceFallsBackToNormalMonthWhenTargetYearHasNoLeapMonth() throws {
+        // 源：2025 闰六月初一（2025 年有闰六月）
+        guard let source = ChineseCalendar.solarDate(
+            fromLunar: 2025, month: 6, day: 1, isLeap: true
+        ) else {
+            return XCTFail("无法构造 2025 闰六月初一")
+        }
+        // "今天" = 2026-01-01；2026 年无闰六月
+        var nowComps = DateComponents()
+        nowComps.year = 2026; nowComps.month = 1; nowComps.day = 1
+        nowComps.hour = 0; nowComps.minute = 0; nowComps.second = 0
+        nowComps.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        let now = gregorian.date(from: nowComps)!
+
+        let result = NotificationManager.nextSolarDateForLunarAnniversary(
+            lunarSource: source, timeSource: source, now: now
+        )
+
+        let next = try XCTUnwrap(result)
+        let nextLunar = ChineseCalendar.lunarDateSafe(from: next)
+        XCTAssertEqual(nextLunar?.month, 6)
+        XCTAssertEqual(nextLunar?.day, 1)
+        XCTAssertFalse(nextLunar?.isLeapMonth ?? true,
+                       "2026 无闰六月，闰月源应回退到普通六月初一")
+        // 且应正好等于 2026 普通六月初一
+        let expected = try XCTUnwrap(
+            ChineseCalendar.solarDate(fromLunar: 2026, month: 6, day: 1, isLeap: false)
+        )
+        XCTAssertTrue(gregorian.isDate(next, inSameDayAs: expected),
+                      "回退结果应为 2026 普通六月初一")
+    }
+
+    /// 闰月源事件：目标年「有同闰月」→ 用闰月匹配（不蹭普通月）。
+    func testLeapMonthSourceUsesLeapMonthWhenTargetYearHasSameLeapMonth() throws {
+        guard let source = ChineseCalendar.solarDate(
+            fromLunar: 2025, month: 6, day: 1, isLeap: true
+        ) else {
+            return XCTFail("无法构造 2025 闰六月初一")
+        }
+        // 找 2027 之后第一个有闰六月的年份
+        var leapYear: Int?
+        for y in 2027...2060 where ChineseCalendar.leapMonth(of: y) == 6 {
+            leapYear = y
+            break
+        }
+        guard let ly = leapYear else {
+            return XCTFail("2027...2060 内未找到闰六月年份")
+        }
+        // "今天" = ly-1 年六月初二（该年普通六月初一已过）→ 下一匹配只能到 ly 年
+        guard let prevAfter = ChineseCalendar.solarDate(
+            fromLunar: ly - 1, month: 6, day: 2, isLeap: false
+        ) else {
+            return XCTFail("无法构造 \(ly - 1) 年六月初二")
+        }
+
+        let result = NotificationManager.nextSolarDateForLunarAnniversary(
+            lunarSource: source, timeSource: source, now: prevAfter
+        )
+
+        let next = try XCTUnwrap(result)
+        let nextLunar = ChineseCalendar.lunarDateSafe(from: next)
+        XCTAssertEqual(nextLunar?.month, 6)
+        XCTAssertEqual(nextLunar?.day, 1)
+        XCTAssertTrue(nextLunar?.isLeapMonth ?? false,
+                      "目标年 \(ly) 有闰六月，闰月源应匹配闰六月初一")
+        let expected = try XCTUnwrap(
+            ChineseCalendar.solarDate(fromLunar: ly, month: 6, day: 1, isLeap: true)
+        )
+        XCTAssertTrue(gregorian.isDate(next, inSameDayAs: expected),
+                      "结果应为 \(ly) 闰六月初一")
+    }
 }

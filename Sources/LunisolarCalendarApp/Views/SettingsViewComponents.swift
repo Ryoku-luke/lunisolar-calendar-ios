@@ -67,11 +67,10 @@ struct ToastBannerView: View {
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
         .padding(.vertical, AppTheme.Spacing.md)
-        .liquidCard(radius: AppTheme.Radius.lg,
-                    material: .thickMaterial,
-                    tint: bgAccent,
-                    shadow: AppTheme.Shadow.floating,
-                    highlight: 0.16)
+        .glassCard(radius: AppTheme.Radius.lg,
+                   material: .thickMaterial,
+                   tint: bgAccent,
+                   shadow: AppTheme.Shadow.floating)
     }
 
     private var iconName: String {
@@ -90,20 +89,6 @@ struct ToastBannerView: View {
         }
     }
 }
-
-// MARK: - ShareSheet (UIActivityViewController 包装)
-
-#if canImport(UIKit)
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-#endif
 
 // MARK: - ImportFileModifier（.fileImporter 包装成独立 ViewModifier，降低 body 内联闭包复杂度）
 
@@ -135,5 +120,6 @@ struct ImportFileModifier: ViewModifier {
     func body(content: Content) -> some View { content }
 }
 #endif
+
 
 #endif

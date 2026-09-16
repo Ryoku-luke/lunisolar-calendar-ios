@@ -1,5 +1,19 @@
 import Foundation
 
+// MARK: - 全局公历实例复用（性能）
+//
+// 月历渲染高频路径（42 格 × 每帧 × 多次 dateComponents/component 调用）
+// 每次 `Calendar.gregorian` 都会新建值类型并触达底层 NSCalendar 缓存；
+// 统一复用只读静态实例可减少该路径的分配与查表。本工程所有调用点均为只读
+// （startOfDay/dateComponents/component/range/isDate），不修改 timeZone/locale，
+// 共享安全。
+extension Calendar {
+    /// 只读公历实例（全局复用，禁止对其 mutation）
+    /// ⚠️ 必须用 `Calendar(identifier: .gregorian)` 构造，不能写 `Calendar.gregorian`
+    /// （那是对自身的无限递归初始化 → 首次触达即 EXC_BAD_ACCESS，实测崩溃）。
+    public static let gregorian: Calendar = Calendar(identifier: .gregorian)
+}
+
 // MARK: - 农历数据加载器（资源化 JSON + 内置 fallback）
 
 /// 农历数据提供器：优先从 Bundle JSON 加载，失败时回退到内置数据
@@ -65,6 +79,13 @@ public struct LunarDate: Equatable, Hashable, Sendable {
         self.day = day
         self.isLeapMonth = isLeapMonth
     }
+
+    /// 越界占位（公历日期落在农历数据 1900–2100 之外时由 Date.lunar 返回）。
+    /// UI 层应通过 `isUnsupported` 隐藏农历显示，而不是展示占位内容。
+    public static let unsupported = LunarDate(year: 0, month: 1, day: 1, isLeapMonth: false)
+
+    /// 是否为越界占位（1900 前 / 2100 后）。
+    public var isUnsupported: Bool { year == 0 }
 
     public var yearGanZhi: String { ChineseCalendar.ganZhiOfYear(year) }
     public var yearAnimal: String { ChineseCalendar.zodiacOfYear(year) }
@@ -143,7 +164,7 @@ public enum ChineseCalendar {
     // MARK: - 公历转农历
 
     private static let baseDate: Date = {
-        let cal = Calendar(identifier: .gregorian)
+        let cal = Calendar.gregorian
         var comps = DateComponents()
         comps.year = 1900
         comps.month = 1
@@ -156,7 +177,7 @@ public enum ChineseCalendar {
 
     /// 检查日期是否在支持范围内
     public static func isSupported(_ date: Date) -> Bool {
-        let cal = Calendar(identifier: .gregorian)
+        let cal = Calendar.gregorian
         let comps = cal.dateComponents([.year], from: cal.startOfDay(for: date))
         let y = comps.year ?? 0
         return y >= minYear && y <= maxYear
@@ -168,9 +189,11 @@ public enum ChineseCalendar {
         return lunarDate(from: date)
     }
 
-    /// 公历 Date 转农历 LunarDate（越界降级为公历镜像）
+    /// 公历 Date 转农历 LunarDate。
+    /// ⚠️ 非安全版：越界（1900 前 / 2100 后）会降级为"公历镜像假农历"（year/month/day 取公历值）。
+    ///   仅供内部/兼容路径使用；**UI 一律使用 Date.lunar（已安全化，越界返回 .unsupported 占位）**。
     public static func lunarDate(from date: Date) -> LunarDate {
-        let cal = Calendar(identifier: .gregorian)
+        let cal = Calendar.gregorian
         let normalized = cal.startOfDay(for: date)
         let baseNorm = cal.startOfDay(for: baseDate)
 
@@ -250,12 +273,16 @@ public enum ChineseCalendar {
 
     /// 农历转公历：给定农历年月日，返回公历 Date（失败返回 nil）
     public static func solarDate(fromLunar year: Int, month: Int, day: Int, isLeap: Bool) -> Date? {
-        guard year >= minYear, year <= maxYear, month >= 1, month <= 12, day >= 1, day <= 30 else { return nil }
+        guard year >= minYear, year <= maxYear, month >= 1, month <= 12, day >= 1 else { return nil }
         // 闰月非法：请求闰月但该年无此闰月
         let leapM = leapMonth(of: year)
         if isLeap && leapM != month { return nil }
+        // P3-8 修复：天数不得超过目标月实际天数——否则 day=30 在 29 天的月份
+        // 会被 Calendar 自动进位到下月 1 日，返回错误的公历日期（旧实现仅校验 day<=30）。
+        let daysInMonth = daysInLunarMonth(year: year, month: month, isLeap: isLeap && leapM == month)
+        guard day <= daysInMonth else { return nil }
 
-        let cal = Calendar(identifier: .gregorian)
+        let cal = Calendar.gregorian
         var baseComps = DateComponents()
         baseComps.year = 1900; baseComps.month = 1; baseComps.day = 31
         guard var date = cal.date(from: baseComps) else { return nil }
@@ -294,6 +321,22 @@ public enum ChineseCalendar {
         return "\(gan)\(zhi)"
     }
 
+    /// 按立春切换的年干支（黄历行业标准：立春交节后才换年柱，立春前用上一年干支）。
+    /// 修复 P3-1：旧实现按农历正月初一换年，立春~春节之间（约 2/4~2/17）年柱差一年。
+    /// ⚠️ 模块边界：LunarDate.swift 同时被 LunarCore（纯算法 target，仅编译本文件 + Huangli）
+    /// 与 LunisolarCalendarApp 编译，**不得引用 App 层符号**（SolarTermProvider 在 App target）。
+    /// 此处用 2/4 00:00 近似立春；App 层如需精确立春时刻（2025–2028 节气表），
+    /// 先自行调用 SolarTermProvider.termDate(year:index:) 求出 effectiveYear，再调 ganZhiOfYear(_:)。
+    public static func ganZhiOfYear(for date: Date) -> String {
+        let cal = Calendar.gregorian
+        let y = cal.component(.year, from: date)
+        var comps = DateComponents()
+        comps.year = y; comps.month = 2; comps.day = 4
+        let boundary = cal.date(from: comps) ?? date
+        let effectiveYear = (date < boundary) ? y - 1 : y
+        return ganZhiOfYear(effectiveYear)
+    }
+
     public static func zodiacOfYear(_ year: Int) -> String {
         let index = (year - 4) % 12
         return zodiacs[(index + 12) % 12]
@@ -315,42 +358,44 @@ public enum ChineseCalendar {
 // MARK: - Date 扩展
 
 public extension Date {
+    /// 农历日期（安全化 P2-1：越界返回 .unsupported 占位，
+    /// 不再返回"公历镜像假农历"——避免 2100 年 12 月后翻月显示假农历误导用户）。
     var lunar: LunarDate {
-        ChineseCalendar.lunarDate(from: self)
+        ChineseCalendar.lunarDateSafe(from: self) ?? .unsupported
     }
 
     /// 当天 00:00（统一公历，避免非公历系统日历导致日界偏移）。
     var startOfDay: Date {
-        Calendar(identifier: .gregorian).startOfDay(for: self)
+        Calendar.gregorian.startOfDay(for: self)
     }
 
     /// 是否今天（统一公历，确保"今天"红点与月视图网格一致）。
     var isToday: Bool {
-        Calendar(identifier: .gregorian).isDateInToday(self)
+        Calendar.gregorian.isDateInToday(self)
     }
 
     /// 加减若干天（统一公历，确保月视图翻页与农历查表一致）。
     func addingDays(_ days: Int) -> Date {
-        Calendar(identifier: .gregorian).date(byAdding: .day, value: days, to: self) ?? self
+        Calendar.gregorian.date(byAdding: .day, value: days, to: self) ?? self
     }
 
     /// 加减若干月（统一公历）。
     func addingMonths(_ months: Int) -> Date {
-        Calendar(identifier: .gregorian).date(byAdding: .month, value: months, to: self) ?? self
+        Calendar.gregorian.date(byAdding: .month, value: months, to: self) ?? self
     }
 
     /// 公历年（4 位数）。
-    var year: Int { Calendar(identifier: .gregorian).component(.year, from: self) }
+    var year: Int { Calendar.gregorian.component(.year, from: self) }
     /// 公历月（1-12）。
-    var month: Int { Calendar(identifier: .gregorian).component(.month, from: self) }
+    var month: Int { Calendar.gregorian.component(.month, from: self) }
     /// 公历日（1-31）。
-    var day: Int { Calendar(identifier: .gregorian).component(.day, from: self) }
+    var day: Int { Calendar.gregorian.component(.day, from: self) }
     /// 星期（1=周日 ... 7=周六）。
-    var weekday: Int { Calendar(identifier: .gregorian).component(.weekday, from: self) }
+    var weekday: Int { Calendar.gregorian.component(.weekday, from: self) }
 
     /// 当月 1 号 00:00（统一公历）。
     var firstDayOfMonth: Date {
-        let cal = Calendar(identifier: .gregorian)
+        let cal = Calendar.gregorian
         var comps = cal.dateComponents([.year, .month], from: self)
         comps.day = 1
         return cal.date(from: comps) ?? self
@@ -358,24 +403,24 @@ public extension Date {
 
     /// 当月天数（28-31，统一公历）。
     var daysInMonth: Int {
-        Calendar(identifier: .gregorian).range(of: .day, in: .month, for: self)?.count ?? 30
+        Calendar.gregorian.range(of: .day, in: .month, for: self)?.count ?? 30
     }
 
     /// 判断同月（统一公历）。
     func isSameMonth(as other: Date) -> Bool {
-        Calendar(identifier: .gregorian).isDate(self, equalTo: other, toGranularity: .month)
+        Calendar.gregorian.isDate(self, equalTo: other, toGranularity: .month)
     }
 
     /// 判断同日（统一公历）。
     func isSameDay(as other: Date) -> Bool {
-        Calendar(identifier: .gregorian).isDate(self, inSameDayAs: other)
+        Calendar.gregorian.isDate(self, inSameDayAs: other)
     }
 
-    /// 本地化星期名称（跟随系统语言，但保证公历星期映射正确）。
+    /// 星期名称（中文定位：周一~周日，与月视图星期头"一~日"一致；
+    /// 农历日历核心用户为中文用户，避免英文系统下显示 "Tue" 的不协调）。
     var weekdaySymbol: String {
-        let symbols = Calendar(identifier: .gregorian).shortWeekdaySymbols
-        // weekday 返回 1-7 (Sun-Sat)，数组下标 0-6
+        let names = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
         let idx = max(0, min(6, weekday - 1))
-        return symbols[idx]
+        return names[idx]
     }
 }

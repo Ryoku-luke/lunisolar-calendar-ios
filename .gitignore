@@ -23,6 +23,9 @@ calendar_events.json
 *.swp
 *~
 
+# 开发期 AI 工具目录（不应进入产品仓库；如需保留请放到仓库外）
+.trae/
+
 # 日志
 *.log
 

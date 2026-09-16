@@ -6,6 +6,7 @@ import LunarCore
 public enum FestivalKind: Sendable {
     case solar          // 公历固定日 (如 10-01 国庆)
     case lunar          // 农历固定日 (如 正月初一 春节)
+    case solarTerm      // 节气（公历交节日浮动，如 清明 4/4-4/6）
 }
 
 public struct Festival: Equatable, Hashable, Sendable {
@@ -114,13 +115,24 @@ public enum FestivalManager: Sendable {
 
         // 2. 农历节日：月日字典直查；除夕按"当年最后一天"特殊判断。
         //    普通农历节日闰月不过节；除夕判定本身基于"年内最后一天"，与旧实现一致不查闰月标记。
-        if let lunar {
+        //    P2-1 配套：lunar 为越界占位（.unsupported）时跳过农历节日，
+        //    避免 2100 年后翻月误把"正月初一"当作春节。
+        if let lunar, !lunar.isUnsupported {
             if !lunar.isLeapMonth, let matches = lunarByMD[lunar.month * 100 + lunar.day] {
                 result.append(contentsOf: matches)
             }
             if let chuxi, isLunarLastDayOfYear(lunar: lunar, in: norm) {
                 result.append(chuxi)
             }
+        }
+
+        // 3. 节气节日（P2-2）：当天恰逢节气交节时标注（如清明/冬至/立春）。
+        //    随 SolarTermProvider 数据（2025-2028）联动；2029+ 无数据时不显示。
+        if let term = SolarTermProvider.termOn(norm) {
+            result.append(Festival(
+                name: term, emoji: "🌿", kind: .solarTerm,
+                month: m, day: d, accentHex: "#15803D"
+            ))
         }
 
         return result

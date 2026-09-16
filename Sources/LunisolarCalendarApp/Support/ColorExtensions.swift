@@ -197,34 +197,20 @@ extension View {
         interactive: Bool
     ) -> some View {
         #if canImport(UIKit)
-        // iOS 26 GlassEffect / LiquidGlass 在 Xcode 公开 SDK（截至 iOS 18 GM）中尚未正式声明，
-        // 直接写 `GlassEffect.regular` 会触发 "Cannot find 'GlassEffect' in scope"。
-        // 为了让当前 Xcode App Target 能过编译，这里统一使用 iOS 15+ 的 thickMaterial +
-        // 半透明渐变高光来模拟液态玻璃的折射/高光感；一旦 Apple 公开 Liquid Glass API，
-        // 只要把下面 iOS 26 分支换回 .glassEffect(GlassEffect...) 即可。
+        // iOS 26+/iOS 27 原生 Liquid Glass（WWDC25 已公开官方 API）：
+        // 使用 .glassEffect 获得系统级玻璃折射/高光/容器交互，替代早期 thickMaterial 自绘模拟。
+        //   - interactive 变体用于可交互卡片（触控时玻璃响应增强）；
+        //   - 自定义品牌色薄边框保留（选中/今日强调），玻璃自带边缘高光不再自绘。
+        // iOS 15–25 走下方 ios26Card 的 thickMaterial 模拟，视觉基本一致。
         if #available(iOS 26.0, *) {
             self
-                .background(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(.thickMaterial)
+                .glassEffect(
+                    interactive ? .regular.interactive() : .regular,
+                    in: .rect(cornerRadius: cornerRadius)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        // 顶部内高光，模拟折射边缘
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    .white.opacity(interactive ? 0.45 : 0.25),
-                                    .white.opacity(0.04)
-                                ],
-                                startPoint: .top, endPoint: .bottom
-                            ),
-                            lineWidth: 0.6
-                        )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .strokeBorder(borderColor.opacity(0.6), lineWidth: borderWidth)
+                        .strokeBorder(borderColor.opacity(0.5), lineWidth: borderWidth)
                 )
                 .shadow(color: .black.opacity(shadowOpacity),
                         radius: shadowOpacity > 0 ? 8 : 0,

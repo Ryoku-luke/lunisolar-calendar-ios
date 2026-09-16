@@ -179,9 +179,21 @@ public enum HuangliGenerator {
         let shaIndex = (zhiIndex % 4)
         let sha = shaMap[shaIndex]
 
-        // 五行纳音 (年柱)
-        let yearGanZhi = ChineseCalendar.ganZhiOfYear(lunar.year)
-        let wuXing = wuXingMap[yearGanZhi] ?? "未知"
+        // 五行纳音 (年柱) —— P3-1 审后决策：维持「农历春节换年」口径。
+        //   证据：离散库 huangli_db.json（2024-01-01 立春后、春节前的 2024-02-05 等日期）
+        //   年命纳音仍按上一年（癸卯 金箔金），即数据源按春节换年柱；
+        //   且 HuangliDBProviderTests 每 65 天采样断言「离散库 wuXing == 算法 wuXing」。
+        //   大众生肖/年命习惯亦以春节为界。若未来换用「立春换年柱」数据源，
+        //   可改用 ChineseCalendar.ganZhiOfYear(for: date)（已提供，按立春切换；LunarCore 内用 2/4 近似，App 层可先取 SolarTermProvider 精确立春再换算）。
+        // P3-2：农历越界（year==0 占位）时纳音置空——旧实现会算出
+        //   0 年干支"庚申"→ 白蜡金，向用户展示假数据；UI 层遇空串显示"—"。
+        let wuXing: String
+        if lunar.isUnsupported {
+            wuXing = ""
+        } else {
+            let yearGanZhi = ChineseCalendar.ganZhiOfYear(lunar.year)
+            wuXing = wuXingMap[yearGanZhi] ?? "未知"
+        }
 
         // 神位 (喜神/财神方位，简化)
         let shenWei = shenWeiDirection(zhiIndex)

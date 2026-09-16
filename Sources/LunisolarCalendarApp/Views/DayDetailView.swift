@@ -57,13 +57,18 @@ struct DayDetailView: View {
                             .font(.title3).foregroundStyle(accent)
                             .touchTarget(min: AppTheme.Touch.minTarget)
                     }
+                    .accessibilityLabel("新建日程")
+                    .accessibilityIdentifier(AccessibilityID.dayDetailNewEvent)
                     .pressableFeedback()
                 }
             }
             #endif
             .tint(accent)
             .sheet(isPresented: $showAdd) {
-                EventEditView(editing: nil, defaultDate: date).environment(store)
+                // EventEditView 不自包 NavigationStack（push 继承外层导航），sheet 场景由这里补包
+                NavigationStack {
+                    EventEditView(editing: nil, defaultDate: date).environment(store)
+                }
             }
     }
 
@@ -78,8 +83,9 @@ struct DayDetailView: View {
                     Text("\(date.day)")
                         .font(AppTheme.Font.numeralXL)
                         .foregroundStyle(date.isToday ? Color.systemRed : Color.label)
-                    Text("\(date.year) 年 \(date.month) 月")
+                    Text(verbatim: "\(date.year) 年 \(date.month) 月")
                         .font(AppTheme.Font.caption).foregroundStyle(Color.secondaryLabel)
+                        .contentTransition(.numericText())
                 }
                 .frame(width: 110).padding(.vertical, AppTheme.Spacing.lg)
                 .background {
@@ -89,7 +95,13 @@ struct DayDetailView: View {
                         .stroke(accent.opacity(0.18), lineWidth: AppTheme.Stroke.hair)
                 }
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                    Text(lunar.displayString).font(AppTheme.Font.title2).foregroundStyle(Color.label)
+                    if lunar.isUnsupported {
+                        // 越界（1900 前 / 2100 后）：农历不可用，隐藏农历行与干支/生肖
+                        Text("农历数据暂不支持此日期")
+                            .font(AppTheme.Font.title2).foregroundStyle(Color.secondaryLabel)
+                    } else {
+                        Text(lunar.displayString).font(AppTheme.Font.title2).foregroundStyle(Color.label)
+                    }
                     if !festivals.isEmpty {
                         HStack(spacing: AppTheme.Spacing.xs) {
                             ForEach(Array(festivals.prefix(3)), id: \.name) { f in
@@ -101,11 +113,13 @@ struct DayDetailView: View {
                             }
                         }
                     }
-                    HStack(spacing: AppTheme.Spacing.xs) {
-                        ChipLabel(title: lunar.yearGanZhi, tint: Color.systemIndigo, font: AppTheme.Font.caption)
-                        ChipLabel(title: lunar.yearAnimal,
-                                  systemImage: "pawprint.circle.fill",
-                                  tint: Color.systemOrange, font: AppTheme.Font.caption)
+                    if !lunar.isUnsupported {
+                        HStack(spacing: AppTheme.Spacing.xs) {
+                            ChipLabel(title: lunar.yearGanZhi, tint: Color.systemIndigo, font: AppTheme.Font.caption)
+                            ChipLabel(title: lunar.yearAnimal,
+                                      systemImage: "pawprint.circle.fill",
+                                      tint: Color.systemOrange, font: AppTheme.Font.caption)
+                        }
                     }
                 }
                 Spacer()
@@ -149,10 +163,12 @@ struct DayDetailView: View {
                     }
                 }
             }
+            // 当日天气：嵌入日期卡内（日期卡片的空白处，仅显示选中日当天天气）
+            WeatherCardView(selectedDate: date)
         }
         .padding(AppTheme.Spacing.xl)
-        .liquidCard(radius: AppTheme.Radius.xxl, material: .regularMaterial,
-                     tint: accent, shadow: AppTheme.Shadow.card, highlight: 0.12)
+        .glassCard(radius: AppTheme.Radius.xxl, material: .regularMaterial,
+                   tint: accent, shadow: AppTheme.Shadow.card)
     }
 
     private var almanacCard: some View {
@@ -170,8 +186,8 @@ struct DayDetailView: View {
             }
         }
         .padding(AppTheme.Spacing.xl)
-        .liquidCard(radius: AppTheme.Radius.xl, material: .thinMaterial,
-                     shadow: AppTheme.Shadow.card, highlight: 0.08)
+        .glassCard(radius: AppTheme.Radius.xl, material: .thinMaterial,
+                   shadow: AppTheme.Shadow.card)
     }
 
     private func yiBlockFull(_ yi: [String]) -> some View {
@@ -249,8 +265,8 @@ struct DayDetailView: View {
             .buttonStyle(PrimaryActionButtonStyle(accent: accent))
         }
         .padding(AppTheme.Spacing.xl)
-        .liquidCard(radius: AppTheme.Radius.xl, material: .thinMaterial,
-                     tint: accent.opacity(0.6), shadow: AppTheme.Shadow.card, highlight: 0.08)
+        .glassCard(radius: AppTheme.Radius.xl, material: .thinMaterial,
+                   tint: accent.opacity(0.6), shadow: AppTheme.Shadow.card)
     }
 }
 
