@@ -9,8 +9,8 @@ public enum CountdownKind: String, Codable, CaseIterable, Sendable {
 
     public var label: String {
         switch self {
-        case .countdown: return String(localized: "倒数日")
-        case .anniversary: return String(localized: "纪念日")
+        case .countdown: return L10n.str("倒数日")
+        case .anniversary: return L10n.str("纪念日")
         }
     }
 
@@ -52,7 +52,7 @@ public struct CountdownEvent: Identifiable, Codable, Equatable, Hashable, Sendab
     /// 显示文案：如"还有 30 天" / "已过 5 天" / "今天"
     public func displayText(today: Date) -> String {
         let days = daysFrom(today: today)
-        if days == 0 { return String(localized: "就是今天") }
+        if days == 0 { return L10n.str("就是今天") }
         if days > 0 { return String(format: NSLocalizedString("还有 %d 天", comment: ""), days) }
         return String(format: NSLocalizedString("已过 %d 天", comment: ""), -days)
     }

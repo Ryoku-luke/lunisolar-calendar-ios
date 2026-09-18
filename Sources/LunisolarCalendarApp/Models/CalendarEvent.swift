@@ -13,9 +13,9 @@ public enum EventType: String, Codable, CaseIterable, Identifiable, Sendable {
     /// UI / 导出显示名；不与 SwiftFoundation 的 String.title / AttributedString.title 扩展名冲突
     public var uiLabel: String {
         switch self {
-        case .schedule: return String(localized: "日程")
-        case .reminder: return String(localized: "提醒")
-        case .note:     return String(localized: "记事")
+        case .schedule: return L10n.str("日程")
+        case .reminder: return L10n.str("提醒")
+        case .note:     return L10n.str("记事")
         }
     }
 
@@ -44,7 +44,7 @@ public enum RepeatRule: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
     /// UI / 导出显示名；不与 Foundation String `.title` 语义扩展歧义
-    public var uiLabel: String { String(localized: String.LocalizationValue(rawValue)) }
+    public var uiLabel: String { L10n.str(rawValue) }
     /// 列表行内的短标签 —— .never 返回 nil（列表不显示"不重复"）
     public var displayText: String? {
         switch self {
@@ -64,7 +64,7 @@ public enum Priority: String, Codable, CaseIterable, Identifiable, Comparable, S
 
     public var id: String { rawValue }
     /// UI / 导出显示名；不与 Foundation String `.title` 语义扩展歧义
-    public var uiLabel: String { String(localized: String.LocalizationValue(rawValue)) }
+    public var uiLabel: String { L10n.str(rawValue) }
 
     var order: Int {
         switch self {

@@ -34,7 +34,7 @@ public struct Festival: Equatable, Hashable, Sendable {
     /// 本地化节日名：name 保留中文作为 Localizable key 源，
     /// 显示层按系统语言取翻译（春节→Spring Festival / 春節 / 春節）
     public var localizedName: String {
-        String(localized: String.LocalizationValue(name))
+        L10n.str(name)
     }
 }
 
