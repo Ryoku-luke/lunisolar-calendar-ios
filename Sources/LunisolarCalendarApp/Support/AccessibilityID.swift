@@ -8,15 +8,15 @@ import Foundation
 /// 命名规范：`模块.元素.动作`，全部小写、点分。
 public enum AccessibilityID {
     // 月视图
-    public static let monthNewEvent = "calendar.month.newEvent"
+    public static let monthNewEvent = "calendar.month.new"
     public static let todayJump = "calendar.month.today"
     // 日详情
-    public static let dayDetailNewEvent = "calendar.dayDetail.newEvent"
+    public static let dayDetailNewEvent = "calendar.day.detail.new"
     // 编辑页
-    public static let editSave = "eventEdit.save"
-    public static let editDelete = "eventEdit.delete"
+    public static let editSave = "event.edit.save"
+    public static let editDelete = "event.edit.delete"
     // 设置页
-    public static let settingsWeekStart = "settings.weekStart"
+    public static let settingsWeekStart = "settings.week.start"
 
     /// 全部标识（供测试校验非空 / 唯一 / 命名规范）
     public static let all: [String] = [

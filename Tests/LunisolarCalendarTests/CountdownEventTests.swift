@@ -11,7 +11,7 @@ final class CountdownEventTests: XCTestCase {
         var c = DateComponents()
         c.year = y; c.month = m; c.day = d
         c.hour = 0; c.minute = 0; c.second = 0
-        c.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        // 不设 timeZone：与被测代码同为当前时区（CI UTC 容器与本地均可复现）
         return gregorian.date(from: c)!
     }
 
