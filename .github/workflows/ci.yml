@@ -5,12 +5,9 @@ on:
     branches: [ main, master, develop ]
   pull_request:
 
-# 项目为纯 iOS App：UI 视图使用 topBarLeading / insetGrouped / navigationBarTitleDisplayMode
-# 等 iOS-only API，SwiftPM 在 macOS 上会编译失败。CI 只在 Linux 容器内跑 SwiftPM 单测，
-# iOS 端 UI/Widget 依赖 Xcode + 模拟器，由开发者本地 Xcode 验证，不进 CI。
 jobs:
   linux-tests:
-    name: SwiftPM 单测（Linux）
+    name: Linux · SwiftPM 单测
     runs-on: ubuntu-latest
     container: swift:6.0
     steps:
@@ -20,3 +17,25 @@ jobs:
       - name: Test
         run: swift test
 
+  ios-tests:
+    name: iOS · xcodebuild 单测（模拟器）
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 版本
+        run: xcodebuild -version
+      - name: Build & Test
+        run: |
+          xcodebuild test \
+            -project LunisolarCalendar.xcodeproj \
+            -scheme LunisolarCalendar \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -derivedDataPath DerivedData \
+            -quiet
+      - name: 上传测试产物（失败时可查）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult
+          path: DerivedData/Logs/Test/
+          if-no-files-found: ignore
