@@ -58,4 +58,5 @@ struct WeatherIconView: View {
         result = await WeatherProvider.currentWeather()
     }
 }
+
 #endif

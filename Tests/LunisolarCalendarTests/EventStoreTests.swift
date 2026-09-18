@@ -32,45 +32,41 @@ final class EventStoreTests: XCTestCase {
     // 修复：取消完成时调 scheduleNotification（内部处理 .never && isNotified 不重排）。
     // 本测试在 Linux 上无法实际验证 UNUserNotificationCenter 行为，
     // 但验证关键不变量：取消完成后 isCompleted=false 且 isNotified 保持原值。
-    // 注：CI Swift 6 严格并发下，@MainActor 同步测试方法在派生入口报
-    // "implicitly asynchronous"，改为 async + MainActor 闭包规避派生限制。
-    func testToggleCompletedUncompletePreservesNotifiedState() async {
-        await MainActor.run {
-            let store = makeIsolatedEventStore()
-            let today = Date()
-            let ev = CalendarEvent(title: "取消完成测试", startDate: today)
-            store.add(ev)
+    func testToggleCompletedUncompletePreservesNotifiedState() {
+        let store = makeIsolatedEventStore()
+        let today = Date()
+        let ev = CalendarEvent(title: "取消完成测试", startDate: today)
+        store.add(ev)
 
-            // 1) 标记完成
-            store.toggleCompleted(ev)
-            var current = store.events(on: today).first(where: { $0.id == ev.id })
-            XCTAssertTrue(current?.isCompleted ?? false, "标记完成后 isCompleted 应为 true")
-            XCTAssertFalse(current?.isNotified ?? true, "isNotified 初始应为 false")
+        // 1) 标记完成
+        store.toggleCompleted(ev)
+        var current = store.events(on: today).first(where: { $0.id == ev.id })
+        XCTAssertTrue(current?.isCompleted ?? false, "标记完成后 isCompleted 应为 true")
+        XCTAssertFalse(current?.isNotified ?? true, "isNotified 初始应为 false")
 
-            // 2) 模拟已通知（一次性提醒触发过）
-            if let c = current { store.markNotified(c) }
-            current = store.events(on: today).first(where: { $0.id == ev.id })
-            XCTAssertTrue(current?.isNotified ?? false, "markNotified 后 isNotified 应为 true")
+        // 2) 模拟已通知（一次性提醒触发过）
+        if let c = current { store.markNotified(c) }
+        current = store.events(on: today).first(where: { $0.id == ev.id })
+        XCTAssertTrue(current?.isNotified ?? false, "markNotified 后 isNotified 应为 true")
 
-            // 3) 取消完成：isCompleted 应回到 false，isNotified 应保持 true
-            //    （scheduleNotification 内部会因 .never && isNotified 跳过，不会重复弹窗）
-            if let c = current { store.toggleCompleted(c) }
-            current = store.events(on: today).first(where: { $0.id == ev.id })
-            XCTAssertFalse(current?.isCompleted ?? true, "P2 修复：取消完成后 isCompleted 应为 false")
-            XCTAssertTrue(current?.isNotified ?? false, "P2 修复：取消完成应保留 isNotified，不被重置")
+        // 3) 取消完成：isCompleted 应回到 false，isNotified 应保持 true
+        //    （scheduleNotification 内部会因 .never && isNotified 跳过，不会重复弹窗）
+        if let c = current { store.toggleCompleted(c) }
+        current = store.events(on: today).first(where: { $0.id == ev.id })
+        XCTAssertFalse(current?.isCompleted ?? true, "P2 修复：取消完成后 isCompleted 应为 false")
+        XCTAssertTrue(current?.isNotified ?? false, "P2 修复：取消完成应保留 isNotified，不被重置")
 
-            // 4) 重复事件取消完成：isNotified 始终为 false，scheduleNotification 会正常重排
-            var repeating = CalendarEvent(title: "重复取消完成", startDate: today, repeatRule: .daily)
-            repeating.isNotified = false
-            store.add(repeating)
-            store.toggleCompleted(repeating)
-            current = store.events(on: today).first(where: { $0.id == repeating.id })
-            XCTAssertTrue(current?.isCompleted ?? false, "重复事件标记完成")
-            if let c = current { store.toggleCompleted(c) }
-            current = store.events(on: today).first(where: { $0.id == repeating.id })
-            XCTAssertFalse(current?.isCompleted ?? true, "重复事件取消完成后 isCompleted=false")
-            XCTAssertFalse(current?.isNotified ?? true, "重复事件 isNotified 保持 false")
-        }
+        // 4) 重复事件取消完成：isNotified 始终为 false，scheduleNotification 会正常重排
+        var repeating = CalendarEvent(title: "重复取消完成", startDate: today, repeatRule: .daily)
+        repeating.isNotified = false
+        store.add(repeating)
+        store.toggleCompleted(repeating)
+        current = store.events(on: today).first(where: { $0.id == repeating.id })
+        XCTAssertTrue(current?.isCompleted ?? false, "重复事件标记完成")
+        if let c = current { store.toggleCompleted(c) }
+        current = store.events(on: today).first(where: { $0.id == repeating.id })
+        XCTAssertFalse(current?.isCompleted ?? true, "重复事件取消完成后 isCompleted=false")
+        XCTAssertFalse(current?.isNotified ?? true, "重复事件 isNotified 保持 false")
     }
 
     func testMarkNotified() async {
@@ -496,31 +492,27 @@ final class EventStoreTests: XCTestCase {
     //   被系统在后台终止，Task.sleep 不会被唤醒，最新变更未落盘 → 下次启动数据丢失。
     //   修复：新增 flushPendingSave()，并在 App scenePhase==.background/.inactive
     //   时调用。本测试模拟"CRUD 后立即 flush → 新实例能读到"，等价于后台 flush 的落盘语义。
-    // 注：CI Swift 6 严格并发下，@MainActor 同步测试方法在派生入口报
-    // "implicitly asynchronous"，改为 async + MainActor 闭包规避派生限制。
-    func testFlushPendingSavePersistsWithinDebounceWindow() async {
-        await MainActor.run {
-            let baseDir = URL(fileURLWithPath: NSTemporaryDirectory())
-                .appendingPathComponent("lunisolar-flush-test-\(UUID().uuidString)", isDirectory: true)
-            // ensure clean dir
-            try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
+    func testFlushPendingSavePersistsWithinDebounceWindow() {
+        let baseDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("lunisolar-flush-test-\(UUID().uuidString)", isDirectory: true)
+        // ensure clean dir
+        try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
 
-            // 1) store1：新增事件 → 触发防抖 save（0.5s 内不会自然落盘）
-            let store1 = EventStore(storageBaseDir: baseDir)
-            _ = store1.clearAll(skipSync: true)
-            let ev = CalendarEvent(title: "后台 flush 测试", startDate: Date())
-            store1.add(ev, skipSync: true)
+        // 1) store1：新增事件 → 触发防抖 save（0.5s 内不会自然落盘）
+        let store1 = EventStore(storageBaseDir: baseDir)
+        _ = store1.clearAll(skipSync: true)
+        let ev = CalendarEvent(title: "后台 flush 测试", startDate: Date())
+        store1.add(ev, skipSync: true)
 
-            // 2) 不等待 0.5s，直接 flush（模拟 App 进入后台时的生命周期调用）
-            store1.flushPendingSave()
+        // 2) 不等待 0.5s，直接 flush（模拟 App 进入后台时的生命周期调用）
+        store1.flushPendingSave()
 
-            // 3) store2：用同一 baseDir 重新加载，应能读到事件
-            let store2 = EventStore(storageBaseDir: baseDir)
-            let found = store2.events.contains { $0.id == ev.id }
-            XCTAssertTrue(found, "flushPendingSave 后新实例应能读到防抖窗口内的新增事件（P2 回归）")
+        // 3) store2：用同一 baseDir 重新加载，应能读到事件
+        let store2 = EventStore(storageBaseDir: baseDir)
+        let found = store2.events.contains { $0.id == ev.id }
+        XCTAssertTrue(found, "flushPendingSave 后新实例应能读到防抖窗口内的新增事件（P2 回归）")
 
-            // 清理
-            try? FileManager.default.removeItem(at: baseDir)
-        }
+        // 清理
+        try? FileManager.default.removeItem(at: baseDir)
     }
 }

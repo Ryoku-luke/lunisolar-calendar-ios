@@ -65,7 +65,7 @@ struct CountdownLiveActivityView: View {
                 Text(context.attributes.title)
                     .font(.headline)
                     .lineLimit(1)
-                Text("倒计时 · \(context.state.endDate.formatted(.dateTime.month().day()))")
+                Text(String(format: NSLocalizedString("倒计时 · %@", comment: ""), context.state.endDate.formatted(.dateTime.month().day())))
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
             }
@@ -95,38 +95,42 @@ public struct CountdownLiveActivityWidget: Widget {
             CountdownLiveActivityView(context: context)
         } dynamicIsland: { context in
             DynamicIsland {
-                // 展开态：左侧 emoji（圆角容器）、右侧剩余时间、底部标题+目标日期
+                // 展开态：左侧 emoji（纯黑圆角底）、中部标题+日期、右侧倒计时
+                // 三段均衡布局（系统灵动岛标准结构：图标 | 信息 | 数值）
                 DynamicIslandExpandedRegion(.leading) {
                     Text(context.attributes.emoji)
-                        .font(.system(size: 24, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                        .background(Color.themeQuaternaryFill)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .font(.system(size: 22, weight: .semibold))
+                        .padding(7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.black.opacity(0.9))
+                        )
                 }
-                DynamicIslandExpandedRegion(.trailing) {
+                DynamicIslandExpandedRegion(.center) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("剩余")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text(context.state.endDate, style: .timer)
-                            .font(.system(.title2, design: .rounded).weight(.bold))
-                            .monospacedDigit()
-                    }
-                }
-                DynamicIslandExpandedRegion(.bottom) {
-                    HStack(spacing: 6) {
                         Text(context.attributes.title)
                             .font(.caption.weight(.semibold))
                             .lineLimit(1)
-                        Text("· \(context.state.endDate.formatted(.dateTime.month().day()))")
+                        Text(context.state.endDate.formatted(.dateTime.month(.twoDigits).day(.twoDigits)))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
+                DynamicIslandExpandedRegion(.trailing) {
+                    // 系统原生倒计时：每秒自动刷新、monospaced 防跳动
+                    Text(context.state.endDate, style: .timer)
+                        .font(.system(.title2, design: .rounded).weight(.bold))
+                        .monospacedDigit()
+                }
             } compactLeading: {
-                // 紧凑态（左侧）：仅 emoji 图标
+                // 紧凑态（左侧）：emoji + 纯黑圆角底，边缘干净不露液态玻璃杂色
                 Text(context.attributes.emoji)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
+                    .padding(4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.black.opacity(0.9))
+                    )
             } compactTrailing: {
                 // 紧凑态（右侧）：仅剩余时间（灵动岛紧凑区建议"一元素一数字"）
                 Text(context.state.endDate, style: .timer)
@@ -135,11 +139,17 @@ public struct CountdownLiveActivityWidget: Widget {
             } minimal: {
                 // 最小态（与其他活动并排时）：仅 emoji 图标
                 Text(context.attributes.emoji)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
+                    .padding(3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.black.opacity(0.9))
+                    )
             }
             .keylineTint(Color(red: 0.30, green: 0.55, blue: 0.52))
         }
-        .contentMarginsDisabled()
+        // ⚠️ 不调用 .contentMarginsDisabled()：iOS 26 液态玻璃灵动岛默认自带
+        // 安全边距，内容贴边反而显得更宽更满；保留边距让展开态观感更克制。
     }
 }
 
@@ -151,13 +161,19 @@ public enum CountdownActivityManager {
     /// [eventID.uuidString : activityID]，跨启动恢复用
     private static let idsKey = "Lunisolar.liveActivity.ids"
 
-    /// 为某个倒数日开始灵动岛活动（已有则先结束旧的）
-    /// 返回 Result：成功给 activityID；失败给具体 Error（便于 UI 如实提示定位根因）
+    /// 为某个倒数日启动灵动岛活动（新建/编辑保存时自动调用）。
+    /// 幂等：事件已在岛上且标题/图标/日期都未变 → 直接复用，不重启（避免编辑时活动闪烁）。
+    /// 重建时「先上新、后撤旧」：新活动 request 成功后再结束旧活动，
+    /// 避免旧活动先行消失导致的上岛失败窗口与视觉抖动。
     @discardableResult
     public static func start(event: CountdownEvent) -> Result<String, Error> {
-        if let old = activeActivityID(for: event.id) {
-            end(id: old)
-            remove(eventID: event.id)
+        // 幂等复用：关键内容未变 → 保持现有活动原样
+        if let oldID = activeActivityID(for: event.id),
+           let old = Activity<CountdownActivityAttributes>.activities.first(where: { $0.id == oldID }),
+           old.attributes.title == event.title,
+           old.attributes.emoji == event.emoji,
+           old.content.state.endDate == event.date {
+            return .success(oldID)
         }
         let attrs = CountdownActivityAttributes(eventID: event.id,
                                                 title: event.title,
@@ -169,9 +185,15 @@ public enum CountdownActivityManager {
                 attributes: attrs,
                 content: content
             )
+            // 新活动已上岛 → 再撤同事件旧活动（若有）
+            if let oldID = UserDefaults.standard.dictionary(forKey: idsKey)?[event.id.uuidString] as? String,
+               oldID != activity.id {
+                end(id: oldID)
+            }
             save(activityID: activity.id, for: event.id)
             return .success(activity.id)
         } catch {
+            // request 失败时旧活动原样保留，不丢失
             return .failure(error)
         }
     }
@@ -204,6 +226,26 @@ public enum CountdownActivityManager {
             end(id: id)
         }
         remove(eventID: eventID)
+    }
+
+    /// 启动兜底：清理「事件已不存在但活动仍在岛上」的孤儿活动。
+    /// 覆盖所有删除路径（即使某处删除时漏调 end，下次启动也会自动下岛）。
+    public static func cleanupOrphans(validEventIDs: Set<UUID>) {
+        let dict = UserDefaults.standard.dictionary(forKey: idsKey) as? [String: String] ?? [:]
+        for (idString, activityID) in dict {
+            guard let eventID = UUID(uuidString: idString) else {
+                UserDefaults.standard.removeObject(forKey: idsKey)
+                continue
+            }
+            // 事件已删除，或系统已结束该活动 → 清理记录
+            if !validEventIDs.contains(eventID)
+                || !Activity<CountdownActivityAttributes>.activities.contains(where: { $0.id == activityID }) {
+                if !validEventIDs.contains(eventID) {
+                    end(id: activityID)  // 结束幽灵活动
+                }
+                remove(eventID: eventID)
+            }
+        }
     }
 
     // MARK: 内部

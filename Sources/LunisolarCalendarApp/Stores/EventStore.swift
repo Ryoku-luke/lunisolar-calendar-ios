@@ -12,6 +12,10 @@ import os
 import Observation
 #endif
 
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
+
 // MARK: - 事件存储
 
 #if canImport(Observation)
@@ -873,6 +877,12 @@ public final class EventStore {
             topTitles: top
         )
         _ = WidgetSnapshotStore.write(snap, appGroupID: widgetAppGroupID)
+        #if canImport(WidgetKit)
+        // P2 修复：快照写入后主动刷新小组件时间线。否则用户新增/完成日程后，
+        // 小组件要等到次日 00:05 才重算，Widget 与 App 数据明显滞后。
+        // reloadAllTimelines 由系统节流，防抖后的低频保存不会造成性能问题。
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
     }
 
     private func insertSampleData() {

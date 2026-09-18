@@ -10,7 +10,7 @@
 
 | Capability | 用途 | 必需 | 配置项 |
 |---|---|---|---|
-| **App Groups** | 主 App 与 Widget Extension 共享数据快照 | ✅ | `group.com.lunisolar.calendar` |
+| **App Groups** | 主 App 与 Widget Extension 共享数据快照 | ✅ | `group.com.qinghe.calendar` |
 | **iCloud** | CloudKit 私有数据库同步 | ⚠️ 仅付费账号 | 勾选 CloudKit，Container ID：`iCloud.com.lunisolar.calendar` |
 | **Push Notifications** | 未来支持远端推送通知（当前本地通知不需要） | ⚪ 可选 | — |
 | **Background Modes** | 后台刷新（可选，用于农历提醒续排） | ⚪ 可选 | Background fetch |
@@ -37,7 +37,7 @@
     <!-- App Group：主 App ↔ Widget 共享（个人团队免费支持） -->
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>group.com.lunisolar.calendar</string>
+        <string>group.com.qinghe.calendar</string>
     </array>
 </dict>
 </plist>
@@ -64,7 +64,7 @@
     <!-- 必须与主 App 完全一致 -->
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>group.com.lunisolar.calendar</string>
+        <string>group.com.qinghe.calendar</string>
     </array>
 </dict>
 </plist>

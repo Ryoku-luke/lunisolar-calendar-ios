@@ -39,7 +39,7 @@ struct HolidayBadge: View {
     let isRegular: Bool
 
     var body: some View {
-        Text(type == .holiday ? "休" : "班")
+        Text(type == .holiday ? String(localized: "休") : String(localized: "班"))
             .font(.system(size: isRegular ? 9 : 8, weight: .bold))
             .foregroundStyle(.white)
             .frame(width: isRegular ? 14 : 12, height: isRegular ? 14 : 12)

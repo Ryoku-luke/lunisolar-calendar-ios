@@ -70,11 +70,19 @@ struct WeatherCardView: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             } else {
-                // 选中日超出拉取窗口（前 3 天 ~ 后 14 天）时的兜底
-                Text("\(snapshot.locationName) · 暂无该日天气")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                // 选中日超出拉取窗口（前 3 天 ~ 后 14 天）时的兜底：
+                // 拆成两行短文本（城市 / 暂无天气），避免单行长文案挤压日期卡片
+                // 中间的农历列导致农历换行。
+                VStack(alignment: alignment, spacing: 2) {
+                    Text(snapshot.locationName)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text("暂无该日天气")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
         }
         .frame(minHeight: 24)
@@ -136,4 +144,5 @@ struct WeatherCardView: View {
     private func openSystemSettings() {}
     #endif
 }
+
 #endif

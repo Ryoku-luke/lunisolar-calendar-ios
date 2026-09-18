@@ -104,8 +104,8 @@ struct DayDetailView: View {
                     }
                     if !festivals.isEmpty {
                         HStack(spacing: AppTheme.Spacing.xs) {
-                            ForEach(Array(festivals.prefix(3)), id: \.name) { f in
-                                Text("\(f.emoji) \(f.name)")
+                            ForEach(Array(festivals.prefix(3)), id: \.name) { f in  // 数据源 id 保持原 name
+                                Text("\(f.emoji) \(f.localizedName)")
                                     .font(AppTheme.Font.caption.weight(.bold))
                                     .capsuleTag(fill: Color(hex: f.accentHex).opacity(0.18),
                                                 border: Color(hex: f.accentHex).opacity(0.25), hPad: 10, vPad: 5)
@@ -128,8 +128,8 @@ struct DayDetailView: View {
                 ("冲煞", huangli.chongSha.isEmpty ? "—" : huangli.chongSha, Color.systemRed),
                 ("五行", huangli.wuXing.isEmpty ? "—" : huangli.wuXing, Color.systemBrown),
                 ("纳音", huangli.naYin.isEmpty ? "—" : huangli.naYin, Color.systemPurple),
-                ("喜神", huangli.xiShenDirection.isEmpty ? "—" : huangli.xiShenDirection, Color.systemPink),
-                ("财神", huangli.caiShenDirection.isEmpty ? "—" : huangli.caiShenDirection, Color.systemGold)
+                (NSLocalizedString("喜神", comment: ""), huangli.xiShenDirection.isEmpty ? "—" : huangli.xiShenDirection, Color.systemPink),
+                (NSLocalizedString("财神", comment: ""), huangli.caiShenDirection.isEmpty ? "—" : huangli.caiShenDirection, Color.systemGold)
             ]
             HStack(spacing: AppTheme.Spacing.xs) {
                 ForEach(rows, id: \.0) { item in
@@ -151,10 +151,10 @@ struct DayDetailView: View {
             if holidayInfo.type != .normal || termName != nil {
                 HStack(spacing: AppTheme.Spacing.xs) {
                     if holidayInfo.type == .holiday {
-                        ChipLabel(title: "休 \(holidayInfo.name)", systemImage: "sun.max.fill",
+                        ChipLabel(title: String(format: NSLocalizedString("休 %@", comment: ""), holidayInfo.name), systemImage: "sun.max.fill",
                                   tint: Color.systemGreen, font: AppTheme.Font.caption)
                     } else if holidayInfo.type == .workday {
-                        ChipLabel(title: "班 \(holidayInfo.name)", systemImage: "briefcase.fill",
+                        ChipLabel(title: String(format: NSLocalizedString("班 %@", comment: ""), holidayInfo.name), systemImage: "briefcase.fill",
                                   tint: Color.systemOrange, font: AppTheme.Font.caption)
                     }
                     if let term = termName {
@@ -222,7 +222,7 @@ struct DayDetailView: View {
                     .font(AppTheme.Font.title3).foregroundStyle(Color.label)
                 Spacer()
                 if !todays.isEmpty {
-                    ChipLabel(title: "\(todays.count) 项", systemImage: "calendar.day.timeline.left", tint: accent)
+                    ChipLabel(title: String(format: NSLocalizedString("%d 项", comment: ""), todays.count), systemImage: "calendar.day.timeline.left", tint: accent)
                 }
             }
             if todays.isEmpty {
@@ -260,7 +260,7 @@ struct DayDetailView: View {
             Button {
                 showAdd = true
             } label: {
-                Label("新建\(EventType.schedule.uiLabel)", systemImage: "plus.circle.fill")
+                Label(String(format: NSLocalizedString("新建%@", comment: ""), EventType.schedule.uiLabel), systemImage: "plus.circle.fill")
             }
             .buttonStyle(PrimaryActionButtonStyle(accent: accent))
         }

@@ -1,0 +1,7 @@
+/* InfoPlist.strings (en) — 自动生成 */
+
+"CFBundleDisplayName" = "Qinghe Calendar";
+"NSLocationWhenInUseUsageDescription" = "Used to get your current location and show local weather in the calendar details.";
+"NSContactsUsageDescription" = "Used to import contact birthdays and repeat reminders annually by the lunar calendar.";
+"NSCalendarsFullAccessUsageDescription" = "Used to import events from the system calendar for easier migration.";
+"NSCalendarsUsageDescription" = "Used to import events from the system calendar for easier migration.";

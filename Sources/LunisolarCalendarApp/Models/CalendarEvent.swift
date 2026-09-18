@@ -12,11 +12,20 @@ public enum EventType: String, Codable, CaseIterable, Identifiable, Sendable {
 
     /// UI / 导出显示名；不与 SwiftFoundation 的 String.title / AttributedString.title 扩展名冲突
     public var uiLabel: String {
+        // Linux Foundation 无 String.LocalizationValue / String(localized:)，降级返回字面量
+        #if !os(Linux)
+        switch self {
+        case .schedule: return String(localized: "日程")
+        case .reminder: return String(localized: "提醒")
+        case .note:     return String(localized: "记事")
+        }
+        #else
         switch self {
         case .schedule: return "日程"
         case .reminder: return "提醒"
         case .note:     return "记事"
         }
+        #endif
     }
 
     var systemIcon: String {
@@ -44,7 +53,14 @@ public enum RepeatRule: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
     /// UI / 导出显示名；不与 Foundation String `.title` 语义扩展歧义
-    public var uiLabel: String { rawValue }
+    public var uiLabel: String {
+        // Linux Foundation 无 String.LocalizationValue，降级返回 rawValue（已是中文 label）
+        #if !os(Linux)
+        return String(localized: String.LocalizationValue(rawValue))
+        #else
+        return rawValue
+        #endif
+    }
     /// 列表行内的短标签 —— .never 返回 nil（列表不显示"不重复"）
     public var displayText: String? {
         switch self {
@@ -64,7 +80,14 @@ public enum Priority: String, Codable, CaseIterable, Identifiable, Comparable, S
 
     public var id: String { rawValue }
     /// UI / 导出显示名；不与 Foundation String `.title` 语义扩展歧义
-    public var uiLabel: String { rawValue }
+    public var uiLabel: String {
+        // Linux Foundation 无 String.LocalizationValue，降级返回 rawValue
+        #if !os(Linux)
+        return String(localized: String.LocalizationValue(rawValue))
+        #else
+        return rawValue
+        #endif
+    }
 
     var order: Int {
         switch self {

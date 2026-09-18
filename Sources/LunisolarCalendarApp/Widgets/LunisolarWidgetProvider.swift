@@ -85,7 +85,7 @@ public struct LunisolarWidgetTimelineProvider: TimelineProvider {
             topTitles: (0..<3).map { i in
                 WidgetTodoTitle(
                     id: UUID().uuidString,
-                    title: ["晨读 30 分钟", "提交周报", "给妈妈打电话"][i],
+                    title: [NSLocalizedString("晨读 30 分钟", comment: ""), NSLocalizedString("提交周报", comment: ""), NSLocalizedString("给妈妈打电话", comment: "")][i],
                     isCompleted: i == 0,
                     priorityHex: ["#C41A1A", "#2563EB", "#D97706"][i]
                 )

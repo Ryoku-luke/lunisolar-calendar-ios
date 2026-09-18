@@ -52,6 +52,13 @@ public struct AppRootView: View {
                 await NotificationManager.shared.rescheduleAllReminders(in: store)
             }
             .task {
+                // 启动兜底：清理「倒数日已删除但灵动岛活动仍残留」的孤儿活动
+                // （即使某处删除路径漏调 end，下次启动也会自动下岛）
+                #if canImport(ActivityKit) && canImport(WidgetKit)
+                CountdownActivityManager.cleanupOrphans(validEventIDs: Set(countdownStore.events.map(\.id)))
+                #endif
+            }
+            .task {
                 await setupCloudSyncIfNeeded()
             }
             // P2 修复：App 进入后台/失活时，把 EventStore + CountdownStore 的防抖

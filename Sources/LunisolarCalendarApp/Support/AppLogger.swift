@@ -16,13 +16,13 @@ import os.log
 public enum AppLogger {
     /// 主 App 统一日志通道；subsystem 用 Bundle ID 兜底为默认。
     public static let app: Logger = {
-        let subsystem = Bundle.main.bundleIdentifier ?? "com.lunisolar.calendar.app"
+        let subsystem = Bundle.main.bundleIdentifier ?? "com.qinghe.calendar.app"
         return Logger(subsystem: subsystem, category: "App")
     }()
 
     /// 同步 / iCloud 子通道（Console 里可单独过滤）
     public static let sync: Logger = {
-        let subsystem = Bundle.main.bundleIdentifier ?? "com.lunisolar.calendar.app"
+        let subsystem = Bundle.main.bundleIdentifier ?? "com.qinghe.calendar.app"
         return Logger(subsystem: subsystem, category: "Sync")
     }()
 }

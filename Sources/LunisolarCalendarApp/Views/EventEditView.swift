@@ -3,6 +3,7 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
+import LunarCore
 
 // MARK: - 新建 / 编辑日程（iOS 27 原生化改造）
 //
@@ -31,6 +32,14 @@ struct EventEditView: View {
     @State private var showDeleteConfirm = false
     private var isEditing: Bool { original != nil }
     private var gregorian: Calendar { Calendar(identifier: .gregorian) }
+    /// 黄历/农历数据支持范围（1900-01-01 — 2100-12-31）。
+    /// 约束 DatePicker 可选区间，防止选到范围外日期导致农历/黄历越界显示异常（假农历）。
+    private var supportedDateRange: ClosedRange<Date> {
+        let cal = Calendar(identifier: .gregorian)
+        let start = cal.date(from: DateComponents(year: ChineseCalendar.minYear, month: 1, day: 1, hour: 0, minute: 0)) ?? Date.distantPast
+        let end = cal.date(from: DateComponents(year: ChineseCalendar.maxYear, month: 12, day: 31, hour: 23, minute: 59)) ?? Date.distantFuture
+        return start...end
+    }
     private var reminderOptions: [Int] { [0, 5, 10, 15, 30, 60, 1440] }
     /// 节日自适应强调色（与月/日/设置页一致）
     private var accent: Color {
@@ -82,12 +91,12 @@ struct EventEditView: View {
             Section("时间") {
                 if type != .note {
                     Toggle("全天", isOn: $isAllDay)
-                    DatePicker("开始", selection: $startDate,
+                    DatePicker("开始", selection: $startDate, in: supportedDateRange,
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute])
                         .environment(\.calendar, gregorian)
                         .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
                         .datePickerStyle(.compact)
-                    DatePicker("结束", selection: $endDate,
+                    DatePicker("结束", selection: $endDate, in: supportedDateRange,
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute])
                         .environment(\.calendar, gregorian)
                         .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
@@ -96,7 +105,7 @@ struct EventEditView: View {
                             if endDate < newVal { endDate = newVal }
                         }
                 } else {
-                    DatePicker("日期", selection: $startDate, displayedComponents: [.date])
+                    DatePicker("日期", selection: $startDate, in: supportedDateRange, displayedComponents: [.date])
                         .environment(\.calendar, gregorian)
                         .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
                         .datePickerStyle(.compact)
@@ -193,7 +202,7 @@ struct EventEditView: View {
                 }
             }
         }
-        .navigationTitle(isEditing ? "编辑\(type.uiLabel)" : "新建\(type.uiLabel)")
+        .navigationTitle(isEditing ? String(format: NSLocalizedString("编辑%@", comment: ""), type.uiLabel) : String(format: NSLocalizedString("新建%@", comment: ""), type.uiLabel))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -214,7 +223,7 @@ struct EventEditView: View {
                 Button(role: .destructive) {
                     showDeleteConfirm = true
                 } label: {
-                    Text("删除此\(type.uiLabel)")
+                    Text(String(format: NSLocalizedString("删除此%@", comment: ""), type.uiLabel))
                         .font(.body.weight(.medium))
                         .foregroundStyle(.red)
                         .frame(maxWidth: .infinity)
@@ -234,7 +243,7 @@ struct EventEditView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("确定要删除这个\(type.uiLabel)吗？删除后无法恢复。")
+            Text(String(format: NSLocalizedString("确定要删除这个%@吗？删除后无法恢复。", comment: ""), type.uiLabel))
         }
     }
 
@@ -306,6 +315,8 @@ struct EventEditView: View {
         // 与 CountdownView 保存一致：dismiss 后用户很可能立即上滑杀进程，
         // 0.5s 防抖保存未必能跑完，先同步落盘防丢数据。
         store.flushPendingSave()
+        // 保存成功计入 App Store 评分引导（阈值 5 次 + 90 天冷却）
+        RatingPromptCoordinator.registerMeaningfulAction()
         dismiss()
     }
 

@@ -7,12 +7,11 @@ final class CountdownEventTests: XCTestCase {
 
     private let gregorian = Calendar(identifier: .gregorian)
 
-    /// 构造本地时区午夜日期（与 UI DatePicker 行为一致；测试不应硬编码特定时区）。
     private func date(_ y: Int, _ m: Int, _ d: Int) -> Date {
         var c = DateComponents()
         c.year = y; c.month = m; c.day = d
         c.hour = 0; c.minute = 0; c.second = 0
-        c.timeZone = .current
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai")
         return gregorian.date(from: c)!
     }
 

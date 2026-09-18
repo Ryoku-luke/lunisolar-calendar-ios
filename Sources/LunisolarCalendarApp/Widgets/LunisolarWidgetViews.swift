@@ -163,14 +163,14 @@ public struct HuangliOverviewWidgetView: View {
             header(dateSize: WidgetUI.dateSmall, lunarSize: 11)
 
             HStack(alignment: .top, spacing: 8) {
-                yijiColumn(title: "宜",
+                yijiColumn(title: NSLocalizedString("宜", comment: ""),
                            items: Array(entry.huangli?.yi.prefix(2) ?? []),
                            color: accent, itemSize: WidgetUI.caption)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Rectangle()
                     .fill(Color.themeSeparator.opacity(0.5))
                     .frame(width: 0.5)
-                yijiColumn(title: "忌",
+                yijiColumn(title: NSLocalizedString("忌", comment: ""),
                            items: Array(entry.huangli?.ji.prefix(2) ?? []),
                            color: Color.secondary, itemSize: WidgetUI.caption)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -183,7 +183,7 @@ public struct HuangliOverviewWidgetView: View {
                 }
                 Spacer(minLength: 2)
                 if let f = entry.festivals.first {
-                    WidgetFestivalChip(emoji: f.emoji, name: f.name,
+                    WidgetFestivalChip(emoji: f.emoji, name: f.localizedName,
                                        accentHex: f.accentHex, compact: true)
                 }
             }
@@ -203,14 +203,14 @@ public struct HuangliOverviewWidgetView: View {
             header(dateSize: WidgetUI.dateMedium, lunarSize: 11, showsFestival: true)
 
             HStack(alignment: .top, spacing: 12) {
-                yijiColumn(title: "宜",
+                yijiColumn(title: NSLocalizedString("宜", comment: ""),
                            items: Array(entry.huangli?.yi.prefix(4) ?? []),
                            color: accent, itemSize: WidgetUI.caption, rowSpacing: 3)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Rectangle()
                     .fill(Color.themeSeparator.opacity(0.5))
                     .frame(width: 0.5)
-                yijiColumn(title: "忌",
+                yijiColumn(title: NSLocalizedString("忌", comment: ""),
                            items: Array(entry.huangli?.ji.prefix(4) ?? []),
                            color: Color.secondary, itemSize: WidgetUI.caption, rowSpacing: 3)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -222,10 +222,10 @@ public struct HuangliOverviewWidgetView: View {
                     WidgetMetaLabel(icon: "exclamationmark.shield", text: cs)
                 }
                 if let cai = entry.huangli?.caiShenDirection, !cai.isEmpty {
-                    WidgetMetaLabel(icon: "dollarsign.circle", text: "财神 \(cai)")
+                    WidgetMetaLabel(icon: "dollarsign.circle", text: String(format: NSLocalizedString("财神 %@", comment: ""), cai))
                 }
                 if entry.festivals.count > 1, let f2 = entry.festivals.dropFirst().first {
-                    WidgetFestivalChip(emoji: f2.emoji, name: f2.name,
+                    WidgetFestivalChip(emoji: f2.emoji, name: f2.localizedName,
                                        accentHex: f2.accentHex, compact: true)
                 }
                 Spacer(minLength: 0)
@@ -247,19 +247,19 @@ public struct HuangliOverviewWidgetView: View {
                 header(dateSize: WidgetUI.dateLarge, lunarSize: 14)
                 Spacer(minLength: 0)
                 if let f = entry.festivals.first {
-                    WidgetFestivalChip(emoji: f.emoji, name: f.name, accentHex: f.accentHex)
+                    WidgetFestivalChip(emoji: f.emoji, name: f.localizedName, accentHex: f.accentHex)
                 }
             }
 
             HStack(alignment: .top, spacing: 16) {
-                yijiColumn(title: "宜",
+                yijiColumn(title: NSLocalizedString("宜", comment: ""),
                            items: Array(entry.huangli?.yi.prefix(6) ?? []),
                            color: accent, itemSize: 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Rectangle()
                     .fill(Color.themeSeparator.opacity(0.5))
                     .frame(width: 0.5)
-                yijiColumn(title: "忌",
+                yijiColumn(title: NSLocalizedString("忌", comment: ""),
                            items: Array(entry.huangli?.ji.prefix(6) ?? []),
                            color: Color.secondary, itemSize: 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -274,10 +274,10 @@ public struct HuangliOverviewWidgetView: View {
                     metaPill(icon: "sparkles", text: wx)
                 }
                 if let xi = entry.huangli?.xiShenDirection, !xi.isEmpty {
-                    metaPill(icon: "face.smiling", text: "喜神 \(xi)")
+                    metaPill(icon: "face.smiling", text: String(format: NSLocalizedString("喜神 %@", comment: ""), xi))
                 }
                 if let cai = entry.huangli?.caiShenDirection, !cai.isEmpty {
-                    metaPill(icon: "dollarsign.circle", text: "财神 \(cai)")
+                    metaPill(icon: "dollarsign.circle", text: String(format: NSLocalizedString("财神 %@", comment: ""), cai))
                 }
                 Spacer(minLength: 0)
             }
@@ -300,7 +300,7 @@ public struct HuangliOverviewWidgetView: View {
                 .foregroundStyle(accent)
                 .monospacedDigit()
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(entry.date.month)月 \(entry.date.weekdaySymbol)")
+                Text(String(format: NSLocalizedString("%d月 %@", comment: ""), entry.date.month, entry.date.weekdaySymbol))
                     .font(.system(size: WidgetUI.meta, weight: .medium))
                     .foregroundStyle(Color.secondary)
                 if let lunar = entry.lunar {
@@ -311,7 +311,7 @@ public struct HuangliOverviewWidgetView: View {
             }
             Spacer(minLength: 6)
             if showsFestival, let f = entry.festivals.first {
-                WidgetFestivalChip(emoji: f.emoji, name: f.name,
+                WidgetFestivalChip(emoji: f.emoji, name: f.localizedName,
                                    accentHex: f.accentHex, compact: true)
             }
         }
@@ -323,7 +323,7 @@ public struct HuangliOverviewWidgetView: View {
         VStack(alignment: .leading, spacing: rowSpacing) {
             WidgetYiJiTag(title: title, color: color)
             if items.isEmpty {
-                Text("诸事不宜")
+                Text(NSLocalizedString("诸事不宜", comment: ""))
                     .font(.system(size: WidgetUI.caption))
                     .foregroundStyle(Color.secondary.opacity(0.6))
             } else {
@@ -386,7 +386,7 @@ public struct LunarCardWidgetView: View {
     private var smallView: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("农历")
+                Text(NSLocalizedString("农历", comment: ""))
                     .font(.system(size: WidgetUI.overline, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.72))
                     .tracking(3)
@@ -400,7 +400,7 @@ public struct LunarCardWidgetView: View {
 
             VStack(spacing: 4) {
                 if let lunar = entry.lunar {
-                    Text("\(lunar.month)月\(lunar.day)")
+                    Text(String(format: NSLocalizedString("%d月%d日", comment: ""), lunar.month, lunar.day))
                         .font(.system(size: 32, weight: .heavy, design: .serif))
                         .foregroundStyle(Color.white)
                         .minimumScaleFactor(0.6)
@@ -408,10 +408,10 @@ public struct LunarCardWidgetView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.85))
                 } else {
-                    Text("暂无数据")
+                    Text(NSLocalizedString("暂无数据", comment: ""))
                         .font(.system(size: 20, weight: .heavy, design: .serif))
                         .foregroundStyle(Color.white.opacity(0.92))
-                    Text("请打开 App 刷新")
+                    Text(NSLocalizedString("请打开 App 刷新", comment: ""))
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.72))
                 }
@@ -422,7 +422,7 @@ public struct LunarCardWidgetView: View {
 
             HStack {
                 if let f = entry.festivals.first {
-                    WidgetFestivalChip(emoji: f.emoji, name: f.name,
+                    WidgetFestivalChip(emoji: f.emoji, name: f.localizedName,
                                        accentHex: f.accentHex, onDark: true, compact: true)
                 } else if let lunar = entry.lunar {
                     WidgetGhostCapsule(text: lunar.yearGanZhi)
@@ -441,7 +441,7 @@ public struct LunarCardWidgetView: View {
         HStack(alignment: .center, spacing: 12) {
             // 左：大号农历月日
             VStack(alignment: .leading, spacing: 4) {
-                Text("农 历")
+                Text(NSLocalizedString("农 历", comment: ""))
                     .font(.system(size: WidgetUI.overline, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.62))
                     .tracking(3)
@@ -451,21 +451,21 @@ public struct LunarCardWidgetView: View {
                             .font(.system(size: WidgetUI.lunarNumMedium, weight: .black, design: .serif))
                             .foregroundStyle(Color.white)
                             .minimumScaleFactor(0.7)
-                        Text("月\(lunar.day)")
+                        Text(String(format: NSLocalizedString("月%d", comment: ""), lunar.day))
                             .font(.system(size: 18, weight: .heavy, design: .serif))
                             .foregroundStyle(Color.white.opacity(0.92))
                     }
                     Text("\(lunar.monthName)\(lunar.dayName)")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.9))
-                    Text(verbatim: "\(entry.date.year) 年 \(entry.date.month) 月 \(entry.date.day) 日 · \(entry.date.weekdaySymbol)")
+                    Text(String(format: NSLocalizedString("%d 年 %d 月 %d 日 · %@", comment: ""), entry.date.year, entry.date.month, entry.date.day, entry.date.weekdaySymbol))
                         .font(.system(size: WidgetUI.meta, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.6))
                 } else {
-                    Text("暂无数据")
+                    Text(NSLocalizedString("暂无数据", comment: ""))
                         .font(.system(size: 40, weight: .black, design: .serif))
                         .foregroundStyle(Color.white.opacity(0.95))
-                    Text("请打开 App 刷新")
+                    Text(NSLocalizedString("请打开 App 刷新", comment: ""))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.7))
                 }
@@ -475,7 +475,7 @@ public struct LunarCardWidgetView: View {
             // 右：节日 + 黄历信息（干支只在这里出现一次，避免与左侧重复）
             VStack(alignment: .trailing, spacing: 8) {
                 if let f = entry.festivals.first {
-                    WidgetFestivalChip(emoji: f.emoji, name: f.name,
+                    WidgetFestivalChip(emoji: f.emoji, name: f.localizedName,
                                        accentHex: f.accentHex, onDark: true)
                 }
                 if let f2 = entry.festivals.dropFirst().first {
@@ -513,13 +513,13 @@ public struct LunarCardWidgetView: View {
     private var largeView: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("农 历")
+                Text(NSLocalizedString("农 历", comment: ""))
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.7))
                     .tracking(4)
                 Spacer()
                 if let f = entry.festivals.first {
-                    WidgetFestivalChip(emoji: f.emoji, name: f.name,
+                    WidgetFestivalChip(emoji: f.emoji, name: f.localizedName,
                                        accentHex: f.accentHex, onDark: true)
                 }
             }
@@ -533,7 +533,7 @@ public struct LunarCardWidgetView: View {
                             .font(.system(size: WidgetUI.lunarNumLarge, weight: .black, design: .serif))
                             .foregroundStyle(Color.white)
                             .minimumScaleFactor(0.6)
-                        Text("月\(lunar.day)")
+                        Text(String(format: NSLocalizedString("月%d", comment: ""), lunar.day))
                             .font(.system(size: 30, weight: .heavy, design: .serif))
                             .foregroundStyle(Color.white.opacity(0.92))
                     }
@@ -542,14 +542,14 @@ public struct LunarCardWidgetView: View {
                         .foregroundStyle(Color.white.opacity(0.92))
                     WidgetGhostCapsule(text: "\(lunar.yearGanZhi)年 · 生肖\(lunar.yearAnimal)",
                                        icon: "moon.stars.fill")
-                    Text(verbatim: "\(entry.date.year) 年 \(entry.date.month) 月 \(entry.date.day) 日 · \(entry.date.weekdaySymbol)")
+                    Text(String(format: NSLocalizedString("%d 年 %d 月 %d 日 · %@", comment: ""), entry.date.year, entry.date.month, entry.date.day, entry.date.weekdaySymbol))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.62))
                 } else {
-                    Text("暂无数据")
+                    Text(NSLocalizedString("暂无数据", comment: ""))
                         .font(.system(size: 44, weight: .black, design: .serif))
                         .foregroundStyle(Color.white)
-                    Text("请打开 App 刷新")
+                    Text(NSLocalizedString("请打开 App 刷新", comment: ""))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.75))
                 }
@@ -606,7 +606,7 @@ public struct TodoProgressWidgetView: View {
     private var smallView: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("今日待办")
+                Text(NSLocalizedString("今日待办", comment: ""))
                     .font(.system(size: WidgetUI.title, weight: .heavy, design: .rounded))
                     .foregroundStyle(Color.primary)
                 Spacer()
@@ -650,7 +650,7 @@ public struct TodoProgressWidgetView: View {
         HStack(alignment: .center, spacing: 14) {
             // 左：进度环
             VStack(spacing: 4) {
-                Text("今日待办")
+                Text(NSLocalizedString("今日待办", comment: ""))
                     .font(.system(size: WidgetUI.title, weight: .heavy, design: .rounded))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 WidgetProgressRing(progress: entry.progress, accent: accent, lineWidth: 9)
@@ -688,7 +688,7 @@ public struct TodoProgressWidgetView: View {
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
                     if let f = entry.festivals.first {
-                        WidgetFestivalChip(emoji: f.emoji, name: f.name,
+                        WidgetFestivalChip(emoji: f.emoji, name: f.localizedName,
                                            accentHex: f.accentHex, compact: true)
                     }
                     Spacer(minLength: 0)
@@ -723,9 +723,9 @@ public struct TodoProgressWidgetView: View {
                     .frame(width: 92, height: 92)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("今日待办")
+                    Text(NSLocalizedString("今日待办", comment: ""))
                         .font(.system(size: 15, weight: .heavy, design: .rounded))
-                    Text("已完成 \(entry.completedCount) / \(entry.todaysEventsCount) 项")
+                    Text(String(format: NSLocalizedString("已完成 %d / %d 项", comment: ""), entry.completedCount, entry.todaysEventsCount))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.secondary)
                         .monospacedDigit()
@@ -755,7 +755,7 @@ public struct TodoProgressWidgetView: View {
             // 底部：节日 + 冲煞
             HStack(spacing: 8) {
                 if let f = entry.festivals.first {
-                    WidgetFestivalChip(emoji: f.emoji, name: f.name, accentHex: f.accentHex)
+                    WidgetFestivalChip(emoji: f.emoji, name: f.localizedName, accentHex: f.accentHex)
                 }
                 Spacer(minLength: 0)
                 if let cs = entry.huangli?.displayChongSha {
@@ -786,11 +786,11 @@ public struct TodoProgressWidgetView: View {
         }
         if rows.count < pick {
             let fallbacks: [DisplayRow] = [
-                DisplayRow(title: "打开 App 查看今日日程", done: true,  priorityHex: "#6B7280"),
-                DisplayRow(title: "长按小组件可切换尺寸样式", done: false, priorityHex: "#2563EB"),
-                DisplayRow(title: "今日宜 \(entry.huangli?.yi.first ?? "祭祀")", done: false, priorityHex: "#D97706"),
-                DisplayRow(title: "规划一下明天的安排", done: false, priorityHex: "#6B7280"),
-                DisplayRow(title: "记得喝水、起身活动", done: false, priorityHex: "#22A06B")
+                DisplayRow(title: NSLocalizedString("打开 App 查看今日日程", comment: ""), done: true,  priorityHex: "#6B7280"),
+                DisplayRow(title: NSLocalizedString("长按小组件可切换尺寸样式", comment: ""), done: false, priorityHex: "#2563EB"),
+                DisplayRow(title: String(format: NSLocalizedString("今日宜 %@", comment: ""), entry.huangli?.yi.first ?? NSLocalizedString("祭祀", comment: "")), done: false, priorityHex: "#D97706"),
+                DisplayRow(title: NSLocalizedString("规划一下明天的安排", comment: ""), done: false, priorityHex: "#6B7280"),
+                DisplayRow(title: NSLocalizedString("记得喝水、起身活动", comment: ""), done: false, priorityHex: "#22A06B")
             ]
             for f in fallbacks where rows.count < pick { rows.append(f) }
         }
@@ -799,13 +799,13 @@ public struct TodoProgressWidgetView: View {
 
     private var progressHintText: String {
         if entry.todaysEventsCount == 0 {
-            return "今日还没安排 · 打开 App 添加 ✨"
+            return NSLocalizedString("今日还没安排 · 打开 App 添加 ✨", comment: "")
         } else if entry.progress >= 1.0 {
-            return "已全部完成 🎉 给自己加个鸡腿"
+            return NSLocalizedString("已全部完成 🎉 给自己加个鸡腿", comment: "")
         } else if entry.progress >= 0.5 {
-            return "进度过半，继续加油 💪"
+            return NSLocalizedString("进度过半，继续加油 💪", comment: "")
         } else {
-            return "开工啦，一步一步来 ☕️"
+            return NSLocalizedString("开工啦，一步一步来 ☕️", comment: "")
         }
     }
 

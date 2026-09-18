@@ -78,9 +78,9 @@ struct SettingsView: View {
             conflictPolicyAlertButtons
         } message: { conflictPolicyAlertMessage }
         .alert("确认清空全部事件？", isPresented: $showClearConfirm) {
-            Button("清空全部 \(store.events.count) 条", role: .destructive) {
+            Button(String(format: NSLocalizedString("清空全部 %d 条", comment: ""), store.events.count), role: .destructive) {
                 let n = store.clearAll()
-                toast = .init(kind: .success, text: "已清空 \(n) 条事件")
+                toast = .init(kind: .success, text: String(format: NSLocalizedString("已清空 %d 条事件", comment: ""), n))
             }
             Button("取消", role: .cancel) {}
         } message: {

@@ -16,8 +16,8 @@ public struct HuangliOverviewWidget: Widget {
         StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
             HuangliOverviewWidgetView(entry: entry)
         }
-        .configurationDisplayName("今日黄历概览")
-        .description("查看当日宜忌、冲煞、五行和节日，最常看的黄历信息一屏掌握。")
+        .configurationDisplayName(NSLocalizedString("今日黄历概览", comment: ""))
+        .description(NSLocalizedString("查看当日宜忌、冲煞、五行和节日，最常看的黄历信息一屏掌握。", comment: ""))
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }
@@ -35,8 +35,8 @@ public struct LunarCardWidget: Widget {
         StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
             LunarCardWidgetView(entry: entry)
         }
-        .configurationDisplayName("农历日期卡片")
-        .description("大字号显示农历月日和传统节日、节日主题色渐变，一眼掌握今天是农历几月几日。")
+        .configurationDisplayName(NSLocalizedString("农历日期卡片", comment: ""))
+        .description(NSLocalizedString("大字号显示农历月日和传统节日、节日主题色渐变，一眼掌握今天是农历几月几日。", comment: ""))
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }
@@ -54,8 +54,8 @@ public struct TodoProgressWidget: Widget {
         StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
             TodoProgressWidgetView(entry: entry)
         }
-        .configurationDisplayName("今日待办进度")
-        .description("环形进度条展示今日已完成日程占比，激励每日打卡，Medium 尺寸还显示节日与冲煞信息。")
+        .configurationDisplayName(NSLocalizedString("今日待办进度", comment: ""))
+        .description(NSLocalizedString("环形进度条展示今日已完成日程占比，激励每日打卡，Medium 尺寸还显示节日与冲煞信息。", comment: ""))
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }

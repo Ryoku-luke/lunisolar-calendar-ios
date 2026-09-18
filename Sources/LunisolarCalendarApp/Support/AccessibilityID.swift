@@ -5,7 +5,7 @@ import Foundation
 /// 关键交互元素的稳定无障碍标识。
 /// - VoiceOver：配合 accessibilityLabel 提供可读名称；
 /// - 未来 XCUITest：用这些稳定 ID 定位元素，避免硬编码字符串漂移。
-/// 命名规范：`模块.元素.动作`，小写开头、点分，段内允许 camelCase。
+/// 命名规范：`模块.元素.动作`，全部小写、点分。
 public enum AccessibilityID {
     // 月视图
     public static let monthNewEvent = "calendar.month.newEvent"

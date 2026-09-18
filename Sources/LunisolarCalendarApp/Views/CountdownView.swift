@@ -235,7 +235,7 @@ private struct CountdownEditor: View {
                         .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
                 }
                 Section {
-                    Label("支持范围：\(ChineseCalendar.minYear) 年 1 月 — \(ChineseCalendar.maxYear) 年 12 月",
+                    Label(String(format: NSLocalizedString("支持范围：%d 年 1 月 — %d 年 12 月", comment: ""), ChineseCalendar.minYear, ChineseCalendar.maxYear),
                           systemImage: "calendar.badge.clock")
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
@@ -302,6 +302,17 @@ private struct CountdownEditor: View {
         //   0.5s saveDebounce 里的 Task.sleep 在后台不一定能按时跑完，
         //   直接 flush 确保这次 add/update 的变更一定落盘（防丢数据）。
         store.flushPendingSave()
+        // 灵动岛自动上岛逻辑（不打扰、不弹窗）：
+        // - 新建倒数日 → 自动上岛（核心诉求）
+        // - 编辑且当前已在岛上 → 同步新内容到灵动岛（start 内部幂等：内容未变不重启）
+        // - 编辑但已手动下岛 → 保持下岛，不强行重新上岛（尊重用户主动选择）
+        #if canImport(ActivityKit)
+        if ActivityAuthorizationInfo().areActivitiesEnabled {
+            if editing == nil || CountdownActivityManager.activeActivityID(for: event.id) != nil {
+                _ = CountdownActivityManager.start(event: event)
+            }
+        }
+        #endif
         dismiss()
     }
 }

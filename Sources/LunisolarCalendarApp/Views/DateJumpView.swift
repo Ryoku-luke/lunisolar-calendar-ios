@@ -16,6 +16,8 @@ struct DateJumpView: View {
     // Gregorian 镜像——用户看得到假『农历几月几日』在界面误导），
     // 应该弹错误提示、留在跳转页让用户重新选或回到今天。
     @State private var showOutOfRangeAlert = false
+    /// 年视图入口：全年总览，点击月份直接跳转
+    @State private var showYearOverview = false
 
     private let today = Date()
     private let cal = Calendar(identifier: .gregorian)
@@ -53,7 +55,7 @@ struct DateJumpView: View {
                 }
 
                 Section {
-                    Label("支持范围：\(ChineseCalendar.minYear) 年 1 月 1 日 — \(ChineseCalendar.maxYear) 年 12 月 31 日",
+                    Label(String(format: NSLocalizedString("支持范围：%d 年 1 月 1 日 — %d 年 12 月 31 日", comment: ""), ChineseCalendar.minYear, ChineseCalendar.maxYear),
                           systemImage: "calendar.badge.clock")
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
@@ -65,6 +67,7 @@ struct DateJumpView: View {
                     Button { jumpTo(today.addingMonths(-1)) } label: { Label("上个月", systemImage: "arrow.left") }
                     Button { jumpTo(today.addingMonths(6)) } label: { Label("半年后", systemImage: "arrow.forward") }
                     Button { jumpTo(today.addingYears(1)) } label: { Label("一年后", systemImage: "calendar.badge.plus") }
+                    Button { showYearOverview = true } label: { Label("全年视图", systemImage: "square.grid.3x3.fill") }
                 }
             }
             .navigationTitle("跳转到日期")
@@ -92,6 +95,13 @@ struct DateJumpView: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .sheet(isPresented: $showYearOverview) {
+            YearOverviewView(targetDate: $targetDate) { date in
+                targetDate = date
+                showYearOverview = false
+                dismiss()
+            }
+        }
     }
 
     // MARK: - 逻辑

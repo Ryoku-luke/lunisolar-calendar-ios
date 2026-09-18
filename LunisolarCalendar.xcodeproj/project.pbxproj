@@ -18,6 +18,14 @@
 		000000000000000000000043 /* LunisolarCalendarApp in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000041 /* LunisolarCalendarApp */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		000000000000000000000044 /* LunisolarCalendarApp in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000041 /* LunisolarCalendarApp */; };
 		000000000000000000000045 /* LunisolarWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000000071 /* LunisolarWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		0000000000000000000000C1 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B1 /* Localizable.strings */; };
+		0000000000000000000000C2 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B2 /* InfoPlist.strings */; };
+		0000000000000000000000C3 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B3 /* Localizable.strings */; };
+		0000000000000000000000C4 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B4 /* InfoPlist.strings */; };
+		0000000000000000000000C5 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B5 /* Localizable.strings */; };
+		0000000000000000000000C6 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B6 /* InfoPlist.strings */; };
+		0000000000000000000000C7 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B7 /* Localizable.strings */; };
+		0000000000000000000000C8 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B8 /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -53,6 +61,14 @@
 		000000000000000000000090 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets/Assets.xcassets; sourceTree = "<group>"; };
 		0000000000000000000000A0 /* huangli_db.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Sources/LunisolarCalendarApp/Resources/huangli_db.json"; sourceTree = "<group>"; };
 		0000000000000000000000A1 /* lunar_calendar.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Sources/LunisolarCalendarApp/Resources/lunar_calendar.json"; sourceTree = "<group>"; };
+		0000000000000000000000B1 /* Localizable */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "Sources/LunisolarCalendarApp/Resources/en.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		0000000000000000000000B2 /* InfoPlist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "Sources/LunisolarCalendarApp/Resources/en.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		0000000000000000000000B3 /* Localizable */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "Sources/LunisolarCalendarApp/Resources/ja.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		0000000000000000000000B4 /* InfoPlist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "Sources/LunisolarCalendarApp/Resources/ja.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		0000000000000000000000B5 /* Localizable */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "Sources/LunisolarCalendarApp/Resources/zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		0000000000000000000000B6 /* InfoPlist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "Sources/LunisolarCalendarApp/Resources/zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		0000000000000000000000B7 /* Localizable */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "Sources/LunisolarCalendarApp/Resources/zh-Hant.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		0000000000000000000000B8 /* InfoPlist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "Sources/LunisolarCalendarApp/Resources/zh-Hant.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -181,9 +197,11 @@
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
 				Base,
+				en,
+				ja,
 				"zh-Hans",
+				"zh-Hant",
 			);
 			mainGroup = 000000000000000000000060;
 			productRefGroup = 000000000000000000000063 /* Products */;
@@ -207,6 +225,15 @@
 				000000000000000000000091 /* Assets.xcassets in Resources */,
 				0000000000000000000000A2 /* huangli_db.json in Resources */,
 				0000000000000000000000A3 /* lunar_calendar.json in Resources */,
+
+				0000000000000000000000C1 /* Localizable.strings in Resources */,
+				0000000000000000000000C2 /* InfoPlist.strings in Resources */,
+				0000000000000000000000C3 /* Localizable.strings in Resources */,
+				0000000000000000000000C4 /* InfoPlist.strings in Resources */,
+				0000000000000000000000C5 /* Localizable.strings in Resources */,
+				0000000000000000000000C6 /* InfoPlist.strings in Resources */,
+				0000000000000000000000C7 /* Localizable.strings in Resources */,
+				0000000000000000000000C8 /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -216,6 +243,14 @@
 			files = (
 				0000000000000000000000A4 /* huangli_db.json in Resources */,
 				0000000000000000000000A5 /* lunar_calendar.json in Resources */,
+				0000000000000000000000C1 /* Localizable.strings in Resources */,
+				0000000000000000000000C2 /* InfoPlist.strings in Resources */,
+				0000000000000000000000C3 /* Localizable.strings in Resources */,
+				0000000000000000000000C4 /* InfoPlist.strings in Resources */,
+				0000000000000000000000C5 /* Localizable.strings in Resources */,
+				0000000000000000000000C6 /* InfoPlist.strings in Resources */,
+				0000000000000000000000C7 /* Localizable.strings in Resources */,
+				0000000000000000000000C8 /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -414,7 +449,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.lunisolar.calendar";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.qinghe.calendar";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -441,7 +476,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.lunisolar.calendar";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.qinghe.calendar";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -465,7 +500,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.lunisolar.calendar.widget";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.qinghe.calendar.widget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -490,7 +525,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.lunisolar.calendar.widget";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.qinghe.calendar.widget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;

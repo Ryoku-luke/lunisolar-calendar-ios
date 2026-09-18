@@ -43,7 +43,12 @@ struct EventRow: View {
                           tint: event.priority.tintColor,
                           font: AppTheme.Font.caption2)
                 if !compact, event.type == .reminder || event.type == .schedule {
-                    Button { store.toggleCompleted(event) } label: {
+                    Button {
+                        // 仅在"从未完成 → 完成"方向计入评分引导（取消勾选不计），
+                        // 避免用户反复勾选刷计数。
+                        if !event.isCompleted { RatingPromptCoordinator.registerMeaningfulAction() }
+                        store.toggleCompleted(event)
+                    } label: {
                         Image(systemName: event.isCompleted ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: AppTheme.Touch.checkboxSize, weight: .semibold))
                             .foregroundStyle(

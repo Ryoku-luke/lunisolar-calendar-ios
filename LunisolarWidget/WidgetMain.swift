@@ -4,7 +4,7 @@ import LunisolarCalendarApp
 
 /// Widget Extension 入口：复用 SPM 包里已实现的 3 个 Widget + 灵动岛倒计时 Live Activity。
 /// App Group ID 必须与宿主 App entitlements 中的 com.apple.security.application-groups 一致。
-private let appGroupID = "group.com.lunisolar.calendar"
+private let appGroupID = "group.com.qinghe.calendar"
 
 @main
 struct LunisolarWidgetBundle: WidgetBundle {

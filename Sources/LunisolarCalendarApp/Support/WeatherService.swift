@@ -48,36 +48,26 @@ enum WMOWeather {
 
 // MARK: - 定位结果
 
-/// 定位坐标抽象：iOS 用 CLLocation，Linux/SPM 测试用 StubLocation。
-/// WeatherProvider 仅依赖 .coordinate.latitude / .longitude，与具体类型无关。
 #if canImport(CoreLocation)
-typealias WeatherLocation = CLLocation
-#else
-/// Linux/SPM 测试环境的 CLLocation 占位类型（仅含 WeatherProvider 实际使用的字段）。
-struct WeatherLocation: Sendable {
-    let coordinate: Coordinate
-    struct Coordinate: Sendable {
-        let latitude: Double
-        let longitude: Double
-    }
-    init(latitude: Double, longitude: Double) {
-        self.coordinate = Coordinate(latitude: latitude, longitude: longitude)
-    }
-}
-#endif
-
 enum LocationOutcome {
-    case location(WeatherLocation)
+    case location(CLLocation)
     case denied     // 用户未授权定位
     case failed     // 定位服务失败（无信号等）
 }
+#else
+// Linux / SwiftPM 测试容器无 CoreLocation：天气模块降级为 .failed / .denied
+enum LocationOutcome {
+    case denied
+    case failed
+}
+#endif
 
 // MARK: - 定位服务
 
-#if canImport(CoreLocation)
 /// 定位服务（WhenInUse，单次定位；未授权/失败返回对应结果，天气模块据此显示提示）。
 /// 超时实现：**主线程 100ms 间隔轮询**授权状态与定位结果（无 CheckedContinuation 竞速、
 /// 无 withTaskGroup sending 闭包），规避 Swift 6 区域隔离检查器无法识别的模式，且永不挂起。
+#if canImport(CoreLocation)
 @MainActor
 final class LocationService: NSObject, CLLocationManagerDelegate {
     static let shared = LocationService()
@@ -151,13 +141,6 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         Task { @MainActor in self.pendingResult = .failed }
     }
 }
-#else
-/// Linux/SPM 测试环境的定位 stub：永远返回 .failed。
-/// 让 WeatherProvider 能在 Linux 编译并跑纯函数测试（WMO 描述、缓存读写、URL 构造等）。
-struct LocationService {
-    static let shared = LocationService()
-    func currentLocation() async -> LocationOutcome { .failed }
-}
 #endif
 
 // MARK: - 天气获取
@@ -214,6 +197,10 @@ enum WeatherProvider {
     }
 
     private static func fetchWeather() async -> WeatherResult {
+        // Linux / SwiftPM 测试容器无 CoreLocation：天气功能降级为 .failed，不调用定位/网络
+        #if !canImport(CoreLocation)
+        return .failed
+        #else
         // 定位内部自带 6s 轮询超时（LocationService + 60s 定位缓存），此处直接 await，绝不挂起
         let outcome = await LocationService.shared.currentLocation()
         guard case .location(let location) = outcome else {
@@ -252,6 +239,7 @@ enum WeatherProvider {
         } catch {
             return .failed
         }
+        #endif
     }
 
     /// 组装逐日天气（前 3 天 + 未来 7 天，共 10 条；UI 按选中日取 ±3 天窗口）
@@ -277,16 +265,13 @@ enum WeatherProvider {
     }
 
     /// 反地理编码：Apple 地理编码服务自带超时，失败返回 nil 降级"当前位置"
-    private static func reverseGeocode(_ location: WeatherLocation) async -> String? {
-        #if canImport(CoreLocation)
+    #if canImport(CoreLocation)
+    private static func reverseGeocode(_ location: CLLocation) async -> String? {
         let geocoder = CLGeocoder()
         guard let placemark = try? await geocoder.reverseGeocodeLocation(location).first else { return nil }
         return placemark.locality ?? placemark.administrativeArea ?? placemark.name
-        #else
-        // Linux/SPM 无 CLGeocoder，直接降级为"当前位置"
-        return nil
-        #endif
     }
+    #endif
 
     private static func cachedSnapshot(coordKey: String) -> WeatherSnapshot? {
         let def = UserDefaults.standard
