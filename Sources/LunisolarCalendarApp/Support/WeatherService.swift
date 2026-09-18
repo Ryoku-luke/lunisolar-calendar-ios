@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(CoreLocation)
 import CoreLocation
+#endif
 
 // MARK: - 天气快照
 
@@ -43,17 +45,26 @@ enum WMOWeather {
 
 // MARK: - 定位结果
 
+#if canImport(CoreLocation)
 enum LocationOutcome {
     case location(CLLocation)
     case denied     // 用户未授权定位
     case failed     // 定位服务失败（无信号等）
 }
+#else
+/// 无 CoreLocation 平台（Linux / SwiftPM 单测）：定位恒失败
+enum LocationOutcome {
+    case denied
+    case failed
+}
+#endif
 
 // MARK: - 定位服务
 
 /// 定位服务（WhenInUse，单次定位；未授权/失败返回对应结果，天气模块据此显示提示）。
 /// 超时实现：**主线程 100ms 间隔轮询**授权状态与定位结果（无 CheckedContinuation 竞速、
 /// 无 withTaskGroup sending 闭包），规避 Swift 6 区域隔离检查器无法识别的模式，且永不挂起。
+#if canImport(CoreLocation)
 @MainActor
 final class LocationService: NSObject, CLLocationManagerDelegate {
     static let shared = LocationService()
@@ -127,6 +138,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         Task { @MainActor in self.pendingResult = .failed }
     }
 }
+#endif // canImport(CoreLocation)
 
 // MARK: - 天气获取
 
@@ -138,6 +150,7 @@ enum WeatherResult {
 
 /// Open-Meteo 天气获取（免费、免 Key）+ 1 小时缓存；
 /// 定位 / 反地理编码 / 网络全链路带超时兜底，任何环节失败返回 .failed，绝不挂起
+#if canImport(CoreLocation)
 @MainActor
 enum WeatherProvider {
     private static let cacheKey = "weather.cache.v2"
@@ -270,3 +283,10 @@ enum WeatherProvider {
         let snapshot: WeatherSnapshot
     }
 }
+#else
+/// 无 CoreLocation 平台（Linux / SwiftPM 单测）：天气功能不可用，返回 .failed
+@MainActor
+enum WeatherProvider {
+    static func currentWeather() async -> WeatherResult { .failed }
+}
+#endif // canImport(CoreLocation)

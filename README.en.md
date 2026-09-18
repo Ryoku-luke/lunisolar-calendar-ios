@@ -115,7 +115,7 @@ swift build        # Build all targets
 swift test         # Run 99 unit tests
 ```
 
-> On Linux only the model layer is verified (lunar/almanac/event CRUD/import-export/sync Mock); SwiftUI views require the iOS/macOS SDK. CI (`.github/workflows/ci.yml`) additionally runs `xcodebuild test` on an iOS simulator.
+> On Linux only the model layer is verified (lunar/almanac/event CRUD/import-export/sync Mock); SwiftUI views require the iOS/macOS SDK. CI (`.github/workflows/ci.yml`) additionally runs an iOS `xcodebuild build` compile check (views + host app).
 
 ## Test Coverage (99 tests)
 

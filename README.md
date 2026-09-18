@@ -115,7 +115,7 @@ swift build        # 编译所有 Target
 swift test         # 运行 99 个单元测试
 ```
 
-> Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；CI（`.github/workflows/ci.yml`）额外跑 iOS 模拟器 `xcodebuild test`。
+> Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；CI（`.github/workflows/ci.yml`）额外跑 iOS `xcodebuild build` 编译验证（视图层 + 宿主）。
 
 ## 测试覆盖（99 条）
 

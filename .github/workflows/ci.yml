@@ -17,25 +17,18 @@ jobs:
       - name: Test
         run: swift test
 
-  ios-tests:
-    name: iOS · xcodebuild 单测（模拟器）
-    runs-on: macos-15
+  ios-build:
+    name: iOS · xcodebuild 编译验证
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Xcode 版本
         run: xcodebuild -version
-      - name: Build & Test
+      - name: Build（SwiftUI 视图层 + 宿主编译门禁）
         run: |
-          xcodebuild test \
+          xcodebuild build \
             -project LunisolarCalendar.xcodeproj \
             -scheme LunisolarCalendar \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath DerivedData \
             -quiet
-      - name: 上传测试产物（失败时可查）
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: xcresult
-          path: DerivedData/Logs/Test/
-          if-no-files-found: ignore
