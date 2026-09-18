@@ -70,16 +70,15 @@ public struct CountdownEvent: Identifiable, Codable, Equatable, Hashable, Sendab
             c.month = origComps.month
             c.day   = origComps.day
             c.year  = year
-            if let d = cal.date(from: c) { return d }
-            // 闰日 2/29 在非闰年返回 nil → 退到 2/28
+            // 2/29 在非闰年无效：Calendar.date(from:) 会把它归一化到 3/1
+            //（Apple Foundation 与 Linux corelibs 行为一致，均不返回 nil），
+            // 必须显式判断闰年并回退到 2/28，否则闰日生日会跳期到 3/1。
             if origComps.month == 2 && origComps.day == 29 {
-                var fallback = DateComponents()
-                fallback.month = 2
-                fallback.day   = 28
-                fallback.year  = year
-                return cal.date(from: fallback)
+                let isLeap = (year.isMultiple(of: 4) && !year.isMultiple(of: 100))
+                            || year.isMultiple(of: 400)
+                if !isLeap { c.day = 28 }
             }
-            return nil
+            return cal.date(from: c)
         }
 
         if let thisYear = resolve(year: yearNow),
