@@ -25,12 +25,7 @@ public enum SolarTermProvider: Sendable {
         var name: String {
             // 节气名本地化：termNames 保留中文作为 Localizable key 源，
             // 显示层按系统语言取翻译（英文/日文/繁体各有对照）
-            // Linux Foundation 无 String.LocalizationValue，降级返回原始中文 key
-            #if !os(Linux)
-            return String(localized: String.LocalizationValue(termNames[index]))
-            #else
-            return termNames[index]
-            #endif
+            String(localized: String.LocalizationValue(termNames[index]))
         }
         var date: Date {
             var dc = DateComponents()

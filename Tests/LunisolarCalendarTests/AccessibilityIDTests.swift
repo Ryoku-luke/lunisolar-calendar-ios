@@ -17,8 +17,8 @@ final class AccessibilityIDTests: XCTestCase {
     }
 
     func testAllIDsFollowNamingConvention() {
-        // 规范：小写字母开头，点分段，段内允许 camelCase（newEvent / weekStart 等）
-        let pattern = #"^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$"#
+        // 规范：小写字母开头，点分段，段内仅小写字母/数字
+        let pattern = #"^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$"#
         for id in AccessibilityID.all {
             XCTAssertNotNil(
                 id.range(of: pattern, options: .regularExpression),

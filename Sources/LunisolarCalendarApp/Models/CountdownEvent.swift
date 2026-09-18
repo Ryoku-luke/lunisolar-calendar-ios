@@ -8,18 +8,10 @@ public enum CountdownKind: String, Codable, CaseIterable, Sendable {
     case anniversary // 纪念日（每年重复，如生日、结婚纪念）
 
     public var label: String {
-        // Linux Foundation 无 String(localized:)，降级返回字面量
-        #if !os(Linux)
         switch self {
         case .countdown: return String(localized: "倒数日")
         case .anniversary: return String(localized: "纪念日")
         }
-        #else
-        switch self {
-        case .countdown: return "倒数日"
-        case .anniversary: return "纪念日"
-        }
-        #endif
     }
 
     public var icon: String {
@@ -60,44 +52,34 @@ public struct CountdownEvent: Identifiable, Codable, Equatable, Hashable, Sendab
     /// 显示文案：如"还有 30 天" / "已过 5 天" / "今天"
     public func displayText(today: Date) -> String {
         let days = daysFrom(today: today)
-        // Linux Foundation 无 String(localized:)，降级返回字面量
-        #if !os(Linux)
         if days == 0 { return String(localized: "就是今天") }
         if days > 0 { return String(format: NSLocalizedString("还有 %d 天", comment: ""), days) }
         return String(format: NSLocalizedString("已过 %d 天", comment: ""), -days)
-        #else
-        if days == 0 { return "就是今天" }
-        if days > 0 { return String(format: "还有 %d 天", days) }
-        return String(format: "已过 %d 天", -days)
-        #endif
     }
 
     /// 纪念日的下次周年日期（非闰年 2/29 会落到 2/28，避免闰日生日跳过 2-3 年）
     public func nextAnniversary(from today: Date) -> Date? {
         guard kind == .anniversary else { return nil }
-        // 显式锁定 Asia/Shanghai 时区：纪念日是"日历日"概念，避免 Linux CI 默认 UTC 时区
-        // 导致 dateComponents 解析错位 8 小时（today/day 的 day 组件可能偏移 1 天）
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .current
+        let cal = Calendar(identifier: .gregorian)
         let nowComps = cal.dateComponents([.year, .month, .day], from: today)
         let origComps = cal.dateComponents([.month, .day], from: date)
         let yearNow = nowComps.year ?? 2026
-
-        func isLeap(_ y: Int) -> Bool {
-            (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
-        }
 
         func resolve(year: Int) -> Date? {
             var c = DateComponents()
             c.month = origComps.month
             c.day   = origComps.day
             c.year  = year
-            // 闰日 2/29 在非闰年直接退到 2/28：不能依赖 cal.date(from:) 返回 nil，
-            // 因为 Foundation 会自动把 2/29 滚动到 3/1（导致闰日生日错滚到 3 月）
-            if origComps.month == 2 && origComps.day == 29 && !isLeap(year) {
-                c.day = 28
+            if let d = cal.date(from: c) { return d }
+            // 闰日 2/29 在非闰年返回 nil → 退到 2/28
+            if origComps.month == 2 && origComps.day == 29 {
+                var fallback = DateComponents()
+                fallback.month = 2
+                fallback.day   = 28
+                fallback.year  = year
+                return cal.date(from: fallback)
             }
-            return cal.date(from: c)
+            return nil
         }
 
         if let thisYear = resolve(year: yearNow),

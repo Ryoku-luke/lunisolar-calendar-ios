@@ -1,4 +1,3 @@
-#if canImport(SwiftUI)
 import SwiftUI
 
 /// 日期卡片右侧空白处的大天气效果图标：按**选中日**当天天气码渲染大图标（不显示温度数字），
@@ -58,5 +57,3 @@ struct WeatherIconView: View {
         result = await WeatherProvider.currentWeather()
     }
 }
-
-#endif
