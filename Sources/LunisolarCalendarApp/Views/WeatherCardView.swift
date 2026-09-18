@@ -1,3 +1,4 @@
+#if canImport(SwiftUI)
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
@@ -143,3 +144,4 @@ struct WeatherCardView: View {
     private func openSystemSettings() {}
     #endif
 }
+#endif // canImport(SwiftUI)
