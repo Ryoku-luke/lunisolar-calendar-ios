@@ -91,7 +91,7 @@ public final class EventService {
     /// - 普通日程（schedule）：不上岛；
     /// - 提醒（reminder）：按事件优先级映射 urgent / important / normal；
     /// - 高优先级日程：按 important 处理。
-    public static func timeCapsuleCandidates(from events: [CalendarEvent]) -> [QingheTimeCapsuleCandidate] {
+    nonisolated public static func timeCapsuleCandidates(from events: [CalendarEvent]) -> [QingheTimeCapsuleCandidate] {
         events.compactMap { ev -> QingheTimeCapsuleCandidate? in
             guard !ev.isCompleted else { return nil }
             let type: QingheActivityType
@@ -120,7 +120,7 @@ public final class EventService {
     }
 
     /// CalendarEvent.Priority → QingheActivityPriority
-    private static func mapPriority(_ p: Priority) -> QingheActivityPriority {
+    nonisolated private static func mapPriority(_ p: Priority) -> QingheActivityPriority {
         switch p {
         case .urgent: return .urgent
         case .high:   return .important

@@ -2,14 +2,14 @@
 
 > 本文档说明如何使用 Xcode 对**清和日历**（LunisolarCalendar）进行本地编译、单元测试、真机调试与上架发布。
 >
-> 本项目是 **Swift Package Manager（SPM）纯工程**，仓库里没有 `.xcodeproj`。Xcode 打开 `Package.swift` 就会自动生成 `LunisolarCalendar.xcodeproj`，但要跑 iOS App / Widget / 真机调试，仍然需要**手动创建一个宿主 iOS App target**（见 §2）。
+> 本项目是 **Swift Package Manager（SPM）业务包 + Xcode 宿主工程**双结构：业务代码全部在 SPM 包（`LunisolarCalendarApp` / `LunarCore`），仓库根目录已随仓库提供 `LunisolarCalendar.xcodeproj` 宿主工程（`LunisolarCalendar` 主 App + `LunisolarWidget` Widget 扩展两个宿主 target），直接打开即可编译运行，**无需手动创建宿主 target**（见 §2）。
 
 ---
 
 ## 目录
 
 1. [环境要求](#1-环境要求)
-2. [首次打开 · 接入 iOS App Target](#2-首次打开--接入-ios-app-target)
+2. [首次打开 · 运行宿主工程](#2-首次打开--运行宿主工程)
 3. [编译 & 运行](#3-编译--运行)
 4. [单元测试](#4-单元测试)
 5. [Widget 小组件 Extension](#5-widget-小组件-extension)
@@ -57,52 +57,22 @@ Package.swift
 
 ---
 
-## 2. 首次打开 · 接入 iOS App Target
+## 2. 首次打开 · 运行宿主工程
 
-SPM 纯工程 `swift run LunisolarCalendarApp` 无法启动 App（没有可执行的 iOS 入口）。需要：
+仓库已提供 `LunisolarCalendar.xcodeproj`（含 `LunisolarCalendar` 主 App 与 `LunisolarWidget` Widget 扩展两个宿主 target）。宿主工程只做"编译入口 + 资源"（HostApp.swift / WidgetMain.swift / Assets / entitlements），业务代码全部在 SPM 包内，宿主通过 SwiftPM 依赖引用。
 
-### 方式 A · 创建一个空的 iOS App Target（推荐）
+### 打开方式（推荐）
 
-1. Xcode → **File → Open**，选择仓库根目录的 `Package.swift`。
-   Xcode 会自动生成 `LunisolarCalendar.xcodeproj`（在 DerivedData，不用手动保存）。
-2. **File → New → Target…** → 选 **iOS → App**。
-   - Product Name：`LunisolarCalendar`（或别的，只要**与 SPM product 名字不同**就行）
-   - Interface：SwiftUI
-   - Language：Swift
-   - **⚠️ 不要勾 "Use SwiftUI App" 以外的东西**，Core Data / Testing / Localization 都关掉
-3. 新 target 创建完后，进入 **Project → Target → General → Frameworks, Libraries, and Embedded Content**。
-   点 `+`，选择 `Package Products` 分组下的 **`LunisolarCalendarApp`**，设为 **`Embed & Sign`**。
-4. 删除模板生成的 `ContentView.swift` 和 `LunisolarCalendarApp.swift`（Xcode 默认建的那个）。
-5. 新建一个**只有三行**的入口文件 `AppDelegate+Main.swift`（放在你新建 target 的文件夹里，**不要**放进 Sources/LunisolarCalendarApp）：
+1. 双击 / 用 Xcode 打开仓库根目录的 `LunisolarCalendar.xcodeproj`。
+2. 选择 `LunisolarCalendar` scheme，选好 Team（真机调试需 Apple ID；免费账号亦可模拟器 / 真机调试）。
+3. 直接 ⌘R 运行。Widget 扩展随主 App 一起构建；小组件可在模拟器 / 真机添加。
 
-   ```swift
-   import SwiftUI
-   import LunisolarCalendarApp
+> 也可直接打开 `Package.swift` 让 Xcode 管理 SPM 包本身（命令行 `swift build` / `swift test` 走此路径），但运行 iOS App / Widget 一律通过上面的宿主工程。
 
-   @main
-   struct HostApp: App {
-       var body: some Scene {
-           WindowGroup {
-               AdaptiveRootView()
-                   .environment(EventStore.shared)
-           }
-       }
-   }
-   ```
+### 调试注意
 
-6. 把新 target 的 **Bundle Identifier** 设为你自己的（例如 `com.yourname.lunisolar-calendar`），并在 **Signing & Capabilities** 勾上你的 Team。
-7. 如果要跑 Widget，按 §5 创建 Widget Extension target。
-
-### 方式 B · 用 `swift run` + 命令行
-
-不推荐，只能验证业务逻辑，无法启动 UI：
-
-```bash
-swift build
-.build/debug/gen_huangli_db Resources/huangli_db.json
-```
-
----
+- 主 App target 的 **Bundle Identifier**（`com.qinghe.calendar`）与 Widget（`com.qinghe.calendar.widget`）、App Group（`group.com.qinghe.calendar`）需保持一致（见 §7）。
+- 若从旧版克隆后宿主工程引用丢失，Xcode → File → Packages → Resolve Package Versions 重新解析即可。
 
 ## 3. 编译 & 运行
 
