@@ -69,4 +69,62 @@ public final class EventService {
     public func requestNotificationAuthorization() async -> Bool {
         await NotificationManager.shared.requestAuthorization()
     }
+
+    // MARK: - 清和时间胶囊（文档 #20/#25）
+
+    /// 从当前事件中选出最值得进入时间胶囊（灵动岛 / 锁屏）的一个。
+    /// 映射规则（对齐文档 #20 优先级表）：
+    /// - 记事（note）：不上岛；
+    /// - 普通日程（schedule）：不上岛；
+    /// - 提醒（reminder）：按事件优先级映射 urgent / important / normal；
+    /// - 高优先级日程：按 important 处理。
+    public func timeCapsuleCandidate(now: Date = Date()) -> QingheTimeCapsuleCandidate? {
+        QingheActivityCoordinator.pickForIsland(
+            from: Self.timeCapsuleCandidates(from: store.events),
+            now: now
+        )
+    }
+
+    /// 事件 → 时间胶囊候选（纯函数，可测试）。
+    /// 映射规则（对齐文档 #20 优先级表）：
+    /// - 记事（note）：不上岛；
+    /// - 普通日程（schedule）：不上岛；
+    /// - 提醒（reminder）：按事件优先级映射 urgent / important / normal；
+    /// - 高优先级日程：按 important 处理。
+    public static func timeCapsuleCandidates(from events: [CalendarEvent]) -> [QingheTimeCapsuleCandidate] {
+        events.compactMap { ev -> QingheTimeCapsuleCandidate? in
+            guard !ev.isCompleted else { return nil }
+            let type: QingheActivityType
+            let priority: QingheActivityPriority
+            switch ev.type {
+            case .note:
+                return nil
+            case .reminder:
+                type = .reminder
+                priority = mapPriority(ev.priority)
+            case .schedule:
+                // 仅高优先级日程参与
+                guard ev.priority >= .high else { return nil }
+                type = .event
+                priority = .important
+            }
+            return QingheTimeCapsuleCandidate(
+                eventID: ev.id,
+                type: type,
+                priority: priority,
+                startDate: ev.startDate,
+                endDate: ev.isAllDay ? nil : ev.endDate,
+                isAllDay: ev.isAllDay
+            )
+        }
+    }
+
+    /// CalendarEvent.Priority → QingheActivityPriority
+    private static func mapPriority(_ p: Priority) -> QingheActivityPriority {
+        switch p {
+        case .urgent: return .urgent
+        case .high:   return .important
+        case .normal, .low: return .normal
+        }
+    }
 }
