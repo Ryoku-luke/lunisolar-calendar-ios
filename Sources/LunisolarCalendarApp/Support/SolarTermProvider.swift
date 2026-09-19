@@ -31,7 +31,7 @@ public enum SolarTermProvider: Sendable {
             var dc = DateComponents()
             dc.year = year; dc.month = month; dc.day = day
             dc.hour = hour; dc.minute = minute
-            dc.timeZone = TimeZone(identifier: "Asia/Shanghai")
+            dc.timeZone = QingheCalendarContext.chinaTimeZone
             return Calendar(identifier: .gregorian).date(from: dc) ?? Date()
         }
     }

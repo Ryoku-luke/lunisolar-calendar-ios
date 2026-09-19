@@ -69,7 +69,7 @@ public enum HuangliDBProvider {
         init() {
             let df = DateFormatter()
             df.dateFormat = "yyyy-MM-dd"
-            df.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .current
+            df.timeZone = QingheCalendarContext.chinaTimeZone
             df.locale = Locale(identifier: "zh_CN_POSIX")
             self.df = df
 

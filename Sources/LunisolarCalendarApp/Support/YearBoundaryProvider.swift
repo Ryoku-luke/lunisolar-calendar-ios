@@ -28,7 +28,7 @@ enum YearBoundaryProvider {
         dc.day = 4
         dc.hour = 0
         dc.minute = 0
-        dc.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        dc.timeZone = QingheCalendarContext.chinaTimeZone
         return Calendar(identifier: .gregorian).date(from: dc) ?? Date(timeIntervalSince1970: 0)
     }
 

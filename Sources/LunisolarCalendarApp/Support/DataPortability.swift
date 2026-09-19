@@ -103,7 +103,7 @@ public enum DataPortability {
 
         let dfmt = DateFormatter()
         dfmt.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
-        dfmt.timeZone = TimeZone(identifier: "UTC")
+        dfmt.timeZone = QingheCalendarContext.utcTimeZone
         let dfmtAllDay = DateFormatter()
         dfmtAllDay.dateFormat = "yyyyMMdd"
         // RFC 5545 VALUE=DATE 是「无时区日期」（floating），表示本地历法上的某一整天。
@@ -452,7 +452,7 @@ public enum DataPortability {
         if value.hasSuffix("Z") {
             let dfmt = DateFormatter()
             dfmt.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
-            dfmt.timeZone = TimeZone(identifier: "UTC")
+            dfmt.timeZone = QingheCalendarContext.utcTimeZone
             return dfmt.date(from: value)
         }
         if let tzid, !tzid.isEmpty, let tz = TimeZone(identifier: tzid) {
@@ -485,7 +485,7 @@ public enum DataPortability {
         } else {
             let df = DateFormatter()
             df.dateFormat = "yyyyMMddHHmmss"
-            df.timeZone = TimeZone(identifier: "UTC")
+            df.timeZone = QingheCalendarContext.utcTimeZone
             seed += "t:\(title)|s:\(df.string(from: startDate))|e:\(df.string(from: endDate))|a:\(isAllDay ? 1 : 0)"
         }
         let hash16 = sha256_first16Bytes(of: seed)
