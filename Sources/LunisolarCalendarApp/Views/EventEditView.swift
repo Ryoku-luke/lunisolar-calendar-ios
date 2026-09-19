@@ -308,10 +308,8 @@ struct EventEditView: View {
         }
         // 只刷新当前事件的通知：避免 O(N) 全量 cancelAll+reschedule 导致
         // badge 短暂闪烁、大事件库下保存卡顿、不必要的 UN 系统调用
-        Task { @MainActor in
-            NotificationManager.shared.cancelNotification(for: resultingEvent)
-            await NotificationManager.shared.scheduleNotification(for: resultingEvent)
-        }
+        // （文档 #37：View 不直接操作 UNUserNotificationCenter，统一走 EventService）
+        EventService.shared.refreshNotification(for: resultingEvent)
         // 与 CountdownView 保存一致：dismiss 后用户很可能立即上滑杀进程，
         // 0.5s 防抖保存未必能跑完，先同步落盘防丢数据。
         store.flushPendingSave()

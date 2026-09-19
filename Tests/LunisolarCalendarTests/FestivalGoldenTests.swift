@@ -61,15 +61,16 @@ final class FestivalGoldenTests: XCTestCase {
     func test2025Festivals() {
         assertLunarFestival(2025, 1, 15, gy: 2025, gm: 2, gd: 12, note: "2025 元宵")
         assertLunarFestival(2025, 5, 5,  gy: 2025, gm: 5, gd: 31, note: "2025 端午")
-        assertLunarFestival(2025, 8, 15, gy: 2025, gm: 9, gd: 7,  note: "2025 中秋")
+        // 2025 闰六月：八月十五顺延至 10-06（与 2025 国庆中秋连假一致）
+        assertLunarFestival(2025, 8, 15, gy: 2025, gm: 10, gd: 6, note: "2025 中秋（闰六月年顺延）")
     }
 
     // MARK: - 闰月年的农历节日（2025 闰六月、2028 闰五月）
 
     func testLeapMonthYearsDoNotShiftFestivals() {
-        // 2025 闰六月：七月初七不受闰月影响
-        assertLunarFestival(2025, 7, 7, gy: 2025, gm: 7, gd: 31, note: "2025 七夕（闰六月年）")
-        // 2028 闰五月：八月十五不受影响
-        assertLunarFestival(2028, 8, 15, gy: 2028, gm: 9, gd: 4, note: "2028 中秋（闰五月年）")
+        // 2025 闰六月：七月初七顺延至 08-29
+        assertLunarFestival(2025, 7, 7, gy: 2025, gm: 8, gd: 29, note: "2025 七夕（闰六月年）")
+        // 2028 闰五月：八月十五顺延至 10-03
+        assertLunarFestival(2028, 8, 15, gy: 2028, gm: 10, gd: 3, note: "2028 中秋（闰五月年）")
     }
 }
