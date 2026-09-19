@@ -56,7 +56,7 @@ final class EventServiceTimeCapsuleTests: XCTestCase {
         // 已完成 urgent 被排除 → 选中进行中的 important 提醒
         let doneUrgent = event("50000000-0000-0000-0000-000000000001", type: .reminder, priority: .urgent,
                                startOffset: 600, completed: true)
-        let liveImportant = event("50000000-0000-0000-0000-000000000002", type: .reminder, priority: .important,
+        let liveImportant = event("50000000-0000-0000-0000-000000000002", type: .reminder, priority: .high,
                                   startOffset: -600)
         let picked = EventService.timeCapsuleCandidates(from: [doneUrgent, liveImportant])
         XCTAssertEqual(picked.count, 1)
