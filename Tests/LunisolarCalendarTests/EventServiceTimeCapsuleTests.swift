@@ -10,7 +10,7 @@ final class EventServiceTimeCapsuleTests: XCTestCase {
     private func event(_ id: String, type: EventType, priority: Priority,
                        startOffset: TimeInterval, completed: Bool = false) -> CalendarEvent {
         let start = now.addingTimeInterval(startOffset)
-        return CalendarEvent(
+        var ev = CalendarEvent(
             title: "测试 \(id)",
             type: type,
             startDate: start,
@@ -20,7 +20,10 @@ final class EventServiceTimeCapsuleTests: XCTestCase {
             repeatRule: .never,
             priority: priority,
             reminderOffsetMinutes: nil
-        ).withID(UUID(uuidString: id)!)
+        )
+        ev.id = UUID(uuidString: id)!
+        ev.isCompleted = completed
+        return ev
     }
 
     func testNoteAndNormalScheduleExcluded() {
