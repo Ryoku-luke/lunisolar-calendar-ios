@@ -49,8 +49,6 @@ struct SettingsView: View {
             notificationSection
             dataSection
             syncSection
-            conflictSection
-            statisticsSection
             dangerSection
             aboutSection
         }
@@ -327,40 +325,28 @@ struct SettingsView: View {
                     .foregroundStyle(Color.secondaryLabel)
             }
             #endif
+
+            // 高级数据设置（文档 #13：技术性设置从顶层下放，不与其他普通设置平级）
+            Section {
+                Picker("冲突处理", selection: $conflictPolicy) {
+                    ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
+                        Text(p.title).tag(p)
+                    }
+                }
+                .pickerStyle(.menu)
+                statRow(label: "总事件数", value: "\(store.events.count)")
+                statRow(label: "日程", value: "\(storeCount(of: .schedule))")
+                statRow(label: "提醒", value: "\(storeCount(of: .reminder))")
+                statRow(label: "记事", value: "\(storeCount(of: .note))")
+            } header: {
+                Text("高级数据设置")
+            } footer: {
+                Text("同 ID 事件合并时的处理方式：\(conflictPolicy.subtitle)")
+            }
         } header: {
             Text("iCloud 同步")
         } footer: {
             Text("通过 iCloud 私有数据库在多台设备间同步")
-        }
-    }
-
-    // MARK: - 5. 导入冲突策略
-
-    private var conflictSection: some View {
-        Section {
-            Picker("冲突处理", selection: $conflictPolicy) {
-                ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
-                    Text(p.title).tag(p)
-                }
-            }
-            .pickerStyle(.menu)
-        } header: {
-            Text("导入冲突策略")
-        } footer: {
-            Text("同 ID 事件合并时的处理方式：\(conflictPolicy.subtitle)")
-        }
-    }
-
-    // MARK: - 6. 数据统计
-
-    private var statisticsSection: some View {
-        Section {
-            statRow(label: "总事件数", value: "\(store.events.count)")
-            statRow(label: "日程", value: "\(storeCount(of: .schedule))")
-            statRow(label: "提醒", value: "\(storeCount(of: .reminder))")
-            statRow(label: "记事", value: "\(storeCount(of: .note))")
-        } header: {
-            Text("数据统计")
         }
     }
 
