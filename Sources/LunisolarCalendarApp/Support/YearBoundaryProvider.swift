@@ -1,4 +1,5 @@
 import Foundation
+import LunarCore
 
 // MARK: - 干支年（年柱）边界：立春交节
 
