@@ -28,22 +28,36 @@ public final class AlternateIconManager: ObservableObject {
     public static let shared = AlternateIconManager()
 
     public enum Icon: String, CaseIterable, Hashable {
-        case primary          = "primary"   // 主图标 AppIcon
-        case springFestival   = "SpringFestival"
+        case primary          = "primary"          // 主图标 AppIcon
+        case springFestival   = "SpringFestival"   // 春节（正月初一）
+        case lantern          = "Lantern"          // 元宵（正月十五）
+        case qingMing         = "QingMing"         // 清明
+        case duanWu           = "DuanWu"           // 端午（五月初五）
+        case qixi             = "Qixi"             // 七夕（七月初七）
+        case midAutumn        = "MidAutumn"        // 中秋（八月十五）
+        case chongYang        = "ChongYang"        // 重阳（九月初九）
+        case winterSolstice   = "WinterSolstice"  // 冬至
 
         /// 传给 `UIApplication.setAlternateIconName` 的值：
         /// 主图标返回 nil（重置为默认图标），备用图标返回其 rawValue。
         var alternateIconName: String? {
             switch self {
             case .primary:        return nil
-            case .springFestival: return rawValue
+            default:              return rawValue
             }
         }
 
         public var uiLabel: String {
             switch self {
-            case .primary:        return "经典（撕历 + 朱砂印）"
+            case .primary:        return "经典（撕历 + 四季）"
             case .springFestival: return "春节限定（金福 + 红灯笼）"
+            case .lantern:       return "元宵限定（汤圆 + 花灯）"
+            case .qingMing:      return "清明限定（新柳 + 青团）"
+            case .duanWu:        return "端午限定（粽子 + 龙舟）"
+            case .qixi:          return "七夕限定（鹊桥 + 星河）"
+            case .midAutumn:     return "中秋限定（满月 + 玉兔）"
+            case .chongYang:     return "重阳限定（菊花 + 枫叶）"
+            case .winterSolstice: return "冬至限定（饺子 + 梅花）"
             }
         }
     }
@@ -86,17 +100,61 @@ public final class AlternateIconManager: ObservableObject {
     }
 
     // MARK: - 自动根据日期启用/停用
-    /// 若今天落在「春节窗口」（正月初一前 7 天 ~ 正月初六），自动切换到春节图标；
-    /// 否则确保回到主图标（仅在与 current 不一致时才触发系统弹窗）。
-    ///
-    /// ⚠️ 春节窗口判定统一走 LunarCore（本 App 自己的农历数据库），避免 Apple `.chinese` Calendar
-    /// 与我们的农历查表有±1天偏差导致「月视图显示正月初一但图标没切/切早了」的不一致。
+    /// 根据今天日期自动选择图标：落在任一节日窗口内则切对应节日图标，
+    /// 否则回主图标。多个节日窗口重叠时按下面 priority 数组顺序取第一个命中。
     public func applyTodayIfNeeded(graceBeforeDays: Int = 7) {
         let today = Date()
-        let expected: Icon = isWithinSpringWindow(today, graceBeforeDays: graceBeforeDays)
-            ? .springFestival
-            : .primary
+        let expected: Icon = icon(for: today, graceBeforeDays: graceBeforeDays)
         Task { await setIcon(expected) }
+    }
+
+    /// 判断某天应使用哪个节日图标（纯函数，便于测试）
+    func icon(for date: Date, graceBeforeDays: Int = 7) -> Icon {
+        // 优先级：春节 > 元宵 > 端午 > 中秋 > 七夕 > 重阳 > 清明 > 冬至
+        if isWithinSpringWindow(date, graceBeforeDays: graceBeforeDays) { return .springFestival }
+        if isWithinLunarFestival(date, month: 1, day: 15, windowDays: 1) { return .lantern }
+        if isWithinSolarFestival(date, month: 4, day: 5, windowDays: 1) { return .qingMing }
+        if isWithinLunarFestival(date, month: 5, day: 5, windowDays: 1) { return .duanWu }
+        if isWithinLunarFestival(date, month: 7, day: 7, windowDays: 0) { return .qixi }
+        if isWithinLunarFestival(date, month: 8, day: 15, windowDays: 1) { return .midAutumn }
+        if isWithinLunarFestival(date, month: 9, day: 9, windowDays: 0) { return .chongYang }
+        if isWithinSolarFestival(date, month: 12, day: 22, windowDays: 1) { return .winterSolstice }
+        return .primary
+    }
+
+    /// 农历节日窗口：农历 month/month day 前后 windowDays 天
+    private func isWithinLunarFestival(_ date: Date, month: Int, day: Int, windowDays: Int) -> Bool {
+        let cal = Calendar(identifier: .gregorian)
+        let today = cal.startOfDay(for: date)
+        let gy = cal.component(.year, from: today)
+        // 春节在公历 1-2 月，可能属于上一个农历年；其他节日月份稳定，查 gy 即可
+        for candidateYear in [gy, gy + 1, gy - 1] {
+            guard let festivalDay = ChineseCalendar.solarDate(
+                fromLunar: candidateYear, month: month, day: day, isLeap: false
+            ) else { continue }
+            let fest = cal.startOfDay(for: festivalDay)
+            guard let start = cal.date(byAdding: .day, value: -windowDays, to: fest),
+                  let end = cal.date(byAdding: .day, value: windowDays, to: fest) else { continue }
+            if today >= start && today <= end { return true }
+        }
+        return false
+    }
+
+    /// 公历节日窗口：month/day 前后 windowDays 天
+    private func isWithinSolarFestival(_ date: Date, month: Int, day: Int, windowDays: Int) -> Bool {
+        let cal = Calendar(identifier: .gregorian)
+        let today = cal.startOfDay(for: date)
+        let gy = cal.component(.year, from: today)
+        for candidateYear in [gy, gy + 1, gy - 1] {
+            var comps = DateComponents()
+            comps.year = candidateYear; comps.month = month; comps.day = day
+            guard let fest = cal.date(from: comps) else { continue }
+            let festStart = cal.startOfDay(for: fest)
+            guard let start = cal.date(byAdding: .day, value: -windowDays, to: festStart),
+                  let end = cal.date(byAdding: .day, value: windowDays, to: festStart) else { continue }
+            if today >= start && today <= end { return true }
+        }
+        return false
     }
 
     /// 判断给定日期是否处于「春节窗口」

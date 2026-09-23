@@ -85,13 +85,55 @@
             <dict>
                 <key>CFBundleIconName</key>
                 <string>AppIconSpringFestival</string>
-                <key>CFBundleIconFiles</key>
-                <array>
-                    <string>AppIconSpringFestival20x20</string>
-                    <string>AppIconSpringFestival29x29</string>
-                    <string>AppIconSpringFestival40x40</string>
-                    <string>AppIconSpringFestival60x60</string>
-                </array>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>Lantern</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconLantern</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>QingMing</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconQingMing</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>DuanWu</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconDuanWu</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>Qixi</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconQixi</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>MidAutumn</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconMidAutumn</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>ChongYang</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconChongYang</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>WinterSolstice</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconWinterSolstice</string>
                 <key>UIPrerenderedIcon</key>
                 <false/>
             </dict>
@@ -120,14 +162,55 @@
             <dict>
                 <key>CFBundleIconName</key>
                 <string>AppIconSpringFestival</string>
-                <key>CFBundleIconFiles</key>
-                <array>
-                    <string>AppIconSpringFestival20x20</string>
-                    <string>AppIconSpringFestival29x29</string>
-                    <string>AppIconSpringFestival40x40</string>
-                    <string>AppIconSpringFestival76x76</string>
-                    <string>AppIconSpringFestival83.5x83.5</string>
-                </array>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>Lantern</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconLantern</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>QingMing</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconQingMing</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>DuanWu</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconDuanWu</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>Qixi</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconQixi</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>MidAutumn</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconMidAutumn</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>ChongYang</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconChongYang</string>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>WinterSolstice</key>
+            <dict>
+                <key>CFBundleIconName</key>
+                <string>AppIconWinterSolstice</string>
                 <key>UIPrerenderedIcon</key>
                 <false/>
             </dict>
