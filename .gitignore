@@ -1,0 +1,34 @@
+# SwiftPM / Xcode / macOS
+.build/
+DerivedData/
+# 仅忽略 Xcode 用户私有数据，工程文件本身纳入版本控制
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+.swiftpm/xcode/
+Package.resolved
+
+# Xcode
+.DS_Store
+
+# 事件持久化数据文件 (本地沙箱)
+calendar_events.json
+*.json
+# 资源 JSON 文件（农历数据表 / 黄历离散库）必须纳入版本控制
+!Sources/LunisolarCalendarApp/Resources/*.json
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+*~
+
+# 开发期 AI 工具目录（不应进入产品仓库；如需保留请放到仓库外）
+.trae/
+
+# 日志
+*.log
+
+# 临时上传目录（截屏等）
+.uploads/
+.i18n_work/

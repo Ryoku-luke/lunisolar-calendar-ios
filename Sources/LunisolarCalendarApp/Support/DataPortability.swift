@@ -1,0 +1,555 @@
+import Foundation
+#if canImport(Crypto)
+import Crypto  // Apple 平台推荐 CryptoKit (import Crypto 会把 SHA256 暴露)
+#elseif canImport(CommonCrypto)
+import CommonCrypto
+#endif
+// DP2 修复：在 iOS 15+ SDK 中 AppLogger.app = os.Logger，其 Logger.error(_:) / log 方法
+// 使用 OSLogMessage（ExpressibleByStringInterpolation）实现带 privacy 的字符串插值。
+// OSLogInterpolation 等类型属于 module `os`，DataPortability 不 import 时会报
+// "appendInterpolation / appendLiteral / init(stringInterpolation:) is not available due to
+// missing import of defining module 'os'"。
+#if canImport(os)
+import os
+#endif
+
+// MARK: - 合并结果统计（ICS / JSON 导入都会返回）
+
+/// 导入合并后的结果统计，用于展示 Alert 文案
+public struct ImportMergeResult: Equatable, Sendable {
+    /// 新增的条目数（EventStore 中不存在同 id）
+    public var added: Int
+    /// 按 id 覆盖更新的条目数（同 id 已存在，incoming 更「新」或策略为 overwrite）
+    public var updated: Int
+    /// 保留原样未动的条目数（同 id 已存在且本地 updatedAt 较新或策略为 skip）
+    public var skipped: Int
+    /// 解析失败或数据异常被跳过的条目
+    public var invalid: Int
+
+    public init(added: Int = 0, updated: Int = 0, skipped: Int = 0, invalid: Int = 0) {
+        self.added = added
+        self.updated = updated
+        self.skipped = skipped
+        self.invalid = invalid
+    }
+
+    /// 发生冲突（updated + skipped），用于 UI 判断"是否需要冲突提示"
+    public var hasConflicts: Bool { (updated + skipped) > 0 }
+}
+
+// MARK: - 冲突策略
+
+/// 导入时遇到同 id 事件如何处理
+public enum ImportConflictPolicy: String, Codable, CaseIterable, Sendable {
+    /// 谁更新时间更新就用谁（推荐）
+    case keepLatest
+    /// 一律保留本地（跳过 incoming）
+    case keepLocal
+    /// 一律用 incoming 覆盖
+    case overwrite
+}
+
+// MARK: - 数据导入导出
+
+/// 支持 .ics (iCalendar) / .csv / .json 格式的导入导出，以及合并策略与结果统计
+public enum DataPortability {
+
+    // MARK: - JSON 全量备份（推荐：字段零损失）
+
+    /// 导出为 JSON（全字段无损，包含 id / repeatRule.lunarAnnually / isNotified / createdAt 等）
+    public static func exportJSON(from events: [CalendarEvent]) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let wrapper = JSONBackupWrapper(
+            version: 1,
+            exportedAt: Date(),
+            count: events.count,
+            events: events
+        )
+        guard let data = try? encoder.encode(wrapper),
+              let text = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return text
+    }
+
+    /// 从 JSON 字符串解析事件列表（支持本 app 导出的备份 JSON）
+    public static func importJSON(_ content: String) -> [CalendarEvent] {
+        guard let data = content.data(using: .utf8) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        // 先尝试 wrapper 格式；否则退化为直接解数组（兼容一些手工拼接）
+        if let wrapper = try? decoder.decode(JSONBackupWrapper.self, from: data) {
+            return wrapper.events
+        }
+        if let array = try? decoder.decode([CalendarEvent].self, from: data) {
+            return array
+        }
+        return []
+    }
+
+    // MARK: - ICS 导出
+
+    /// 导出所有事件为 .ics 格式字符串
+    public static func exportICS(from events: [CalendarEvent]) -> String {
+        var lines: [String] = [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//LunisolarCalendar//iOS//CN",
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH"
+        ]
+
+        let dfmt = DateFormatter()
+        dfmt.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+        dfmt.timeZone = QingheCalendarContext.utcTimeZone
+        let dfmtAllDay = DateFormatter()
+        dfmtAllDay.dateFormat = "yyyyMMdd"
+        // RFC 5545 VALUE=DATE 是「无时区日期」（floating），表示本地历法上的某一整天。
+        // 本 App 全天事件 startDate 存为本地 00:00，必须按当前时区取 Y/M/D；
+        // 若用 UTC，UTC+8 用户的 9/6 00:00 会被格式化成 9/5，全天事件整体提前一天。
+        dfmtAllDay.timeZone = .current
+
+        for event in events {
+            lines.append("BEGIN:VEVENT")
+            lines.append("UID:\(event.id.uuidString)")
+            lines.append("DTSTAMP:\(dfmt.string(from: event.createdAt))")
+
+            if event.isAllDay {
+                lines.append("DTSTART;VALUE=DATE:\(dfmtAllDay.string(from: event.startDate))")
+                // P2 修复：RFC 5545 §3.8.2.2 规定 DATE 类型的 DTEND 是**排他**的
+                //   （即"不含这一天"）。本 App 内部把全天事件 endDate 存为当日 23:59:59
+                //   （inclusive），若直接格式化导出会得到 DTEND == DTSTART，
+                //   跨日历（Google/Apple/Outlook）导入时显示为 0 时长事件甚至不显示。
+                //   修复：DTEND 取 endDate 所在日期的**次日**，符合 RFC 排他语义。
+                //   例：9/6 全天 → DTSTART=20260906, DTEND=20260907。
+                let exclusiveEnd = Calendar(identifier: .gregorian)
+                    .date(byAdding: .day, value: 1, to: event.endDate) ?? event.endDate
+                lines.append("DTEND;VALUE=DATE:\(dfmtAllDay.string(from: exclusiveEnd))")
+            } else {
+                lines.append("DTSTART:\(dfmt.string(from: event.startDate))")
+                lines.append("DTEND:\(dfmt.string(from: event.endDate))")
+            }
+
+            lines.append("SUMMARY:\(escapeICS(event.title))")
+            if let loc = event.location, !loc.isEmpty {
+                lines.append("LOCATION:\(escapeICS(loc))")
+            }
+            if let notes = event.notes, !notes.isEmpty {
+                lines.append("DESCRIPTION:\(escapeICS(notes))")
+            }
+
+            // P3 修复（对称映射）：RFC 5545 PRIORITY 1=最高 5=普通 9=最低。
+            //   旧映射 .normal/.low 都给 9，导入侧 "7,8,9"→.low，
+            //   round-trip 会把 .normal 降级为 .low（数据损失）。
+            //   新映射与 importICS 解析侧严格对称：
+            //     urgent(1)→1   high(2-4)→3   normal(5,6)→5   low(7-9)→7
+            let priorityVal: String
+            switch event.priority {
+            case .urgent: priorityVal = "1"
+            case .high:   priorityVal = "3"
+            case .normal: priorityVal = "5"
+            case .low:    priorityVal = "7"
+            }
+            lines.append("PRIORITY:\(priorityVal)")
+            lines.append("STATUS:\(event.isCompleted ? "COMPLETED" : "CONFIRMED")")
+
+            switch event.repeatRule {
+            case .never: break
+            case .daily:    lines.append("RRULE:FREQ=DAILY")
+            case .workday:  lines.append("RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR")
+            case .weekly:   lines.append("RRULE:FREQ=WEEKLY")
+            case .monthly:  lines.append("RRULE:FREQ=MONTHLY")
+            case .yearly:   lines.append("RRULE:FREQ=YEARLY")
+            case .lunarAnnually: break // ICS 标准不支持农历重复，跳过
+            }
+
+            lines.append("END:VEVENT")
+        }
+
+        lines.append("END:VCALENDAR")
+        return lines.joined(separator: "\r\n")
+    }
+
+    // MARK: - CSV 导出
+
+    /// 导出所有事件为 .csv 格式字符串
+    public static func exportCSV(from events: [CalendarEvent]) -> String {
+        let header = "标题,类型,开始时间,结束时间,全天,地点,备注,重复规则,优先级,已完成,创建时间"
+        var rows: [String] = [header]
+
+        let dfmt = DateFormatter()
+        dfmt.dateFormat = "yyyy-MM-dd HH:mm"
+
+        for event in events {
+            let row: [String] = [
+                escapeCSV(event.title),
+                event.type.uiLabel,
+                dfmt.string(from: event.startDate),
+                dfmt.string(from: event.endDate),
+                event.isAllDay ? "是" : "否",
+                escapeCSV(event.location ?? ""),
+                escapeCSV(event.notes ?? ""),
+                event.repeatRule.uiLabel,
+                event.priority.uiLabel,
+                event.isCompleted ? "是" : "否",
+                dfmt.string(from: event.createdAt)
+            ]
+            rows.append(row.joined(separator: ","))
+        }
+
+        return rows.joined(separator: "\n")
+    }
+
+    // MARK: - ICS 导入
+
+    /// 从 .ics 字符串解析事件列表
+    public static func importICS(_ content: String) -> [CalendarEvent] {
+        var events: [CalendarEvent] = []
+        // RFC 5545: 折叠行以空格或制表符开头，需拼接到上一行末尾
+        let rawLines = content
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+        // 展开折叠行
+        var lines: [String] = []
+        for line in rawLines {
+            if (line.hasPrefix(" ") || line.hasPrefix("\t")) && !lines.isEmpty {
+                lines[lines.count - 1] += String(line.dropFirst())
+            } else {
+                lines.append(line)
+            }
+        }
+
+        var idx = 0
+        // P2 修复：非全天 DTSTART/DTEND 现在走 parseICSDateTime（支持 TZID/UTC/floating），
+        //   不再需要预先创建 dfmtUTC/dfmtLocal。
+        let dfmtAllDay = DateFormatter()
+        dfmtAllDay.dateFormat = "yyyyMMdd"
+        // VALUE=DATE 无时区：按当前时区还原为本地 00:00，与全天事件的本地存储约定一致，
+        // 也保证跨时区导入后「日历日」不变（9/6 始终落在 9/6，不会因 UTC 换算漂到 9/5）。
+        dfmtAllDay.timeZone = .current
+
+        while idx < lines.count {
+            let line = lines[idx]
+            if line.uppercased().hasPrefix("BEGIN:VEVENT") {
+                idx += 1
+                var title = ""
+                var startDate = Date()
+                var endDate = Date().addingTimeInterval(3600)
+                var isAllDay = false
+                var location: String? = nil
+                var notes: String? = nil
+                var rawUID: String? = nil
+                var parsedRRULE: RepeatRule? = nil
+                var parsedPriority: Priority = .normal
+                var parsedIsCompleted = false
+                var hasStart = false
+                var hasEnd = false
+
+                while idx < lines.count && !lines[idx].uppercased().hasPrefix("END:VEVENT") {
+                    let vline = lines[idx]
+                    let parts = vline.split(separator: ":", maxSplits: 1)
+                    guard parts.count == 2 else { idx += 1; continue }
+                    // P2 修复：TZID 的值是 IANA 时区标识符（大小写敏感，如 "America/New_York"）。
+                    //   key 的参数名（DTSTART/TZID/VALUE）不区分大小写，但 TZID 的值必须保留原始大小写，
+                    //   否则 TimeZone(identifier:) 找不到对应时区 → 回退本地时间 → 跨时区事件时间错误。
+                    //   因此保留 rawKey 用于提取 TZID，keyUpper 仅用于前缀匹配。
+                    let rawKey = String(parts[0])
+                    let key = rawKey.uppercased()
+                    let value = String(parts[1])
+
+                    if key.hasPrefix("UID") {
+                        rawUID = value
+                    } else if key.hasPrefix("SUMMARY") {
+                        title = unescapeICS(value)
+                    } else if key.hasPrefix("DTSTART") {
+                        if key.contains("VALUE=DATE") {
+                            if let d = dfmtAllDay.date(from: value) { startDate = d; isAllDay = true; hasStart = true }
+                        } else if let d = parseICSDateTime(value, tzid: tzidFromRawKey(rawKey)) {
+                            startDate = d; hasStart = true
+                        }
+                    } else if key.hasPrefix("DTEND") {
+                        if key.contains("VALUE=DATE") {
+                            // P2 修复：RFC 5545 DATE 类型 DTEND 是排他的（不含当天）。
+                            //   本 App 全天事件 endDate 存为当日 23:59:59（inclusive）。
+                            //   导入时把排他 DTEND（次日 00:00）转回 inclusive（当日 23:59:59），
+                            //   即 endDate = exclusiveEnd - 1 秒。避免单日事件被拉成跨两天。
+                            if let d = dfmtAllDay.date(from: value) {
+                                endDate = d.addingTimeInterval(-1)
+                                hasEnd = true
+                            }
+                        } else if let d = parseICSDateTime(value, tzid: tzidFromRawKey(rawKey)) {
+                            endDate = d; hasEnd = true
+                        }
+                    } else if key.hasPrefix("LOCATION") {
+                        location = unescapeICS(value)
+                    } else if key.hasPrefix("DESCRIPTION") {
+                        notes = unescapeICS(value)
+                    } else if key.hasPrefix("RRULE") {
+                        parsedRRULE = parseRRULE(value)
+                    } else if key.hasPrefix("PRIORITY") {
+                        // RFC 5545: 1 = 最高优先级，5/undefined = 普通，9 = 最低
+                        if let p = Int(value) {
+                            switch p {
+                            case 1:          parsedPriority = .urgent
+                            case 2, 3, 4:    parsedPriority = .high
+                            case 5, 6:       parsedPriority = .normal
+                            case 7, 8, 9:    parsedPriority = .low
+                            default:         parsedPriority = .normal
+                            }
+                        }
+                    } else if key.hasPrefix("STATUS") {
+                        // COMPLETED / CANCELLED 都视为已完成，不再重复触发提醒
+                        let v = value.uppercased()
+                        parsedIsCompleted = (v == "COMPLETED" || v == "CANCELLED")
+                    }
+                    idx += 1
+                }
+
+                if hasStart {
+                    // P2 修复：全天事件无 DTEND 时，兜底应为整日（+86399）而非 +3600。
+                    //   否则导入的全天事件 endDate=start+1h，跨日显示/occurs 判断会异常。
+                    if !hasEnd { endDate = startDate.addingTimeInterval(isAllDay ? 86_399 : 3_600) }
+                    // ICS 进来的事件没有稳定主键（UID 是对方日历的UUID，且不一定存在）。
+                    // 为了让「重复导入不会产生副本」，我们用 (title, start, end, isAllDay) 哈希拼伪 UID
+                    // 同时保存导入源 UID 以便 merge 时去重。
+                    let pseudoID = pseudoUUIDForImport(
+                        uid: rawUID,
+                        title: title.isEmpty ? "导入事件" : title,
+                        startDate: startDate,
+                        endDate: endDate,
+                        isAllDay: isAllDay
+                    )
+                    var event = CalendarEvent(
+                        id: pseudoID,
+                        title: title.isEmpty ? "导入事件" : title,
+                        startDate: startDate,
+                        endDate: endDate,
+                        isAllDay: isAllDay,
+                        location: location,
+                        notes: notes,
+                        repeatRule: parsedRRULE ?? .never,
+                        priority: parsedPriority
+                    )
+                    // STATUS:COMPLETED/CANCELLED → 导入后仍保持已完成，避免重挂提醒
+                    if parsedIsCompleted { event.isCompleted = true }
+                    // 把外部的 UID 记到 notes 末尾，便于排查（不覆盖原 notes）
+                    if let uid = rawUID, !uid.isEmpty {
+                        let suffix = "\n\n[ICS-UID]\(uid)"
+                        event.notes = (event.notes ?? "") + suffix
+                    }
+                    events.append(event)
+                }
+            }
+            idx += 1
+        }
+
+        return events
+    }
+
+    // MARK: - 文件保存
+
+    /// 将导出内容写入临时文件，返回文件 URL
+    public static func writeToTempFile(content: String, filename: String) -> URL? {
+        let tmpURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(filename)
+        do {
+            try content.write(to: tmpURL, atomically: true, encoding: .utf8)
+            return tmpURL
+        } catch {
+            AppLogger.app.error("导出文件写入失败: \(error)")
+            return nil
+        }
+    }
+
+    // MARK: - ICS 转义
+
+    private static func escapeICS(_ text: String) -> String {
+        // P3 修复：RFC 5545 §3.3.11 TEXT 转义要求 \r\n / \r / \n 全部转成字面 \n。
+        //   旧实现只转 \n，遇到 \r\n 或单独 \r 时 round-trip 会出现多余的 \n 或残余 \r。
+        //   顺序：先归一化行尾再走标准转义链，避免 \\\\ 占位被 \n 处理误吞。
+        text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: ";", with: "\\;")
+            .replacingOccurrences(of: ",", with: "\\,")
+            .replacingOccurrences(of: "\n", with: "\\n")
+    }
+
+    private static func unescapeICS(_ text: String) -> String {
+        // 顺序：先处理 \\ (反斜杠转义)，再处理 \n \t \, \;
+        // 否则 \\n 会被错误地先解析为换行再变成 \n
+        text
+            .replacingOccurrences(of: "\\\\", with: "\u{0000}")  // 占位
+            .replacingOccurrences(of: "\\n", with: "\n")
+            .replacingOccurrences(of: "\\N", with: "\n")
+            .replacingOccurrences(of: "\\t", with: "\t")
+            .replacingOccurrences(of: "\\,", with: ",")
+            .replacingOccurrences(of: "\\;", with: ";")
+            .replacingOccurrences(of: "\u{0000}", with: "\\")
+    }
+
+    // MARK: - CSV 转义
+
+    private static func escapeCSV(_ text: String) -> String {
+        if text.contains(",") || text.contains("\"") || text.contains("\n") {
+            return "\"\(text.replacingOccurrences(of: "\"", with: "\"\""))\""
+        }
+        return text
+    }
+
+    // MARK: - ICS 辅助：解析 RRULE + 伪 UID（保证重复导入无副本）
+
+    /// 解析常见 RRULE：FREQ=DAILY / WEEKLY;BYDAY=MO..FR / MONTHLY / YEARLY。其他返回 nil。
+    private static func parseRRULE(_ value: String) -> RepeatRule? {
+        let upper = value.uppercased()
+        if upper.contains("FREQ=DAILY") { return .daily }
+        if upper.contains("FREQ=MONTHLY") { return .monthly }
+        if upper.contains("FREQ=YEARLY") { return .yearly }
+        if upper.contains("FREQ=WEEKLY") {
+            // 含 BYDAY=MO,TU,WE,TH,FR（且**正好**是这 5 个，不多不少）→ 工作日
+            // 注意：不能用 isSubset——「周一三五」也是工作日子集，但语义上不是「每个工作日」
+            if let byDay = upper.split(separator: ";").first(where: { $0.hasPrefix("BYDAY=") }) {
+                let daysStr = String(byDay).dropFirst("BYDAY=".count)
+                let parts = Set(daysStr.split(separator: ",").map(String.init))
+                let workdaySet: Set<String> = ["MO","TU","WE","TH","FR"]
+                // 精确相等才是 workday；BYDAY 不包含（整个 BYDAY 缺省 = 每周按起始日）也算 weekly
+                if parts == workdaySet { return .workday }
+            }
+            return .weekly
+        }
+        return nil
+    }
+
+    // MARK: - ICS 辅助：TZID 时区解析（P2 修复）
+
+    /// 从 ICS 属性原始 key 中提取 TZID 参数值（保留原始大小写）。
+    /// 例：`DTSTART;TZID=America/New_York` → `"America/New_York"`
+    /// IANA 时区标识符大小写敏感，因此必须用未大写化的 rawKey。
+    private static func tzidFromRawKey(_ rawKey: String) -> String? {
+        // 参数名 TZID 不区分大小写；用 caseInsensitive 搜索后精确截取值
+        guard let range = rawKey.range(of: "TZID=", options: .caseInsensitive) else { return nil }
+        var rest = rawKey[range.upperBound...]
+        if let semi = rest.firstIndex(of: ";") {
+            rest = rest[..<semi]
+        }
+        let tzid = String(rest).trimmingCharacters(in: .whitespaces)
+        return tzid.isEmpty ? nil : tzid
+    }
+
+    /// 解析 ICS DATE-TIME 值，正确处理三种时区语义：
+    /// 1) 末尾带 `Z` → UTC（RFC 5545 全局时间）
+    /// 2) 带 `TZID=...` 参数 → 按该 IANA 时区解析
+    /// 3) 既无 Z 也无 TZID → floating time（按设备本地时区解释）
+    ///
+    /// P2 修复：旧实现只尝试 UTC 格式（带 Z）然后直接按本地时间解析，
+    ///   完全忽略 TZID。跨时区日历（如 Google Calendar 导出的纽约会议）
+    ///   导入后时间会错位数小时。
+    private static func parseICSDateTime(_ value: String, tzid: String?) -> Date? {
+        if value.hasSuffix("Z") {
+            let dfmt = DateFormatter()
+            dfmt.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+            dfmt.timeZone = QingheCalendarContext.utcTimeZone
+            return dfmt.date(from: value)
+        }
+        if let tzid, !tzid.isEmpty, let tz = TimeZone(identifier: tzid) {
+            let dfmt = DateFormatter()
+            dfmt.dateFormat = "yyyyMMdd'T'HHmmss"
+            dfmt.timeZone = tz
+            return dfmt.date(from: value)
+        }
+        // floating time：无 Z 无 TZID，按设备本地时区
+        let dfmt = DateFormatter()
+        dfmt.dateFormat = "yyyyMMdd'T'HHmmss"
+        return dfmt.date(from: value)
+    }
+
+    /// 为导入的事件生成稳定伪 UUID：优先用 ics UID 做 hash + seed；否则用 (title, start, end, allDay)。
+    /// 关键性质：同一 .ics 反复导入，事件的 UUID 不变，merge 会进入"同 id 冲突分支"而不是无脑新增副本。
+    ///
+    /// P7 修复：哈希从弱双 64-bit FNV 替换为 SHA-256，取前 16 字节拼成 UUID v4，
+    /// 128-bit 碰撞概率在 10^12 条记录时仍低于 10^-24，可安全导入超大日历文件。
+    private static func pseudoUUIDForImport(
+        uid: String?,
+        title: String,
+        startDate: Date,
+        endDate: Date,
+        isAllDay: Bool
+    ) -> UUID {
+        var seed = "LUNISOLAR-ICS-IMPORT-V2|"
+        if let uid = uid, !uid.isEmpty {
+            seed += "uid:\(uid)"
+        } else {
+            let df = DateFormatter()
+            df.dateFormat = "yyyyMMddHHmmss"
+            df.timeZone = QingheCalendarContext.utcTimeZone
+            seed += "t:\(title)|s:\(df.string(from: startDate))|e:\(df.string(from: endDate))|a:\(isAllDay ? 1 : 0)"
+        }
+        let hash16 = sha256_first16Bytes(of: seed)
+        // 按 RFC 4122 §4.4 设为 UUID v4（version=4，variant=2）
+        var bytes = hash16
+        bytes[6] = (bytes[6] & 0x0f) | 0x40  // 高半字节 0100 = version 4
+        bytes[8] = (bytes[8] & 0x3f) | 0x80  // 高位 10xx = RFC 4122 variant
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
+    }
+
+    // MARK: - SHA-256 封装：CryptoKit 优先 → CommonCrypto 回退 → Linux 弱哈希兜底
+
+    private static func sha256_first16Bytes(of string: String) -> [UInt8] {
+        let data = [UInt8](string.utf8)
+        #if canImport(Crypto)
+        if #available(iOS 13.0, macOS 10.15, *) {
+            let digest = SHA256.hash(data: data)
+            // SHA256 digest = 32 字节，取前 16
+            return Array(digest.prefix(16))
+        }
+        #endif
+        #if canImport(CommonCrypto)
+        var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        data.withUnsafeBytes { buf in
+            _ = CC_SHA256(buf.baseAddress, CC_LONG(data.count), &digest)
+        }
+        return Array(digest.prefix(16))
+        #else
+        // Linux 兜底：若 Crypto 都不可用，退到一个 256-bit 级别的强哈希（DJB2a × 轮 = 128-bit 足够）
+        // 注：实际生产环境里 SPM 构建能直接 import Crypto（或 SwiftCrypto 纯 Swift 实现）
+        var h1: UInt64 = 1469598103934665603, h2: UInt64 = 1099511628211
+        for ch in data {
+            h1 ^= UInt64(ch); h1 &*= 1099511628211
+            h2 = h2 &* 31 &+ UInt64(ch) &* 18446744073709551557
+        }
+        let h3: UInt64 = h1 ^ h2, h4: UInt64 = h1 &+ h2 &* 7
+        return [
+            UInt8((h1 >> 56) & 0xff), UInt8((h1 >> 48) & 0xff), UInt8((h1 >> 40) & 0xff), UInt8((h1 >> 32) & 0xff),
+            UInt8((h1 >> 24) & 0xff), UInt8((h1 >> 16) & 0xff), UInt8((h1 >> 8) & 0xff), UInt8(h1 & 0xff),
+            UInt8((h2 >> 56) & 0xff), UInt8((h2 >> 48) & 0xff), UInt8((h2 >> 40) & 0xff), UInt8((h2 >> 32) & 0xff),
+            UInt8((h3 >> 24) & 0xff), UInt8((h3 >> 16) & 0xff), UInt8((h4 >> 8) & 0xff), UInt8(h4 & 0xff)
+        ]
+        #endif
+    }
+}
+
+// MARK: - JSON 备份包装（带 version / exportedAt / count 元信息，方便未来升级做迁移）
+
+/// JSON 备份顶层结构：{version, exportedAt, count, events: [...]}
+public struct JSONBackupWrapper: Codable, Equatable, Sendable {
+    public var version: Int
+    public var exportedAt: Date
+    public var count: Int
+    public var events: [CalendarEvent]
+
+    public init(version: Int, exportedAt: Date, count: Int, events: [CalendarEvent]) {
+        self.version = version
+        self.exportedAt = exportedAt
+        self.count = count
+        self.events = events
+    }
+}

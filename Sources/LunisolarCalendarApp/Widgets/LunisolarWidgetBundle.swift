@@ -1,0 +1,97 @@
+#if canImport(WidgetKit)
+import WidgetKit
+import SwiftUI
+
+// MARK: - 3 种 Widget 封装 + Bundle
+
+/// ① 今日黄历概览 Widget
+@available(iOSApplicationExtension 17.0, *)
+public struct HuangliOverviewWidget: Widget {
+    public let kind: String = "HuangliOverview"
+    private let appGroupID: String?
+    public init() { self.appGroupID = nil }
+    public init(appGroupID: String?) { self.appGroupID = appGroupID }
+
+    public var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
+            HuangliOverviewWidgetView(entry: entry)
+        }
+        .configurationDisplayName(NSLocalizedString("今日黄历概览", comment: ""))
+        .description(NSLocalizedString("查看当日宜忌、冲煞、五行和节日，最常看的黄历信息一屏掌握。", comment: ""))
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .contentMarginsDisabled()
+    }
+}
+
+/// ② 农历日期卡片 Widget
+@available(iOSApplicationExtension 17.0, *)
+public struct LunarCardWidget: Widget {
+    public let kind: String = "LunarCard"
+    private let appGroupID: String?
+    public init() { self.appGroupID = nil }
+    public init(appGroupID: String?) { self.appGroupID = appGroupID }
+
+    public var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
+            LunarCardWidgetView(entry: entry)
+        }
+        .configurationDisplayName(NSLocalizedString("农历日期卡片", comment: ""))
+        .description(NSLocalizedString("大字号显示农历月日和传统节日、节日主题色渐变，一眼掌握今天是农历几月几日。", comment: ""))
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .contentMarginsDisabled()
+    }
+}
+
+/// ③ 今日待办进度 Widget
+@available(iOSApplicationExtension 17.0, *)
+public struct TodoProgressWidget: Widget {
+    public let kind: String = "TodoProgress"
+    private let appGroupID: String?
+    public init() { self.appGroupID = nil }
+    public init(appGroupID: String?) { self.appGroupID = appGroupID }
+
+    public var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: LunisolarWidgetTimelineProvider(appGroupID: appGroupID)) { entry in
+            TodoProgressWidgetView(entry: entry)
+        }
+        .configurationDisplayName(NSLocalizedString("今日待办进度", comment: ""))
+        .description(NSLocalizedString("环形进度条展示今日已完成日程占比，激励每日打卡，Medium 尺寸还显示节日与冲煞信息。", comment: ""))
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .contentMarginsDisabled()
+    }
+}
+
+// MARK: - WidgetBundle 入口
+
+/// 宿主 Widget Extension 里只要：
+///   ```
+///   @main
+///   struct LunisolarWidgetsBundle: WidgetBundle {
+///       var body: some Widget {
+///           HuangliOverviewWidget()
+///           LunarCardWidget()
+///           TodoProgressWidget()
+///       }
+///   }
+///   ```
+/// 直接复用此处的 3 个 Widget 实现即可。
+@available(iOSApplicationExtension 17.0, *)
+public struct LunisolarWidgetsBundle: WidgetBundle {
+    private let appGroupID: String?
+    public init() { self.appGroupID = nil }
+    public init(appGroupID: String?) { self.appGroupID = appGroupID }
+
+    @WidgetBundleBuilder
+    public var body: some Widget {
+        HuangliOverviewWidget(appGroupID: appGroupID)
+        LunarCardWidget(appGroupID: appGroupID)
+        TodoProgressWidget(appGroupID: appGroupID)
+        #if canImport(ActivityKit)
+        if #available(iOS 16.1, *) {
+            CountdownLiveActivityWidget()
+            QingheLiveActivityWidget()
+        }
+        #endif
+    }
+}
+#endif

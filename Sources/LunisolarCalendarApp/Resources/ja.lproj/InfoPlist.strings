@@ -1,0 +1,7 @@
+/* InfoPlist.strings (ja) — 自动生成 */
+
+"CFBundleDisplayName" = "清和カレンダー";
+"NSLocationWhenInUseUsageDescription" = "現在地を取得し、カレンダー詳細にその地域の天気を表示するために使用します。";
+"NSContactsUsageDescription" = "連絡先の誕生日をインポートし、旧暦で毎年繰り返し通知するために使用します。";
+"NSCalendarsFullAccessUsageDescription" = "システムカレンダーから予定をインポートし、履歴イベントを移行するために使用します。";
+"NSCalendarsUsageDescription" = "システムカレンダーから予定をインポートし、履歴イベントを移行するために使用します。";

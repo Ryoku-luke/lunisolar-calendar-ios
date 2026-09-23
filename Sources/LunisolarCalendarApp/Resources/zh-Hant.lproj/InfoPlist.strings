@@ -1,0 +1,7 @@
+/* InfoPlist.strings (zh-Hant) — 自动生成 */
+
+"CFBundleDisplayName" = "清和日曆";
+"NSLocationWhenInUseUsageDescription" = "用於取得目前位置，在日曆詳情中顯示當地天氣。";
+"NSContactsUsageDescription" = "用於匯入聯絡人生日，並按農曆每年重複提醒。";
+"NSCalendarsFullAccessUsageDescription" = "用於從系統日曆匯入行程安排，方便遷移歷史事件。";
+"NSCalendarsUsageDescription" = "用於從系統日曆匯入行程安排，方便遷移歷史事件。";
