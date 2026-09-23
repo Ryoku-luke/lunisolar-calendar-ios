@@ -211,10 +211,20 @@ struct CalendarMonthView: View {
             AIAssistantView()
         }
         .sheet(item: $showNewEventForContextMenu) { date in
-            NavigationStack { EventEditView(editing: nil, defaultDate: date).environment(store) }
+            NavigationStack {
+                EventEditView(editing: nil, defaultDate: date).environment(store)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(item: $pendingOpenEvent) { ev in
-            NavigationStack { EventEditView(editing: ev, defaultDate: ev.startDate).environment(store) }
+            NavigationStack {
+                EventEditView(editing: ev, defaultDate: ev.startDate).environment(store)
+            }
+            // P1-8a：iPad regular 下用中 detent，避免全屏 sheet 遮挡主日历
+            // （iOS 17 无 .inspector，这是最接近 Inspector 的体验）
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         // P1：深链 / 通知 / Live Activity 点击 → 直接打开事件详情
         .onChange(of: NavigationCoordinator.shared.pendingOpenEventID) { _, id in
