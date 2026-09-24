@@ -1,4 +1,8 @@
 import Foundation
+// N5-1 教训：AppLogger 的字符串插值定义在 module `os` 内，显式引入避免 SDK 组合差异
+#if canImport(os)
+import os
+#endif
 #if canImport(ActivityKit) && !os(macOS)
 import ActivityKit
 #endif
@@ -19,7 +23,11 @@ public final class TimeCapsuleCoordinator {
     public func refresh() {
         #if canImport(ActivityKit) && !os(macOS) && canImport(WidgetKit)
         let now = Date()
-        let enabled = UserDefaults.standard.bool(forKey: "Lunisolar.liveActivity.enabled")
+        // 必须用 AppSettings.liveActivityEnabled（raw bool(forKey:) 在键不存在时返回 false，
+        // 而 @AppStorage 默认值是 true —— 曾因此"设置显示开启但永不上岛"）
+        let enabled = AppSettings.liveActivityEnabled
+        // 仲裁：存在倒数日活动时让位（docs #25：同一时间只维护一个主要时间胶囊，不互相挤压）
+        guard LiveActivityArbiter.canTimeCapsuleTakeOver() else { return }
         guard enabled,
               ActivityAuthorizationInfo().areActivitiesEnabled,
               let candidate = EventService.shared.timeCapsuleCandidate(now: now) else {
@@ -49,7 +57,10 @@ public final class TimeCapsuleCoordinator {
             countdownTarget: candidate.type == .solarTerm ? candidate.startDate : nil,
             isImportant: candidate.priority >= .important
         )
-        QingheLiveActivityManager.sync(target: display)
+        // 上岛失败必须留痕（此前静默丢弃 Result，真机排查时无从判断）
+        if case .failure(let error) = QingheLiveActivityManager.sync(target: display) {
+            AppLogger.app.error("时间胶囊上岛失败：\(error.localizedDescription)")
+        }
         #endif
     }
 

@@ -1,4 +1,8 @@
 import Foundation
+// N5-1 教训：AppLogger 的字符串插值定义在 module `os` 内，显式引入避免 SDK 组合差异
+#if canImport(os)
+import os
+#endif
 // 与 CountdownEvent.swift / CountdownActivity.swift 保持同一编译守卫：
 // 无 SwiftUI 的平台（Linux CI）上不编译倒数日相关类型。
 #if canImport(SwiftUI)
@@ -25,6 +29,8 @@ public final class CountdownActivityController {
         case ended
         /// 系统「实时活动」总开关被关闭（引导用户去系统设置）
         case systemDenied
+        /// App 内「时间胶囊」总开关被关闭（引导用户去 App 设置开启）
+        case appSettingDisabled
         /// 启动失败（系统预算 / 权限窗口 / 设备限制等），附错误描述如实展示
         case failed(String)
     }
@@ -54,11 +60,19 @@ public final class CountdownActivityController {
         #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
         if CountdownActivityManager.activeActivityID(for: event.id) != nil {
             CountdownActivityManager.end(for: event.id)
+            // 释放灵动岛占用：让时间胶囊在下次 refresh 时有机会接管（docs #25）
+            TimeCapsuleCoordinator.shared.refresh()
             return .ended
+        }
+        // App 内「时间胶囊」总开关关闭：不允许（重新）上岛
+        guard AppSettings.liveActivityEnabled else {
+            return .appSettingDisabled
         }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             return .systemDenied
         }
+        // 仲裁：倒数日占用灵动岛 → 先结束时间胶囊，避免两个活动并存互相挤压（docs #25）
+        LiveActivityArbiter.endActivities(otherThan: .countdown)
         switch CountdownActivityManager.start(event: event) {
         case .success:
             return .started
@@ -85,9 +99,16 @@ public final class CountdownActivityController {
     /// - 编辑但已手动下岛 → 保持下岛，尊重用户主动选择
     public func autoStartAfterSave(isNew: Bool, event: CountdownEvent) {
         #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
+        // 尊重 App 内「时间胶囊」总开关：关闭时新建的倒数日不再自动上岛
+        guard AppSettings.liveActivityEnabled else { return }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         if isNew || CountdownActivityManager.activeActivityID(for: event.id) != nil {
-            _ = CountdownActivityManager.start(event: event)
+            // 仲裁：倒数日占用灵动岛 → 先结束时间胶囊（新建倒数日是用户明确意图，docs #25）
+            LiveActivityArbiter.endActivities(otherThan: .countdown)
+            // 自动上岛失败不打扰用户（设计如此），但必须留痕：Console 过滤 subsystem 可见原因
+            if case .failure(let error) = CountdownActivityManager.start(event: event) {
+                AppLogger.app.error("倒数日自动上岛失败：\(error.localizedDescription)")
+            }
         }
         #endif
     }

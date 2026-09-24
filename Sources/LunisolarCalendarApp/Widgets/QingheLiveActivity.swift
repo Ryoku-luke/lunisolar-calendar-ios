@@ -71,8 +71,11 @@ struct QingheLiveActivityLockScreenView: View {
     var body: some View {
         HStack(spacing: AppTheme.Spacing.md) {
             // 图标（纯黑圆角底，与 Countdown 一致避免液态玻璃杂色）
-            Text(state.icon)
-                .font(.system(size: 26, weight: .semibold))
+            // ⚠️ state.icon 是 SF Symbol 名（如 "bell.fill"），必须 Image(systemName:) 渲染——
+            // 曾用 Text(state.icon) 把符号名当文字直接显示在锁屏与灵动岛上。
+            Image(systemName: state.icon)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(.white)
                 .frame(width: 40, height: 40)
                 .background(Color.black.opacity(0.9))
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous))
@@ -125,8 +128,10 @@ public struct QingheLiveActivityWidget: Widget {
             return DynamicIsland {
                 // 展开态：左侧图标 | 中部标题+副题 | 右侧时间
                 DynamicIslandExpandedRegion(.leading) {
-                    Text(state.icon)
-                        .font(.system(size: 22, weight: .semibold))
+                    // SF Symbol 必须 Image(systemName:)；黑底 → 显式白色保证对比度
+                    Image(systemName: state.icon)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
                         .padding(7)
                         .background(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -151,30 +156,43 @@ public struct QingheLiveActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
+                    // docs #26：右侧只放"时间"一类信息，不重复中心的日期
                     if let target = state.countdownTarget {
                         Text(target, style: .timer)
                             .font(.system(.title2, design: .rounded).weight(.bold))
                             .monospacedDigit()
+                    } else if let start = state.startDate, start > Date() {
+                        // 未开始：距开始的系统倒计时（系统每秒刷新，零耗电）
+                        Text(start, style: .timer)
+                            .font(.system(.title2, design: .rounded).weight(.bold))
+                            .monospacedDigit()
                     } else if let end = state.endDate {
-                        Text(end.formatted(.dateTime.month(.twoDigits).day(.twoDigits)))
+                        // 进行中：显示结束时刻
+                        Text(end.formatted(.dateTime.hour().minute()))
                             .font(.system(.title2, design: .rounded).weight(.bold))
                             .monospacedDigit()
                     }
                 }
             } compactLeading: {
-                // 紧凑态（左侧）：图标 + 纯黑圆角底
-                Text(state.icon)
-                    .font(.system(size: 18, weight: .semibold))
+                // 紧凑态（左侧）：图标 + 纯黑圆角底（SF Symbol → Image）
+                Image(systemName: state.icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
                     .padding(4)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(Color.black.opacity(0.9))
                     )
             } compactTrailing: {
-                // 紧凑态（右侧）：优先显示剩余天数（一元素一数字），否则显示结束时间
+                // 紧凑态（右侧）：只放"剩余时间"（docs #26），由系统 timer 每秒刷新
                 if let target = state.countdownTarget {
                     let days = Calendar(identifier: .gregorian).dateComponents([.day], from: Date(), to: target).day ?? 0
                     Text("\(days)天")
+                        .font(.system(.caption, design: .rounded).weight(.bold))
+                        .monospacedDigit()
+                } else if let start = state.startDate, start > Date() {
+                    // 未开始：距开始的系统倒计时（如 29:59；不再显示与中心重复的日期/时刻）
+                    Text(start, style: .timer)
                         .font(.system(.caption, design: .rounded).weight(.bold))
                         .monospacedDigit()
                 } else if let end = state.endDate {
@@ -183,9 +201,10 @@ public struct QingheLiveActivityWidget: Widget {
                         .monospacedDigit()
                 }
             } minimal: {
-                // 最小态：仅图标
-                Text(state.icon)
-                    .font(.system(size: 16, weight: .semibold))
+                // 最小态：仅图标（SF Symbol → Image）
+                Image(systemName: state.icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
                     .padding(3)
                     .background(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)

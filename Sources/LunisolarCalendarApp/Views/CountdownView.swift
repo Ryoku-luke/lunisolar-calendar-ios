@@ -7,6 +7,9 @@ import UIKit
 
 /// 倒数日 / 纪念日列表页
 struct CountdownView: View {
+    /// 深链 / Live Activity 卡片点击进来时高亮的条目（可选）
+    var focusID: UUID? = nil
+
     @Environment(CountdownStore.self) private var store
     @State private var showingEditor = false
     @State private var editingEvent: CountdownEvent?
@@ -24,6 +27,8 @@ struct CountdownView: View {
             } else {
                 ForEach(store.events) { event in
                     CountdownRow(event: event, today: today)
+                        // 卡片点击深链直达：高亮对应条目，帮助用户一眼定位
+                        .listRowBackground(focusID == event.id ? Color.appTint.opacity(0.12) : nil)
                         .contentShape(Rectangle())
                         .onTapGesture { editingEvent = event }
                         .swipeActions(edge: .trailing) {
@@ -62,8 +67,10 @@ private struct CountdownRow: View {
     let today: Date
     /// 该倒数日是否已上灵动岛（Live Activity 活跃）
     @State private var isOnIsland = false
-    /// 系统「实时活动」权限被关闭（设置→通知→清和日历）
+    /// 系统「实时活动」权限被关闭 / App 内时间胶囊开关被关闭（设置→通知→清和日历）
     @State private var showLADeniedAlert = false
+    /// 未开启的具体原因文案（区分系统权限与 App 内开关）
+    @State private var laDeniedMessage = ""
     /// Activity.request 启动失败（预算/系统限制等）
     @State private var showLAFailedAlert = false
     /// 启动失败的具体错误（如实展示，便于定位）
@@ -126,7 +133,7 @@ private struct CountdownRow: View {
         .accessibilityLabel("\(event.title) \(event.displayText(today: today))")
         .onAppear { refreshIslandState() }
         .onChange(of: event) { _, _ in refreshIslandState() }
-        // 系统实时活动权限关闭：引导去设置开启
+        // 灵动岛未开启：区分"系统权限被关"与"App 内时间胶囊开关被关"，给出对应指引
         .alert("灵动岛未开启", isPresented: $showLADeniedAlert) {
             Button("去设置") {
                 #if canImport(UIKit)
@@ -137,7 +144,9 @@ private struct CountdownRow: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。")
+            Text(laDeniedMessage.isEmpty
+                 ? "请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。"
+                 : laDeniedMessage)
         }
         // 启动失败（系统预算等）：如实告知具体原因
         .alert("上岛失败", isPresented: $showLAFailedAlert) {
@@ -161,6 +170,11 @@ private struct CountdownRow: View {
             isOnIsland = false
         case .systemDenied:
             // 系统「实时活动」总开关关闭（用户可在 设置→通知→清和日历 重新开启）
+            laDeniedMessage = "请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。"
+            showLADeniedAlert = true
+        case .appSettingDisabled:
+            // App 内「时间胶囊」总开关关闭（设置 → 提醒与时间胶囊）
+            laDeniedMessage = "「时间胶囊」已关闭。请在 App 内「我的 → 提醒与时间胶囊」中开启后重试。"
             showLADeniedAlert = true
         case .failed(let message):
             // 启动失败（系统预算 / 权限窗口 / 设备限制等）：如实展示具体错误以便定位

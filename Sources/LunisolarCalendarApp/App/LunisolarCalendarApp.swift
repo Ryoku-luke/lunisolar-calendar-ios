@@ -31,7 +31,11 @@ public struct AppRootView: View {
         AppAppearance(rawValue: appearanceRaw) ?? .system
     }
 
-    public init() {}
+    public init() {
+        // 注册偏好默认值域：@AppStorage 的默认值不写盘，raw 读取点靠这里兜底
+        // （否则"设置页显示开、逻辑判定关"，见 AppSettings）
+        AppSettings.registerDefaults()
+    }
 
     public var body: some View {
         AdaptiveRootView()

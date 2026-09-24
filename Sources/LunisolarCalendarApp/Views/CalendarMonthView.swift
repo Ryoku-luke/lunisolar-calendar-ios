@@ -84,6 +84,8 @@ struct CalendarMonthView: View {
     private var externalSelectedDate: Binding<Date>?
     // iPad 侧栏内「倒数日 / 设置」改用 sheet 弹出（push 会挤在窄列里）
     @State private var showCountdown = false
+    /// P1：卡片点击深链进来时高亮的倒数日条目（sheet 关闭后重置）
+    @State private var countdownFocusID: UUID?
     @State private var showSettings = false
     /// AI 助手 Sheet 展示
     @State private var showAIAssistant = false
@@ -201,9 +203,10 @@ struct CalendarMonthView: View {
                 }
             ))
         }
-        .sheet(isPresented: $showCountdown) {
-            // CountdownView 的列表自身不包导航栈，sheet 中补一层
-            NavigationStack { CountdownView() }
+        .sheet(isPresented: $showCountdown, onDismiss: { countdownFocusID = nil }) {
+            // CountdownView 的列表自身不包导航栈，sheet 中补一层；
+            // focusID：卡片点击深链进来时高亮对应条目（关闭后重置，避免下次从菜单进入仍高亮）
+            NavigationStack { CountdownView(focusID: countdownFocusID) }
         }
         .sheet(isPresented: $showSettings) {
             // SettingsView 自身不再包导航栈，sheet 场景补一层（push 场景继承外层导航）
@@ -238,6 +241,13 @@ struct CalendarMonthView: View {
                 pendingOpenEvent = ev
             }
             NavigationCoordinator.shared.pendingOpenEventID = nil
+        }
+        // P1：倒数日 / 纪念日卡片点击 → 打开倒数日列表并聚焦该条
+        .onChange(of: NavigationCoordinator.shared.pendingOpenCountdownID) { _, id in
+            guard let id else { return }
+            countdownFocusID = id
+            showCountdown = true
+            NavigationCoordinator.shared.pendingOpenCountdownID = nil
         }
         // 本地选中 → 同步外部（iPad 双栏联动 DayDetailView）
         .onChange(of: selectedDate) { _, newValue in

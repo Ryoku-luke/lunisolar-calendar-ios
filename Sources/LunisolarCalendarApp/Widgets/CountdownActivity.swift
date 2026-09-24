@@ -80,7 +80,7 @@ struct CountdownLiveActivityView: View {
         .padding(.horizontal)
         .padding(.vertical, AppTheme.Spacing.sm)
         // P1：点锁屏卡 → 打开 App 直达该倒数日
-        .widgetURL(URL(string: "qinghe://event/\(context.attributes.eventID.uuidString)"))
+        .widgetURL(URL(string: "qinghe://countdown/\(context.attributes.eventID.uuidString)"))
     }
 }
 
@@ -106,7 +106,7 @@ public struct CountdownLiveActivityWidget: Widget {
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .fill(Color.black.opacity(0.9))
                         )
-                        .widgetURL(URL(string: "qinghe://event/\(context.attributes.eventID.uuidString)"))
+                        .widgetURL(URL(string: "qinghe://countdown/\(context.attributes.eventID.uuidString)"))
                 }
                 DynamicIslandExpandedRegion(.center) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -117,14 +117,14 @@ public struct CountdownLiveActivityWidget: Widget {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    .widgetURL(URL(string: "qinghe://event/\(context.attributes.eventID.uuidString)"))
+                    .widgetURL(URL(string: "qinghe://countdown/\(context.attributes.eventID.uuidString)"))
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     // 系统原生倒计时：每秒自动刷新、monospaced 防跳动
                     Text(context.state.endDate, style: .timer)
                         .font(.system(.title2, design: .rounded).weight(.bold))
                         .monospacedDigit()
-                        .widgetURL(URL(string: "qinghe://event/\(context.attributes.eventID.uuidString)"))
+                        .widgetURL(URL(string: "qinghe://countdown/\(context.attributes.eventID.uuidString)"))
                 }
             } compactLeading: {
                 // 紧凑态（左侧）：emoji + 纯黑圆角底，边缘干净不露液态玻璃杂色
@@ -150,7 +150,8 @@ public struct CountdownLiveActivityWidget: Widget {
                             .fill(Color.black.opacity(0.9))
                     )
             }
-            .keylineTint(Color(red: 0.30, green: 0.55, blue: 0.52))
+            // 视觉区分：倒数日用暖绿 keyline，时间胶囊用青绿（两者此前同色，滑动切换时难以分辨）
+            .keylineTint(Color(red: 0.24, green: 0.62, blue: 0.36))
         }
         // ⚠️ 不调用 .contentMarginsDisabled()：iOS 26 液态玻璃灵动岛默认自带
         // 安全边距，内容贴边反而显得更宽更满；保留边距让展开态观感更克制。
@@ -171,19 +172,24 @@ public enum CountdownActivityManager {
     /// 避免旧活动先行消失导致的上岛失败窗口与视觉抖动。
     @discardableResult
     public static func start(event: CountdownEvent) -> Result<String, Error> {
+        // 倒计时目标：纪念日取"下一个周年"。直接用原始日期时，若该日期当年已过，
+        // 目标时刻就在过去 → 活动一启动即过期（staleDate 在过去）→ 灵动岛空白/无倒计时。
+        let target = event.kind == .anniversary
+            ? (event.nextAnniversary(from: Date()) ?? event.date)
+            : event.date
         // 幂等复用：关键内容未变 → 保持现有活动原样
         if let oldID = activeActivityID(for: event.id),
            let old = Activity<CountdownActivityAttributes>.activities.first(where: { $0.id == oldID }),
            old.attributes.title == event.title,
            old.attributes.emoji == event.emoji,
-           old.content.state.endDate == event.date {
+           old.content.state.endDate == target {
             return .success(oldID)
         }
         let attrs = CountdownActivityAttributes(eventID: event.id,
                                                 title: event.title,
                                                 emoji: event.emoji)
-        let state = CountdownActivityAttributes.ContentState(endDate: event.date)
-        let content = ActivityContent(state: state, staleDate: event.date)
+        let state = CountdownActivityAttributes.ContentState(endDate: target)
+        let content = ActivityContent(state: state, staleDate: target)
         do {
             let activity = try Activity<CountdownActivityAttributes>.request(
                 attributes: attrs,

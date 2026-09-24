@@ -30,6 +30,10 @@ public final class NavigationCoordinator {
     /// CalendarMonthView 监听此字段并 sheet 出 EventEditView；消费后置 nil。
     public var pendingOpenEventID: UUID?
 
+    /// P1：待打开的倒数日 ID（倒数日 / 纪念日 Live Activity 卡片 → qinghe://countdown/<UUID>）。
+    /// CalendarMonthView 监听并 sheet 出 CountdownView；消费后置 nil。
+    public var pendingOpenCountdownID: UUID?
+
     private init() {}
 
     /// 跳转到指定日期（跨 Tab / 跨平台统一入口）
@@ -48,6 +52,15 @@ public final class NavigationCoordinator {
     /// P1：直接打开某事件的详情编辑页（深链 qinghe://event/<UUID> 专用）
     public func openEventDetail(_ id: UUID) {
         pendingOpenEventID = id
+        #if os(iOS)
+        phoneTab = .calendar
+        #endif
+    }
+
+    /// P1：打开倒数日列表并聚焦指定条目（倒数日卡片点击 → qinghe://countdown/<UUID> 专用）。
+    /// iPhone 上倒数日入口在「日历」Tab 的工具栏菜单里，故先切到该 Tab。
+    public func openCountdownDetail(_ id: UUID) {
+        pendingOpenCountdownID = id
         #if os(iOS)
         phoneTab = .calendar
         #endif

@@ -3,9 +3,10 @@ import Foundation
 // MARK: - DeepLink 路由（P0-3）
 //
 // 统一处理 qinghe:// 深链：
-// - qinghe://event/<UUID>   → 打开事件对应日期
+// - qinghe://event/<UUID>     → 打开事件详情编辑页
+// - qinghe://countdown/<UUID> → 打开倒数日列表并聚焦该条（倒数日 / 纪念日卡片点击）
 // - qinghe://calendar/date/<yyyy-MM-dd> → 跳日历到指定日期
-// - qinghe://ai             → 打开 AI 助手
+// - qinghe://ai               → 打开 AI 助手
 
 @MainActor
 public enum DeepLinkRouter {
@@ -27,6 +28,13 @@ public enum DeepLinkRouter {
            let uuid = UUID(uuidString: url.lastPathComponent) {
             // P1：直接打开事件详情编辑页（而非仅切日期）
             nav.openEventDetail(uuid)
+            return
+        }
+
+        // qinghe://countdown/<UUID>（倒数日 / 纪念日 Live Activity 卡片点击直达）
+        if url.host == "countdown",
+           let uuid = UUID(uuidString: url.lastPathComponent) {
+            nav.openCountdownDetail(uuid)
             return
         }
 
