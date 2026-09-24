@@ -66,4 +66,16 @@ final class CountdownEventTests: XCTestCase {
         XCTAssertEqual(past.daysFrom(today: date(2026, 9, 14)), -13)
         XCTAssertEqual(past.displayText(today: date(2026, 9, 14)), "已过 13 天")
     }
+
+    // MARK: - Live Activity「N天」口径（P1 打磨）
+
+    /// 岛上的「N天」必须与列表的 daysFrom 同口径（startOfDay 日差），
+    /// 否则会出现「列表显示还有 1 天、岛上却显示 2天」这类不一致。
+    func testRemainingDaysTextMatchesListDayCounting() {
+        let now = date(2026, 9, 14)
+        XCTAssertEqual(LiveActivityRemainingText.daysText(from: now, to: date(2026, 9, 15)), "1天")
+        XCTAssertEqual(LiveActivityRemainingText.daysText(from: now, to: date(2026, 10, 14)), "30天")
+        // 同一天（理论上走 <24h 分支）也不应出现「0天」
+        XCTAssertEqual(LiveActivityRemainingText.daysText(from: now, to: now), "1天")
+    }
 }

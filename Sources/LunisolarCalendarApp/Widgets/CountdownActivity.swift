@@ -72,10 +72,9 @@ struct CountdownLiveActivityView: View {
 
             Spacer(minLength: 8)
 
-            // 系统原生倒计时样式：每秒自动刷新、monospaced 防跳动
-            Text(context.state.endDate, style: .timer)
+            // 剩余时间统一走 LiveActivityRemainingText（≥24h「N天」，避免长读数）
+            LiveActivityRemainingText.view(for: context.state.endDate)
                 .font(.system(.title3, design: .rounded).weight(.bold))
-                .monospacedDigit()
         }
         .padding(.horizontal)
         .padding(.vertical, AppTheme.Spacing.sm)
@@ -120,10 +119,9 @@ public struct CountdownLiveActivityWidget: Widget {
                     .widgetURL(URL(string: "qinghe://countdown/\(context.attributes.eventID.uuidString)"))
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    // 系统原生倒计时：每秒自动刷新、monospaced 防跳动
-                    Text(context.state.endDate, style: .timer)
+                    // 剩余时间统一走 LiveActivityRemainingText（≥24h「N天」/ 1–24h 目标时刻 / <1h 系统 timer）
+                    LiveActivityRemainingText.view(for: context.state.endDate)
                         .font(.system(.title2, design: .rounded).weight(.bold))
-                        .monospacedDigit()
                         .widgetURL(URL(string: "qinghe://countdown/\(context.attributes.eventID.uuidString)"))
                 }
             } compactLeading: {
@@ -136,10 +134,11 @@ public struct CountdownLiveActivityWidget: Widget {
                             .fill(Color.black.opacity(0.9))
                     )
             } compactTrailing: {
-                // 紧凑态（右侧）：仅剩余时间（灵动岛紧凑区建议"一元素一数字"）
-                Text(context.state.endDate, style: .timer)
+                // 紧凑态（右侧）：仅剩余时间（灵动岛紧凑区建议"一元素一数字"）。
+                // 走 LiveActivityRemainingText：≥24h 显示「N天」（避免 "717:59:59" 这类长读数），
+                // <1h 才用系统 timer 自动走秒。
+                LiveActivityRemainingText.view(for: context.state.endDate)
                     .font(.system(.caption, design: .rounded).weight(.bold))
-                    .monospacedDigit()
             } minimal: {
                 // 最小态（与其他活动并排时）：仅 emoji 图标
                 Text(context.attributes.emoji)

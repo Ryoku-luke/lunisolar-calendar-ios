@@ -94,11 +94,13 @@ struct QingheLiveActivityLockScreenView: View {
 
             Spacer(minLength: 8)
 
-            // 倒计时优先系统 timer；无目标则显示日期
+            // 剩余时间文案统一走 LiveActivityRemainingText（<1h 系统 timer / 1–24h 目标时刻 / ≥24h N天）
             if let target = state.countdownTarget {
-                Text(target, style: .timer)
+                LiveActivityRemainingText.view(for: target)
                     .font(.system(.title3, design: .rounded).weight(.bold))
-                    .monospacedDigit()
+            } else if let start = state.startDate, start > Date() {
+                LiveActivityRemainingText.view(for: start)
+                    .font(.system(.title3, design: .rounded).weight(.bold))
             } else if let end = state.endDate {
                 Text(end.formatted(.dateTime.month().day()))
                     .font(.system(.title3, design: .rounded).weight(.bold))
@@ -156,16 +158,15 @@ public struct QingheLiveActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    // docs #26：右侧只放"时间"一类信息，不重复中心的日期
+                    // docs #26：右侧只放"时间"一类信息，不重复中心的日期。
+                    // 剩余时间文案统一走 LiveActivityRemainingText（同目录）：
+                    // <1h 系统 timer、1–24h 显示目标时刻、≥24h 显示「N天」——既简短又不会过期。
                     if let target = state.countdownTarget {
-                        Text(target, style: .timer)
+                        LiveActivityRemainingText.view(for: target)
                             .font(.system(.title2, design: .rounded).weight(.bold))
-                            .monospacedDigit()
                     } else if let start = state.startDate, start > Date() {
-                        // 未开始：距开始的系统倒计时（系统每秒刷新，零耗电）
-                        Text(start, style: .timer)
+                        LiveActivityRemainingText.view(for: start)
                             .font(.system(.title2, design: .rounded).weight(.bold))
-                            .monospacedDigit()
                     } else if let end = state.endDate {
                         // 进行中：显示结束时刻
                         Text(end.formatted(.dateTime.hour().minute()))
@@ -206,17 +207,13 @@ public struct QingheLiveActivityWidget: Widget {
                             .fill(Color.black.opacity(0.9))
                     )
             } compactTrailing: {
-                // 紧凑态（右侧）：只放"剩余时间"（docs #26），由系统 timer 每秒刷新
+                // 紧凑态（右侧）：只放"剩余时间"（docs #26），统一走 LiveActivityRemainingText
                 if let target = state.countdownTarget {
-                    let days = Calendar(identifier: .gregorian).dateComponents([.day], from: Date(), to: target).day ?? 0
-                    Text("\(days)天")
+                    LiveActivityRemainingText.view(for: target)
                         .font(.system(.caption, design: .rounded).weight(.bold))
-                        .monospacedDigit()
                 } else if let start = state.startDate, start > Date() {
-                    // 未开始：距开始的系统倒计时（如 29:59；不再显示与中心重复的日期/时刻）
-                    Text(start, style: .timer)
+                    LiveActivityRemainingText.view(for: start)
                         .font(.system(.caption, design: .rounded).weight(.bold))
-                        .monospacedDigit()
                 } else if let end = state.endDate {
                     Text(end.formatted(.dateTime.hour().minute()))
                         .font(.system(.caption, design: .rounded).weight(.bold))
