@@ -119,7 +119,7 @@ swift build        # Build all targets
 swift test         # Run 99 unit tests
 ```
 
-> On Linux only the model layer is verified (lunar/almanac/event CRUD/import-export/sync Mock); SwiftUI views require the iOS/macOS SDK. CI (`.github/workflows/ci.yml`) additionally runs an iOS `xcodebuild build` compile check (views + host app).
+> On Linux only the model layer is verified (lunar/almanac/event CRUD/import-export/sync Mock); SwiftUI views require the iOS/macOS SDK. This repository has **no CI configured** (no `.github/workflows`, so pushing triggers no build). Local checks: `swift build` / `swift test` (macOS host, available since 2026-09-24) plus `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"` (iOS view layer + host app) — see `docs/XCODE_BUILD_GUIDE.md` §4.
 
 ## Test Coverage (99 tests)
 

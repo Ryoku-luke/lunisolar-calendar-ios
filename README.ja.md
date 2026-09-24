@@ -119,7 +119,7 @@ swift build        # 全ターゲットをビルド
 swift test         # 99 件のユニットテストを実行
 ```
 
-> Linux ではモデル層のみ検証します（旧暦/暦注/イベント CRUD/インポート・エクスポート/同期 Mock）。SwiftUI ビューのコンパイルには iOS/macOS SDK が必要です。CI（`.github/workflows/ci.yml`）では iOS での `xcodebuild build` コンパイル検証（ビュー層＋ホスト）も実行します。
+> Linux ではモデル層のみ検証します（旧暦/暦注/イベント CRUD/インポート・エクスポート/同期 Mock）。SwiftUI ビューのコンパイルには iOS/macOS SDK が必要です。本リポジトリは **CI 未設定**（`.github/workflows` なし。push してもビルドは走りません）。ローカル検証は `swift build` / `swift test`（macOS ホスト、2026-09-24 以降利用可）と `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS ビュー層＋ホスト）— 詳細は `docs/XCODE_BUILD_GUIDE.md` §4。
 
 ## テストカバレッジ（99 件）
 

@@ -119,7 +119,7 @@ swift build        # 編譯所有 Target
 swift test         # 執行 99 個單元測試
 ```
 
-> Linux 環境僅驗證模型層（農曆/黃曆/事件 CRUD/匯入匯出/同步 Mock），SwiftUI 檢視編譯需 iOS/macOS SDK；CI（`.github/workflows/ci.yml`）額外執行 iOS `xcodebuild build` 編譯驗證（檢視層 + 宿主）。
+> Linux 環境僅驗證模型層（農曆/黃曆/事件 CRUD/匯入匯出/同步 Mock），SwiftUI 檢視編譯需 iOS/macOS SDK；本倉庫**未設定 CI**（無 `.github/workflows`，推送不會觸發建置）。本機自檢：`swift build` / `swift test`（macOS 宿主，2026-09-24 起可用）與 `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS 檢視層與宿主編譯），詳見 `docs/XCODE_BUILD_GUIDE.md` §4。
 
 ## 測試覆蓋（99 條）
 
