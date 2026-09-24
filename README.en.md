@@ -143,9 +143,13 @@ swift test         # Run 99 unit tests
 
 ### Almanac Data Strategy (product decision)
 
-1. **Current scope**: 2024-01-01 ~ 2028-12-31 uses the human-verified discrete DB (`huangli_db.json`); outside this range (including 2029 onward) the algorithmic fallback kicks in, so there is never an empty state.
-2. **Consistency risk**: the algorithm and the discrete DB may differ in wording for individual days; the Settings page shows a data-coverage note to avoid misunderstanding.
-3. **Extending the DB**: to keep 2029+ consistent with the DB, run `swift run gen_huangli_db` to extend the JSON and validate with `HuangliDBProviderTests` before merging.
+1. **Data source (important — do not overclaim)**: 宜忌 / 冲煞 / 神位 are **derived in-app from a traditional sexagenary-cycle (干支) rule set** (see `yiPool` / `jiPool` in `Models/Huangli.swift`).
+   `huangli_db.json` is a **pre-generated result** for 2024-01-01 ~ 2028-12-31 (an offline cache produced by the same rule set, purely for faster loading).
+   It is **not a human-verified authoritative almanac**: the bundled DB contains only 9 distinct 「宜」 combinations and 10 distinct 「忌」 combinations across 1,827 days (grouped by the day's heavenly stem) — i.e. coarse rule-derived data.
+   Dates outside that range are derived live by the same rule set, so there is never an empty state.
+2. **Wording boundaries**: neither in-app copy nor store descriptions may call this data "authoritative" or "verified"; almanac content is for reference only.
+3. **In-app visibility**: Settings → Data & Sync → Advanced Data Settings shows the data-provenance note (`HuangliDBProvider.coverageDescription`).
+4. **Replacing / extending**: to adopt an authoritative source, replace `huangli_db.json` (keys must stay `yyyy-MM-dd`); when the rule set changes, regenerate via `swift run gen_huangli_db` and spot-check with `HuangliDBProviderTests` before merging.
 
 ### Localization (built in)
 

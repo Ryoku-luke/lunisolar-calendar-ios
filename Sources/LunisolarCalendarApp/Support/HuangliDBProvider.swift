@@ -131,18 +131,18 @@ public enum HuangliDBProvider {
         return Resolved(huangliDay: day, source: .algorithm)
     }
 
-    /// 覆盖范围描述（用于 UI 展示/诊断）
+    /// 覆盖范围描述（用于 UI 展示 / 诊断；**不得**表述为"权威 / 经核验"数据）
     public static var coverageDescription: String {
         let c = Cache.shared
         guard let r = c.root else {
-            return "离散黄历库未加载（将走算法兜底）"
+            return "黄历数据：按传统干支规则实时推导（未加载预生成数据）"
         }
         // P3 修复：JSON 被外部篡改/损坏时 r.range.count 可能 < 2，
         //   旧代码直接 r.range[1] 会触发 Swift Array index out of range precondition
         //   → 整个 SettingsView 进程崩溃。改用 first/last 安全访问。
         let start = r.range.first ?? "未知"
         let end = r.range.count >= 2 ? r.range.last! : start
-        return "离散黄历库 v\(r.version)：\(start) ~ \(end)，共 \(r.count) 条"
+        return "黄历数据：\(start) ~ \(end) 为预生成（按传统干支规则推导）\(r.count) 条；范围外按同一规则实时推导"
     }
 }
 

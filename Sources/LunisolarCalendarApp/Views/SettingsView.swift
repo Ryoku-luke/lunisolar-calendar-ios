@@ -419,6 +419,10 @@ struct SettingsView: View {
                 statRow(label: NSLocalizedString("日程", comment: ""), value: "\(storeCount(of: .schedule))")
                 statRow(label: NSLocalizedString("提醒", comment: ""), value: "\(storeCount(of: .reminder))")
                 statRow(label: NSLocalizedString("记事", comment: ""), value: "\(storeCount(of: .note))")
+                // P1-2 数据诚实化：明确黄历数据的来源与推导方式（非人工核验的权威库）
+                Text(HuangliDBProvider.coverageDescription)
+                    .font(AppTheme.Font.caption)
+                    .foregroundStyle(Color.secondaryLabel)
             } header: {
                 Text(NSLocalizedString("高级数据设置", comment: ""))
             } footer: {
