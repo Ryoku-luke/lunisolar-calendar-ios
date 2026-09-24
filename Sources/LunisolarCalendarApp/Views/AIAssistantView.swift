@@ -118,8 +118,9 @@ struct AIAssistantView: View {
                 }
 
                 Section {
+                    // 不做 disabled：空输入时点击会走 parse() 并给出明确提示；
+                    // 否则按钮静默不可点，用户感受为「点了没反应」
                     Button(NSLocalizedString("解析并预览", comment: "AI助手")) { parse() }
-                        .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
 
                 if let d = draft {
@@ -270,6 +271,9 @@ struct AIAssistantView: View {
         destructiveTarget = nil
         destructiveLabel = nil
         pendingCommand = nil
+
+        // 收起键盘：否则预览 / 结果区被键盘挡在屏幕下方，用户会以为「点了没反应」
+        inputFocused = false
 
         switch AICommandParser.parse(input) {
         case .failure(let error):

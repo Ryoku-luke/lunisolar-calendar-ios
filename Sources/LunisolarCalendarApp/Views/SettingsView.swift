@@ -34,6 +34,8 @@ struct SettingsView: View {
     /// 每周起始日（Calendar weekday 语义：1=周日，2=周一；默认周日起始，保持既有用户布局）
     @AppStorage("Lunisolar.weekStart") private var weekStart: Int = 1
     @AppStorage("Lunisolar.liveActivity.enabled") private var liveActivityEnabled: Bool = true
+    /// 头部卡的「AI 日历助手」入口（此前误接到「帮助与说明」文档，点了等于没反应）
+    @State private var showAIAssistant = false
 
     /// 节日自适应强调色（与月/日视图同规则）
     private var accent: Color {
@@ -50,7 +52,9 @@ struct SettingsView: View {
                 QingheSettingsHeroCard(
                     eventCount: store.events.count,
                     version: appVersionString,
-                    onAI: { docToShow = .help }
+                    // 打开 AI 助手（此前误接到「帮助与说明」文档——标签写 AI 却弹帮助，
+                    // 用户感受为「点了没什么反应」）
+                    onAI: { showAIAssistant = true }
                 )
                 .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 10, trailing: 16))
                 .listRowBackground(Color.clear)
@@ -97,6 +101,10 @@ struct SettingsView: View {
         } message: { conflictPolicyAlertMessage }
         .sheet(item: $docToShow) { kind in
             DocSheetView(kind: kind)
+        }
+        // AI 助手入口（设置头部卡）：AIAssistantView 自身已含 NavigationStack，勿再包一层
+        .sheet(isPresented: $showAIAssistant) {
+            AIAssistantView().environment(store)
         }
         .alert(NSLocalizedString("确认清空全部事件？", comment: ""), isPresented: $showClearConfirm) {
             Button(String(format: NSLocalizedString("清空全部 %d 条", comment: ""), store.events.count), role: .destructive) {
