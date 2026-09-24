@@ -135,12 +135,16 @@ struct AIAssistantView: View {
                             } label: {
                                 Label(NSLocalizedString("取消", comment: ""), systemImage: "xmark.circle")
                             }
+                            // List 行内多按钮必须显式样式：默认样式下整行会抢走点击 →
+                            // 两个按钮都点不动（真机反馈「点确认取消也不起作用」）
+                            .buttonStyle(.borderless)
                             Spacer()
                             Button {
                                 create(d)
                             } label: {
                                 Label(NSLocalizedString("确认创建", comment: "AI助手"), systemImage: "checkmark.circle.fill")
                             }
+                            .buttonStyle(.borderless)
                             .tint(Color.appTint)
                         }
                     } header: {
@@ -191,12 +195,15 @@ struct AIAssistantView: View {
                             } label: {
                                 Label(NSLocalizedString("取消", comment: ""), systemImage: "xmark.circle")
                             }
+                            // 同上：List 行内多按钮需要显式样式，否则整行抢点击
+                            .buttonStyle(.borderless)
                             Spacer()
                             Button {
                                 confirmDestructive()
                             } label: {
                                 Label(NSLocalizedString("确认", comment: ""), systemImage: "checkmark.circle.fill")
                             }
+                            .buttonStyle(.borderless)
                             .tint(Color.appTint)
                         }
                     } header: {
