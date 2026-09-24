@@ -245,10 +245,23 @@ final class AIAssistantTests: XCTestCase {
         XCTAssertNil(AICommandParser.chineseNumberToInt("abc"))
     }
 
-    /// 只替换紧邻「点/时」的数字词，标题里的普通数字词不受影响
+    /// 只替换紧邻「点/时/月/日/号」的数字词，标题里的普通数字词不受影响
     func testChineseNumeralNormalizationDoesNotTouchTitles() {
         XCTAssertEqual(AICommandParser.normalize("晚上八点跑步"), "晚上8点跑步")
         XCTAssertEqual(AICommandParser.normalize("买两斤苹果"), "买两斤苹果")
+    }
+
+    /// 中文数字日期（同日反馈的同类缺口）：九月二十五号 → 9月25号
+    func testParseChineseNumeralDate() throws {
+        let d = try XCTUnwrap(draft("九月二十五号上午十点开会"))
+        XCTAssertEqual(d.title, "开会")
+        let c = cal.dateComponents([.month, .day, .hour], from: d.startDate)
+        XCTAssertEqual([c.month, c.day, c.hour], [9, 25, 10])
+    }
+
+    func testChineseNumeralDateNormalization() {
+        XCTAssertEqual(AICommandParser.normalize("十月一号国庆值班"), "10月1号国庆值班")
+        XCTAssertEqual(AICommandParser.normalize("十二月三十一日跨年"), "12月31日跨年")
     }
 
     func testValidateDeleteWithoutTargetIsRejected() {

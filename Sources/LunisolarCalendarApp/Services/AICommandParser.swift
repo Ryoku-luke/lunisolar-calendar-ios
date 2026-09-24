@@ -364,9 +364,10 @@ public enum AICommandParser {
              .replacingOccurrences(of: "am", with: "上午")
              .replacingOccurrences(of: "pm", with: "下午")
 
-        // 中文数字时刻 → 阿拉伯数字（只处理紧邻"点/时"的数字词：
-        // 「两点」→「2点」、「十点」→「10点」；避免污染标题里的普通数字词如「两斤苹果」）
-        s = normalizeClockNumerals(s)
+        // 中文数字 → 阿拉伯数字（只处理紧邻时间/日期单位的数字词：
+        // 「两点」→「2点」、「九月二十五号」→「9月25号」；
+        // 标题里的普通数字词如「两斤苹果」不受影响）
+        s = normalizeChineseNumerals(s)
         // 补齐「半 / 一刻 / 三刻」的分钟（时间正则只认阿拉伯数字，故要求"点"前已有数字）
         s = s.replacingOccurrences(of: #"(?<=\d)点半"#, with: "点30分", options: .regularExpression)
         s = s.replacingOccurrences(of: #"(?<=\d)点一刻"#, with: "点15分", options: .regularExpression)
@@ -374,9 +375,10 @@ public enum AICommandParser {
         return s
     }
 
-    /// 中文数字时刻 → 阿拉伯数字：仅替换紧邻「点/时」的数字词
-    static func normalizeClockNumerals(_ s: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: "([零〇一二两三四五六七八九十]{1,3})(?=\\s*[点时])") else {
+    /// 中文数字 → 阿拉伯数字：仅替换紧邻「月 / 日 / 号 / 点 / 时」的数字词
+    /// （「九月二十五号」→「9月25号」、「两点」→「2点」）
+    static func normalizeChineseNumerals(_ s: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: "([零〇一二两三四五六七八九十]{1,3})(?=\\s*[月日号点时])") else {
             return s
         }
         let ns = s as NSString
