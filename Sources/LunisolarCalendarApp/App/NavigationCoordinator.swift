@@ -55,14 +55,19 @@ public final class NavigationCoordinator {
         #if os(iOS)
         phoneTab = .calendar
         #endif
+        // iPad：事件属于日历节，同步切换侧栏，保证中间栏能看到它
+        // （显式 self.：属性名与枚举 NavigationCoordinator.iPadSection 同名）
+        self.iPadSection = .calendar
     }
 
     /// P1：打开倒数日列表并聚焦指定条目（倒数日卡片点击 → qinghe://countdown/<UUID> 专用）。
-    /// iPhone 上倒数日入口在「日历」Tab 的工具栏菜单里，故先切到该 Tab。
+    /// iPhone 上倒数日入口在「日历」Tab 的工具栏菜单里，故先切到该 Tab；
+    /// iPad 上直接切到侧栏的「倒数日」节。
     public func openCountdownDetail(_ id: UUID) {
         pendingOpenCountdownID = id
         #if os(iOS)
         phoneTab = .calendar
         #endif
+        self.iPadSection = .countdown
     }
 }

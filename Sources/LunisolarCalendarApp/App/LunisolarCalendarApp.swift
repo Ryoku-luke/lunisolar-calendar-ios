@@ -171,16 +171,11 @@ struct iPadRootView: View {
                 NavigationStack { SettingsView().environment(store) }
             }
         } detail: {
-            // context-aware detail：只在日历/年视图下显示 DayDetail，其他分支显示占位
-            switch nav.iPadSection ?? .calendar {
-            case .calendar, .year:
-                DayDetailView(date: nav.selectedDate, embedsInNavigationStack: false)
-                    .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 460)
-            case .countdown, .settings:
-                // 占位：倒数日/设置详情在 content 列已展示，右栏留空
-                Text("")
-                    .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 460)
-            }
+            // docs #18：右侧常驻「当日信息列」（日期/农历/宜忌/节气/天气/当日安排）。
+            // 原先在倒数日/设置节显示空白占位，导致 iPad 横屏下右栏大面积留白；
+            // 当日信息与所在节无关，故在所有节下都常驻展示。
+            DayDetailView(date: nav.selectedDate, embedsInNavigationStack: false)
+                .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 460)
         }
         .navigationSplitViewStyle(.balanced)
     }
