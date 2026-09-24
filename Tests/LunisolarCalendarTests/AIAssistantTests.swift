@@ -214,6 +214,43 @@ final class AIAssistantTests: XCTestCase {
         XCTAssertEqual(d.title, "开会")
     }
 
+    // MARK: - 1.7 中文数字时刻（真机反馈：两点 未识别 → 时间错为 9:00、标题残留时间词）
+
+    func testParseChineseNumeralClock() throws {
+        let d = try XCTUnwrap(draft("今天下午两点看球"))
+        XCTAssertEqual(d.title, "看球")
+        XCTAssertEqual(cal.component(.hour, from: d.startDate), 14)
+        XCTAssertEqual(cal.component(.minute, from: d.startDate), 0)
+    }
+
+    func testParseChineseNumeralHalfAndQuarter() throws {
+        let half = try XCTUnwrap(draft("明天上午十点半开会"))
+        XCTAssertEqual(half.title, "开会")
+        XCTAssertEqual(cal.component(.hour, from: half.startDate), 10)
+        XCTAssertEqual(cal.component(.minute, from: half.startDate), 30)
+
+        let quarter = try XCTUnwrap(draft("今天下午两点一刻看球"))
+        XCTAssertEqual(quarter.title, "看球")
+        XCTAssertEqual(cal.component(.hour, from: quarter.startDate), 14)
+        XCTAssertEqual(cal.component(.minute, from: quarter.startDate), 15)
+    }
+
+    func testChineseNumberConversion() {
+        XCTAssertEqual(AICommandParser.chineseNumberToInt("两"), 2)
+        XCTAssertEqual(AICommandParser.chineseNumberToInt("十"), 10)
+        XCTAssertEqual(AICommandParser.chineseNumberToInt("十一"), 11)
+        XCTAssertEqual(AICommandParser.chineseNumberToInt("十二"), 12)
+        XCTAssertEqual(AICommandParser.chineseNumberToInt("二十"), 20)
+        XCTAssertEqual(AICommandParser.chineseNumberToInt("二十四"), 24)
+        XCTAssertNil(AICommandParser.chineseNumberToInt("abc"))
+    }
+
+    /// 只替换紧邻「点/时」的数字词，标题里的普通数字词不受影响
+    func testChineseNumeralNormalizationDoesNotTouchTitles() {
+        XCTAssertEqual(AICommandParser.normalize("晚上八点跑步"), "晚上8点跑步")
+        XCTAssertEqual(AICommandParser.normalize("买两斤苹果"), "买两斤苹果")
+    }
+
     func testValidateDeleteWithoutTargetIsRejected() {
         let criteria = AIEventCriteria(day: now, timeHint: nil, keyword: "")
         guard case .failure(let error) =

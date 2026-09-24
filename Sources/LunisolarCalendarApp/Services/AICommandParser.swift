@@ -363,6 +363,48 @@ public enum AICommandParser {
              .replacingOccurrences(of: " PM", with: " 下午", options: .caseInsensitive)
              .replacingOccurrences(of: "am", with: "上午")
              .replacingOccurrences(of: "pm", with: "下午")
+
+        // 中文数字时刻 → 阿拉伯数字（只处理紧邻"点/时"的数字词：
+        // 「两点」→「2点」、「十点」→「10点」；避免污染标题里的普通数字词如「两斤苹果」）
+        s = normalizeClockNumerals(s)
+        // 补齐「半 / 一刻 / 三刻」的分钟（时间正则只认阿拉伯数字，故要求"点"前已有数字）
+        s = s.replacingOccurrences(of: #"(?<=\d)点半"#, with: "点30分", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"(?<=\d)点一刻"#, with: "点15分", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"(?<=\d)点三刻"#, with: "点45分", options: .regularExpression)
         return s
+    }
+
+    /// 中文数字时刻 → 阿拉伯数字：仅替换紧邻「点/时」的数字词
+    static func normalizeClockNumerals(_ s: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: "([零〇一二两三四五六七八九十]{1,3})(?=\\s*[点时])") else {
+            return s
+        }
+        let ns = s as NSString
+        var result = s
+        // 从后往前替换：后面的替换不会影响前面已算出的 range
+        for match in regex.matches(in: s, range: NSRange(location: 0, length: ns.length)).reversed() {
+            guard let range = Range(match.range, in: s),
+                  let value = chineseNumberToInt(String(s[range])) else { continue }
+            result.replaceSubrange(range, with: String(value))
+        }
+        return result
+    }
+
+    /// 中文数字 → 整数（支持 零-九 / 十 / 十一 / 十二 / 二十 / 二十四 等时刻写法）
+    static func chineseNumberToInt(_ text: String) -> Int? {
+        let digits: [Character: Int] = [
+            "零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+            "五": 5, "六": 6, "七": 7, "八": 8, "九": 9
+        ]
+        if text == "十" { return 10 }
+        if let tenIndex = text.firstIndex(of: "十") {
+            let tensPart = text[text.startIndex..<tenIndex]
+            let onesPart = text[text.index(after: tenIndex)...]
+            let tens = tensPart.isEmpty ? 1 : (digits[tensPart.first!] ?? 1)
+            let ones = onesPart.isEmpty ? 0 : (digits[onesPart.first!] ?? 0)
+            return tens * 10 + ones
+        }
+        if text.count == 1, let char = text.first, let value = digits[char] { return value }
+        return nil
     }
 }
