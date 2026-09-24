@@ -20,7 +20,22 @@ public enum AICommandValidator {
         switch command {
         case .createEvent(let draft):
             return validateCreate(draft, now: now).map { .createEvent($0) }
+        case .queryAgenda(let range):
+            return validateQuery(range).map { .queryAgenda($0) }
         }
+    }
+
+    /// 查询校验：被查询的日期须落在支持范围内（农历/黄历依赖 LunarCore 范围）。
+    /// 注意：查询**允许**过去日期——回顾历史安排是合法用法（与创建意图不同）。
+    static func validateQuery(_ range: AIQueryRange) -> Result<AIQueryRange, AICommandError> {
+        let year = QingheCalendarContext.userCalendar.component(.year, from: range.baseDate)
+        guard year >= ChineseCalendar.minYear, year <= ChineseCalendar.maxYear else {
+            return .failure(AICommandError(
+                kind: .outOfRange,
+                message: "日期超出支持范围（\(ChineseCalendar.minYear)–\(ChineseCalendar.maxYear) 年）。"
+            ))
+        }
+        return .success(range)
     }
 
     /// 创建日程校验规则：

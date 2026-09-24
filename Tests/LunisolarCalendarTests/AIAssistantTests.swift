@@ -25,6 +25,9 @@ final class AIAssistantTests: XCTestCase {
         switch AICommandParser.parse(input, baseDate: now) {
         case .success(.createEvent(let d)):
             return d
+        case .success(.queryAgenda):
+            XCTFail("预期创建意图，实际为查询", file: file, line: line)
+            return nil
         case .failure(let error):
             XCTFail("解析失败：\(error.message)", file: file, line: line)
             return nil
@@ -99,6 +102,73 @@ final class AIAssistantTests: XCTestCase {
         XCTAssertEqual(parseError("后天 14:30 提醒我")?.kind, .missingTitle)
     }
 
+    // MARK: - 1.5 查询意图（P1-6b）
+
+    private func queryRange(_ input: String, file: StaticString = #filePath, line: UInt = #line) -> AIQueryRange? {
+        switch AICommandParser.parse(input, baseDate: now) {
+        case .success(.queryAgenda(let range)):
+            return range
+        case .success(let other):
+            XCTFail("预期查询意图，实际为 \(other.kind)", file: file, line: line)
+            return nil
+        case .failure(let error):
+            XCTFail("解析失败：\(error.message)", file: file, line: line)
+            return nil
+        }
+    }
+
+    func testParseQueryTomorrow() throws {
+        let range = try XCTUnwrap(queryRange("明天有什么安排"))
+        let c = cal.dateComponents([.year, .month, .day], from: range.baseDate)
+        XCTAssertEqual([c.year, c.month, c.day], [2026, 9, 25])
+    }
+
+    func testParseQueryDefaultsToToday() throws {
+        // "查一下" 无日期词 → 默认查询今天
+        let range = try XCTUnwrap(queryRange("查一下日程"))
+        let c = cal.dateComponents([.year, .month, .day], from: range.baseDate)
+        XCTAssertEqual([c.year, c.month, c.day], [2026, 9, 24])
+    }
+
+    func testParseQueryDayAfterTomorrow() throws {
+        let range = try XCTUnwrap(queryRange("查一下后天日程"))
+        let c = cal.dateComponents([.year, .month, .day], from: range.baseDate)
+        XCTAssertEqual([c.year, c.month, c.day], [2026, 9, 26])
+    }
+
+    /// 创建句不得被查询短语误判（"安排一下"是动词，不是查询）
+    func testCreateSentenceNotMisreadAsQuery() throws {
+        let d = try XCTUnwrap(draft("安排一下明天3点开会"))
+        XCTAssertEqual(d.title, "开会")
+    }
+
+    func testValidateQueryAllowsPastDate() {
+        // 查询允许回顾过去（与创建意图不同）
+        let range = AIQueryRange(baseDate: cal.date(byAdding: .day, value: -1, to: now)!)
+        guard case .success = AICommandValidator.validate(.queryAgenda(range), now: now) else {
+            return XCTFail("查询允许过去日期")
+        }
+    }
+
+    func testExecuteQueryIsReadOnlyAndReturnsDayEvents() throws {
+        let store = makeIsolatedEventStore()
+        let service = AIAssistantService(eventService: EventService(store: store))
+
+        // 在"明天"种一条事件（skipSync 避免空跑同步入队）
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 25; dc.hour = 15; dc.minute = 0
+        let target = cal.date(from: dc)!
+        store.add(CalendarEvent(title: "查询测试会", startDate: target), skipSync: true)
+
+        let before = store.events.count
+        guard case .success(.queried(let events)) =
+            service.execute(.queryAgenda(AIQueryRange(baseDate: target)), now: now) else {
+            return XCTFail("查询应返回结果列表")
+        }
+        XCTAssertTrue(events.contains { $0.title == "查询测试会" }, "应包含目标日的事件")
+        XCTAssertEqual(store.events.count, before, "查询是只读路径，不得改变 store")
+    }
+
     // MARK: - 2. 校验
 
     func testValidateRejectsPastOneOffEvent() {
@@ -168,7 +238,7 @@ final class AIAssistantTests: XCTestCase {
         let before = store.events.count
         let service = AIAssistantService(eventService: EventService(store: store))
 
-        guard case .success(let id) = service.handle("明天下午3点提醒我开会", now: now) else {
+        guard case .success(.createdEvent(let id)) = service.handle("明天下午3点提醒我开会", now: now) else {
             return XCTFail("应创建成功")
         }
         let created = try XCTUnwrap(store.eventBy(idString: id.uuidString))

@@ -87,6 +87,9 @@ struct AIAssistantView: View {
 
     @State private var input: String = ""
     @State private var draft: AICreateEventDraft?
+    /// P1-6b：查询意图的结果（只读快照）与被查询日期
+    @State private var queryResults: [CalendarEvent]?
+    @State private var queryDate: Date?
     @State private var showError = false
     @State private var errorText = ""
     @State private var created = false
@@ -105,7 +108,7 @@ struct AIAssistantView: View {
                 } header: {
                     Text(NSLocalizedString("用一句话描述", comment: "AI助手"))
                 } footer: {
-                    Text(NSLocalizedString("支持「今天/明天/后天」或「M月D日」+「X点X分」+ 标题。本地解析，不上传数据。", comment: "AI助手说明"))
+                    Text(NSLocalizedString("创建：「今天/明天/后天」或「M月D日」+「X点X分」+ 标题；查询：「今天/明天有什么安排」。本地解析，不上传数据。", comment: "AI助手说明"))
                 }
 
                 Section {
@@ -135,6 +138,33 @@ struct AIAssistantView: View {
                         }
                     } header: {
                         Text(NSLocalizedString("预览 · 确认后入库", comment: ""))
+                    }
+                }
+
+                // P1-6b：查询意图的结果（只读快照，直接展示，无确认步骤）
+                if let results = queryResults {
+                    Section {
+                        if results.isEmpty {
+                            Text(NSLocalizedString("这一天没有安排。", comment: "AI助手"))
+                                .foregroundStyle(Color.secondary)
+                        } else {
+                            ForEach(results) { ev in
+                                HStack(spacing: AppTheme.Spacing.sm) {
+                                    Text(ev.isAllDay
+                                         ? NSLocalizedString("全天", comment: "")
+                                         : ev.startDate.formatted(date: .omitted, time: .shortened))
+                                        .font(AppTheme.Font.caption)
+                                        .foregroundStyle(Color.secondaryLabel)
+                                        .frame(width: 52, alignment: .leading)
+                                    Text(ev.title)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text(String(format: NSLocalizedString("查询结果 · %@", comment: "AI助手"),
+                                    queryDate?.formatted(date: .abbreviated, time: .omitted) ?? ""))
                     }
                 }
             }
@@ -186,19 +216,41 @@ struct AIAssistantView: View {
     // P1-6：解析逻辑此前在本视图内重复实现（约 115 行，与 AICommandParser 双份维护），
     // 现已收口为 Parser → Validator → AIAssistantService 三层；本视图只保留「预览 + 确认」。
 
-    /// 解析 → 校验 → 进入预览（确认后才写入）
+    /// 解析 → 校验 → 预览（创建）/ 立即执行并展示（查询，只读）
     private func parse() {
+        // 新一轮解析：清掉上一轮的预览与查询结果
+        draft = nil
+        queryResults = nil
+        queryDate = nil
+
         switch AICommandParser.parse(input) {
         case .failure(let error):
             present(error)
 
         case .success(let command):
-            // 预览前先校验：让用户在「确认创建」之前就看到问题（如时间已过去）
-            switch AICommandValidator.validate(command) {
-            case .failure(let error):
-                present(error)
-            case .success(.createEvent(let validated)):
-                draft = validated
+            switch command {
+            case .queryAgenda(let range):
+                // 只读查询：无需确认步骤，直接执行并展示结果
+                switch AIAssistantService.shared.execute(command) {
+                case .success(.queried(let events)):
+                    queryResults = events
+                    queryDate = range.baseDate
+                case .success:
+                    break // 查询路径不会出现其他结果类型
+                case .failure(let error):
+                    present(error)
+                }
+
+            case .createEvent:
+                // 预览前先校验：让用户在「确认创建」之前就看到问题（如时间已过去）
+                switch AICommandValidator.validate(command) {
+                case .failure(let error):
+                    present(error)
+                case .success(.createEvent(let validated)):
+                    draft = validated
+                case .success:
+                    break
+                }
             }
         }
     }

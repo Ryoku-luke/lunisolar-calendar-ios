@@ -52,13 +52,26 @@ public struct AICreateEventDraft: Equatable, Sendable {
     }
 }
 
+/// 查询某一天的日程（P1-6b）
+public struct AIQueryRange: Equatable, Sendable {
+    /// 被查询的日期（以"天"为粒度）
+    public let baseDate: Date
+    public init(baseDate: Date) {
+        self.baseDate = baseDate
+    }
+}
+
 /// 结构化命令：校验通过后由 AIAssistantService 执行
 public enum AIStructuredCommand: Equatable, Sendable {
+    /// 创建日程（第一阶段已实现）
     case createEvent(AICreateEventDraft)
+    /// 查询某一天的日程（只读，不写数据层）
+    case queryAgenda(AIQueryRange)
 
     public var kind: AIIntentKind {
         switch self {
         case .createEvent: return .createEvent
+        case .queryAgenda: return .queryAgenda
         }
     }
 }
@@ -131,6 +144,14 @@ public enum AICommandParser {
             }
         }
 
+        // 1.5 查询意图（P1-6b）："明天有什么安排 / 查一下后天日程"。
+        // 命中查询短语即返回只读查询命令（不做标题提取、不走写入路径）。
+        // 白名单取保守短语，避免"给我安排一下明天的会"这类创建句被误判为查询。
+        if ["有什么安排", "有哪些安排", "什么安排", "有什么日程", "有哪些日程", "什么日程",
+            "查一下", "查日程", "看下安排", "看看安排", "看下日程", "看看日程"].contains(where: { s.contains($0) }) {
+            return .success(.queryAgenda(AIQueryRange(baseDate: base)))
+        }
+
         // 2. 时间：14:30 / 下午3点 / 晚上7点半
         var hour = 9, minute = 0
         var consumedTime = ""
@@ -154,7 +175,7 @@ public enum AICommandParser {
         // 3. 标题：剔除已识别的日期/时间词、重复词与口语前缀
         var title = s
         for w in [consumedDate, consumedTime, "提醒我", "提醒", "帮我", "我要", "记得",
-                  "每天", "每日", "每周", "每月", "工作日"] where !w.isEmpty {
+                  "安排一下", "每天", "每日", "每周", "每月", "工作日"] where !w.isEmpty {
             title = title.replacingOccurrences(of: w, with: "")
         }
         title = title.trimmingCharacters(in: CharacterSet(charactersIn: " ，,。.!！"))
