@@ -173,6 +173,25 @@ public struct QingheLiveActivityWidget: Widget {
                             .monospacedDigit()
                     }
                 }
+                // docs #26：展开态给出显式动作（查看日历 / 稍后提醒）
+                DynamicIslandExpandedRegion(.bottom) {
+                    HStack(spacing: AppTheme.Spacing.lg) {
+                        if let eventID = context.attributes.eventID {
+                            Text(NSLocalizedString("打开日历 ›", comment: "Live Activity 动作"))
+                                .font(.caption2.weight(.semibold))
+                                .widgetURL(URL(string: "qinghe://event/\(eventID)"))
+                        }
+                        Spacer(minLength: 0)
+                        if #available(iOS 17.0, *), let eventID = context.attributes.eventID {
+                            // LiveActivityIntent 在主 App 进程执行：挂一条 10 分钟后的一次性通知
+                            Button(intent: SnoozeReminderIntent(eventID: eventID)) {
+                                Text(NSLocalizedString("稍后提醒", comment: "Live Activity 动作"))
+                                    .font(.caption2.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             } compactLeading: {
                 // 紧凑态（左侧）：图标 + 纯黑圆角底（SF Symbol → Image）
                 Image(systemName: state.icon)

@@ -159,6 +159,35 @@ public final class NotificationManager {
         #endif
     }
 
+    /// 灵动岛「稍后提醒」：为指定事件挂一条 `after` 秒后触发的一次性通知。
+    /// **不修改事件本身的时间**（避免"稍后提醒"把用户日程挪走）。
+    /// - Returns: true 表示已挂载；事件不存在 / 测试环境无通知中心 / 无权限时为 false。
+    @discardableResult
+    public func snoozeReminder(eventID: String, after seconds: TimeInterval = 10 * 60) async -> Bool {
+        #if canImport(UserNotifications)
+        guard let uuid = UUID(uuidString: eventID),
+              let event = EventStore.shared.eventBy(idString: uuid.uuidString),
+              let center = currentCenterIfAvailable else { return false }
+
+        let content = buildContent(for: event)
+        content.body = content.body.isEmpty ? "稍后提醒" : "\(content.body)（稍后提醒）"
+        let request = UNNotificationRequest(
+            identifier: "snooze-\(eventID)-\(Int(Date().timeIntervalSince1970))",
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(seconds, 1), repeats: false)
+        )
+        do {
+            try await center.add(request)
+            return true
+        } catch {
+            AppLogger.app.error("稍后提醒挂载失败：\(error.localizedDescription)")
+            return false
+        }
+        #else
+        return false
+        #endif
+    }
+
     /// 重新调度所有未完成的提醒
     public func rescheduleAllReminders(in store: EventStore) async {
         #if canImport(UserNotifications)
