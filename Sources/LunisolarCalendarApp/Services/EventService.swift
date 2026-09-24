@@ -71,6 +71,56 @@ public final class EventService {
         if flush { store.flushPendingSave() }
     }
 
+    /// 把 EventStore 防抖中的待写变更立即落盘。
+    /// 使用时机：保存后立即退出编辑页等"写后可能立刻进后台"的场景；
+    /// App 进入后台的统一落盘由 AppLifecycleCoordinator 负责。
+    public func flushPendingSave() {
+        store.flushPendingSave()
+    }
+
+    // MARK: - 批量导入 / 危险操作（P0：收口 SettingsView 直连 store）
+
+    /// 批量合并导入事件（ICS / JSON / 系统日历 / 联系人导入的统一数据入口）。
+    /// 返回合并统计；调用方在 added+updated>0 后负责 rescheduleAllReminders()。
+    @discardableResult
+    public func mergeImportedEvents(
+        _ incoming: [CalendarEvent],
+        policy: ImportConflictPolicy,
+        skipSync: Bool = true
+    ) -> ImportMergeResult {
+        store.merge(incoming, policy: policy, skipSync: skipSync)
+    }
+
+    /// 清空全部事件（设置页危险操作，二次确认后执行）。返回删除条数。
+    @discardableResult
+    public func clearAllEvents() -> Int {
+        store.clearAll()
+    }
+
+    // MARK: - 倒数日业务（P0：收口 CountdownView 直连 CountdownStore）
+
+    /// 倒数日数据源（写操作走本类业务方法，保持 UI → Service → Store 单向依赖）。
+    private let countdownStore = CountdownStore.shared
+
+    /// 新增或更新倒数日（按 id 是否已存在决定 add/update）。
+    /// flush=true：编辑页保存后立即 dismiss，很可能马上进后台；0.5s 防抖的
+    /// Task.sleep 在后台不一定跑完，直接落盘防丢数据（沿用 CountdownEditor 原 P2 修复语义）。
+    public func saveCountdown(_ event: CountdownEvent, flush: Bool = false) {
+        if countdownStore.events.contains(where: { $0.id == event.id }) {
+            countdownStore.update(event)
+        } else {
+            countdownStore.add(event)
+        }
+        if flush { countdownStore.flushPendingSave() }
+    }
+
+    /// 删除倒数日（滑动删除）。删除后的灵动岛活动由 CountdownStore 内部统一结束；
+    /// 落盘由 store 防抖 + AppLifecycleCoordinator 后台 flush 兜底。
+    public func deleteCountdown(id: UUID, flush: Bool = false) {
+        countdownStore.delete(id: id)
+        if flush { countdownStore.flushPendingSave() }
+    }
+
     // MARK: - 通知调度统一入口（文档 #37）
 
     /// 全量重排所有提醒（导入 / iCloud 同步 / 权限变更后调用）。

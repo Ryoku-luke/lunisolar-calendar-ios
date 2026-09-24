@@ -4,9 +4,6 @@ import LunarCore
 #if canImport(UIKit)
 import UIKit
 #endif
-#if canImport(ActivityKit)
-import ActivityKit
-#endif
 
 /// 倒数日 / 纪念日列表页
 struct CountdownView: View {
@@ -31,7 +28,8 @@ struct CountdownView: View {
                         .onTapGesture { editingEvent = event }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
-                                store.delete(id: event.id)
+                                // P0 收口：倒数日删除走 EventService（内部转 CountdownStore.delete，含下岛清理）
+                                EventService.shared.deleteCountdown(id: event.id)
                             } label: { Label("删除", systemImage: "trash") }
                         }
                 }
@@ -150,34 +148,25 @@ private struct CountdownRow: View {
     }
 
     private func refreshIslandState() {
-        #if canImport(ActivityKit)
-        isOnIsland = CountdownActivityManager.activeActivityID(for: event.id) != nil
-        #else
-        isOnIsland = false
-        #endif
+        // P0 遗留收口：岛上状态查询走 CountdownActivityController（View 不碰 ActivityKit）
+        isOnIsland = CountdownActivityController.shared.isOnIsland(eventID: event.id)
     }
 
     private func toggleIsland() {
-        #if canImport(ActivityKit)
-        if isOnIsland {
-            CountdownActivityManager.end(for: event.id)
+        // P0 遗留收口：上岛/下岛走 CountdownActivityController，View 只按结果弹 alert
+        switch CountdownActivityController.shared.toggleIsland(for: event) {
+        case .started:
+            isOnIsland = true
+        case .ended:
             isOnIsland = false
-        } else {
-            // 先检查系统「实时活动」总开关（用户可在 设置→通知→清和日历 关闭）
-            guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-                showLADeniedAlert = true
-                return
-            }
-            switch CountdownActivityManager.start(event: event) {
-            case .success:
-                isOnIsland = true
-            case .failure(let error):
-                // 启动失败（系统预算 / 权限窗口 / 设备限制等）：如实展示具体错误以便定位
-                lastLAError = error.localizedDescription
-                showLAFailedAlert = true
-            }
+        case .systemDenied:
+            // 系统「实时活动」总开关关闭（用户可在 设置→通知→清和日历 重新开启）
+            showLADeniedAlert = true
+        case .failed(let message):
+            // 启动失败（系统预算 / 权限窗口 / 设备限制等）：如实展示具体错误以便定位
+            lastLAError = message
+            showLAFailedAlert = true
         }
-        #endif
     }
 }
 
@@ -185,7 +174,6 @@ private struct CountdownRow: View {
 
 private struct CountdownEditor: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(CountdownStore.self) private var store
 
     @State private var title = ""
     @State private var date = Date()
@@ -293,26 +281,14 @@ private struct CountdownEditor: View {
             emoji: emoji,
             note: note.isEmpty ? nil : note
         )
-        if editing != nil {
-            store.update(event)
-        } else {
-            store.add(event)
-        }
-        // P2 修复：保存按钮会立刻 dismiss 并很可能进入后台/被用户上滑杀进程，
-        //   0.5s saveDebounce 里的 Task.sleep 在后台不一定能按时跑完，
-        //   直接 flush 确保这次 add/update 的变更一定落盘（防丢数据）。
-        store.flushPendingSave()
-        // 灵动岛自动上岛逻辑（不打扰、不弹窗）：
-        // - 新建倒数日 → 自动上岛（核心诉求）
-        // - 编辑且当前已在岛上 → 同步新内容到灵动岛（start 内部幂等：内容未变不重启）
-        // - 编辑但已手动下岛 → 保持下岛，不强行重新上岛（尊重用户主动选择）
-        #if canImport(ActivityKit)
-        if ActivityAuthorizationInfo().areActivitiesEnabled {
-            if editing == nil || CountdownActivityManager.activeActivityID(for: event.id) != nil {
-                _ = CountdownActivityManager.start(event: event)
-            }
-        }
-        #endif
+        // P0 收口：倒数日写操作统一走 EventService（内部按 id 是否存在决定 add/update）。
+        // P2 修复语义保留：保存按钮会立刻 dismiss 并很可能进入后台/被用户上滑杀进程，
+        // 0.5s saveDebounce 里的 Task.sleep 在后台不一定能按时跑完，
+        // flush=true 确保这次变更一定落盘（防丢数据）。
+        EventService.shared.saveCountdown(event, flush: true)
+        // P0 遗留收口：保存后的自动上岛策略在 CountdownActivityController
+        // （新建自动上岛；编辑且已在岛上 → 同步新内容；手动下岛过 → 不打扰）
+        CountdownActivityController.shared.autoStartAfterSave(isNew: editing == nil, event: event)
         dismiss()
     }
 }

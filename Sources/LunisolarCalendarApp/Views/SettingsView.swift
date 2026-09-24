@@ -3,9 +3,6 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
-#if canImport(ActivityKit)
-import ActivityKit
-#endif
 // N6 修复：本文件 5 处 AppLogger 最终走 os.Logger 的 OSLogMessage 插值；
 // iOS 18 SDK 下 SwiftUI 不再 transitively 引入 os。
 #if canImport(os)
@@ -60,7 +57,9 @@ struct SettingsView: View {
             }
 
             appearanceSection
+            #if canImport(UIKit)
             iconSection
+            #endif
             notificationSection
             calendarLinkSection
             dataSection
@@ -68,7 +67,12 @@ struct SettingsView: View {
             dangerSection
             AboutSectionView(docToShow: $docToShow)
         }
+        #if canImport(UIKit)
         .listStyle(.insetGrouped)
+        #else
+        // macOS 无 insetGrouped；产品目标为 iOS，macOS 仅作 SPM 单测宿主
+        .listStyle(.automatic)
+        #endif
         .festiveWallpaper(accent: accent)
         .navigationTitle(NSLocalizedString("设置", comment: ""))
         #if canImport(UIKit)
@@ -96,7 +100,8 @@ struct SettingsView: View {
         }
         .alert(NSLocalizedString("确认清空全部事件？", comment: ""), isPresented: $showClearConfirm) {
             Button(String(format: NSLocalizedString("清空全部 %d 条", comment: ""), store.events.count), role: .destructive) {
-                let n = store.clearAll()
+                // P0 收口：清空走 EventService（内部转 EventStore.clearAll，含通知取消 / 墓碑逻辑）
+                let n = EventService.shared.clearAllEvents()
                 toast = .init(kind: .success, text: String(format: NSLocalizedString("已清空 %d 条事件", comment: ""), n))
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
@@ -135,7 +140,9 @@ struct SettingsView: View {
     }
 
     // MARK: - 1.5 App 图标（P2-9：手动切换主图标/春节限定）
+    // UIKit only：UIApplication.setAlternateIconName 为 iOS API，macOS 无替代图标能力
 
+    #if canImport(UIKit)
     private var iconSection: some View {
         Section {
             Picker(NSLocalizedString("App 图标", comment: ""), selection: .init(
@@ -154,6 +161,7 @@ struct SettingsView: View {
             QingheSectionHeader(NSLocalizedString("图标", comment: ""), subtitle: "主图标 / 春节限定自动切换")
         }
     }
+    #endif
 
     // MARK: - 2. 通知
 
@@ -204,13 +212,8 @@ struct SettingsView: View {
             // P1：设置变化即时反馈——关闭时立即结束所有活动，开启时给出提示
             .onChange(of: liveActivityEnabled) { _, newValue in
                 if !newValue {
-                    #if canImport(ActivityKit)
-                    if #available(iOS 16.1, *) {
-                        for id in Activity<CountdownActivityAttributes>.activities.map(\.id) {
-                            CountdownActivityManager.end(id: id)
-                        }
-                    }
-                    #endif
+                    // P0 遗留收口：结束全部倒数日活动走 CountdownActivityController
+                    CountdownActivityController.shared.endAllActivities()
                     toast = ToastMessage(kind: .warning,
                         text: NSLocalizedString("时间胶囊已关闭", comment: ""))
                 } else {
@@ -321,7 +324,8 @@ struct SettingsView: View {
             if let co = store.syncCoordinator {
                 Toggle(isOn: Binding(
                     get: { co.isEnabled },
-                    set: { newVal in handleSyncToggle(co, enabled: newVal) }
+                    // P0 遗留收口：开关切换走 AppLifecycleCoordinator（View 不直接驱动同步）
+                    set: { newVal in AppLifecycleCoordinator.shared.setCloudSyncEnabled(newVal) }
                 )) {
                     Label(NSLocalizedString("启用 iCloud 同步", comment: ""), systemImage: "icloud")
                 }
@@ -353,14 +357,12 @@ struct SettingsView: View {
                 }
 
                 Button {
+                    // P0 遗留收口：立即同步走 AppLifecycleCoordinator（含日志与通知重排）
                     Task { @MainActor in
-                        do {
-                            _ = try await co.syncBidirectional()
-                            EventService.shared.rescheduleAllReminders()
-                            toast = .init(kind: .success, text: NSLocalizedString("同步完成", comment: ""))
-                        } catch {
-                            AppLogger.sync.error("立即同步失败：\(error)")
+                        if let error = await AppLifecycleCoordinator.shared.syncNow() {
                             toast = .init(kind: .error, text: String(format: NSLocalizedString("同步失败：%@", comment: ""), syncErrorBrief(error)))
+                        } else {
+                            toast = .init(kind: .success, text: NSLocalizedString("同步完成", comment: ""))
                         }
                     }
                 } label: {
@@ -379,7 +381,7 @@ struct SettingsView: View {
                     get: { false },
                     set: { newVal in
                         if newVal {
-                            Task { @MainActor in await enableSyncForFirstTime() }
+                            Task { @MainActor in await enableSyncFirstTime() }
                         }
                     }
                 )) {
@@ -577,7 +579,8 @@ struct SettingsView: View {
             case .ics:  incoming = DataPortability.importICS(content)
             case .json: incoming = DataPortability.importJSON(content)
             }
-            let r = store.merge(incoming, policy: conflictPolicy, skipSync: true)
+            // P0 收口：批量合并导入走 EventService（内部转 EventStore.merge）
+            let r = EventService.shared.mergeImportedEvents(incoming, policy: conflictPolicy, skipSync: true)
             importedResult = r
             showImportResult = true
             // 新增/更新的事件如果是 reminder，需要被挂到 UNUserNotificationCenter。
@@ -638,7 +641,8 @@ struct SettingsView: View {
             return
         }
 
-        let r = store.merge(events, policy: conflictPolicy, skipSync: true)
+        // P0 收口：批量合并导入走 EventService（内部转 EventStore.merge）
+        let r = EventService.shared.mergeImportedEvents(events, policy: conflictPolicy, skipSync: true)
         importedResult = r
         showImportResult = false
         // 系统导入成功后重排所有 pending 通知，把新增 reminder 挂到 UNUserNotificationCenter
@@ -663,46 +667,19 @@ struct SettingsView: View {
     }
 
     // MARK: - iCloud 同步辅助
+    //
+    // P0 遗留收口：CloudKit 装配 / 开关切换 / 立即同步全部在 AppLifecycleCoordinator，
+    // 这里只把首次开启的结果映射成 toast（文案与旧行为一致）。
 
     @MainActor
-    private func enableSyncForFirstTime() async {
-        #if canImport(CloudKit)
-        do {
-            let provider = RealCloudKitProvider()
-            let available = await provider.isAvailable
-            guard available else {
-                toast = .init(kind: .error, text: "iCloud 不可用：请登录 iCloud 并检查 entitlement 配置")
-                return
-            }
-            let coordinator = EventSyncCoordinator(eventStore: store, provider: provider)
-            coordinator.isEnabled = true
-            store.syncCoordinator = coordinator
-            UserDefaults.standard.set(true, forKey: "Lunisolar.sync.enabled")
-            _ = try await coordinator.syncBidirectional()
-            // 首次双向同步后：远端可能有新 reminder，需要排本地通知
-            EventService.shared.rescheduleAllReminders()
+    private func enableSyncFirstTime() async {
+        switch await AppLifecycleCoordinator.shared.enableCloudSync() {
+        case .success:
             toast = .init(kind: .success, text: "iCloud 同步已开启")
-        } catch {
-            AppLogger.sync.error("首次开启 iCloud 同步失败：\(error)")
+        case .unavailable:
+            toast = .init(kind: .error, text: "iCloud 不可用：请登录 iCloud 并检查 entitlement 配置")
+        case .syncFailed:
             toast = .init(kind: .error, text: "iCloud 同步开启失败")
-        }
-        #endif
-    }
-
-    @MainActor
-    private func handleSyncToggle(_ co: EventSyncCoordinator, enabled: Bool) {
-        co.isEnabled = enabled
-        UserDefaults.standard.set(enabled, forKey: "Lunisolar.sync.enabled")
-        if enabled {
-            Task { @MainActor in
-                do {
-                    _ = try await co.syncBidirectional()
-                    // 开启同步后首次双向同步：远端新 reminder 需要排本地通知
-                    EventService.shared.rescheduleAllReminders()
-                } catch {
-                    AppLogger.sync.warning("开启同步后首次同步失败：\(error)")
-                }
-            }
         }
     }
 

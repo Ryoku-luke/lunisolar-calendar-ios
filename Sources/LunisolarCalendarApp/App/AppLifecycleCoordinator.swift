@@ -3,6 +3,11 @@ import SwiftUI
 #if canImport(CloudKit)
 import CloudKit
 #endif
+// N5-1 教训：AppLogger.sync.* 的字符串插值定义在 module `os` 内，
+// 是否可见与所在文件 import 了什么都无必然关系；显式引入避免 SDK 组合差异级联报错。
+#if canImport(os)
+import os
+#endif
 
 // MARK: - App 生命周期协调器（P0-1）
 //
@@ -34,7 +39,7 @@ public final class AppLifecycleCoordinator {
         await NotificationManager.shared.rescheduleAllReminders(in: store)
 
         // 2. 清理孤儿倒数日灵动岛 + 刷新时间胶囊
-        #if canImport(ActivityKit) && canImport(WidgetKit)
+        #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
         if let countdownStore {
             CountdownActivityManager.cleanupOrphans(validEventIDs: Set(countdownStore.events.map(\.id)))
         }
@@ -52,7 +57,7 @@ public final class AppLifecycleCoordinator {
         case .active:
             Task { @MainActor in
                 await NotificationManager.shared.rescheduleAllReminders(in: store)
-                #if canImport(ActivityKit) && canImport(WidgetKit)
+                #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
                 TimeCapsuleCoordinator.shared.refresh()
                 #endif
             }
@@ -66,14 +71,14 @@ public final class AppLifecycleCoordinator {
 
     /// 事件 revision 变化 → 重新选择时间胶囊
     public func onEventsChanged() {
-        #if canImport(ActivityKit) && canImport(WidgetKit)
+        #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
         TimeCapsuleCoordinator.shared.refresh()
         #endif
     }
 
     /// 时间胶囊开关变化
     public func onLiveActivityEnabledChanged(_ enabled: Bool) {
-        #if canImport(ActivityKit) && canImport(WidgetKit)
+        #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
         if enabled {
             TimeCapsuleCoordinator.shared.refresh()
         } else {
@@ -93,6 +98,7 @@ public final class AppLifecycleCoordinator {
             let provider = RealCloudKitProvider()
             let available = await provider.isAvailable
             guard available else {
+                AppLogger.sync.warning("iCloud entitlement 或账号不可用，跳过同步装配")
                 UserDefaults.standard.set(false, forKey: "Lunisolar.sync.enabled")
                 return
             }
@@ -102,8 +108,97 @@ public final class AppLifecycleCoordinator {
             syncCoordinator = coordinator
             _ = try await coordinator.syncBidirectional()
         } catch {
+            AppLogger.sync.error("CloudKit 装配失败：\(error)")
             UserDefaults.standard.set(false, forKey: "Lunisolar.sync.enabled")
         }
+        #endif
+    }
+
+    // MARK: - iCloud 同步控制（P0 遗留收口）
+    //
+    // 设置页只发意图（首次开启 / 开关切换 / 立即同步），CloudKit Provider 装配、
+    // coordinator 生命周期、UserDefaults 开关标记全部收在本类。
+    // View 不再 import CloudKit / 构造 RealCloudKitProvider。
+    // 设置页仍只读 store.syncCoordinator 的 status/lastResult 做状态展示（只读，允许）。
+
+    /// 首次开启 iCloud 同步的三种结局（设置页按此映射不同 toast）。
+    public enum CloudSyncEnableResult: Sendable {
+        /// 装配 + 首次双向同步完成
+        case success
+        /// iCloud 账号 / entitlement 不可用（未改变任何状态）
+        case unavailable
+        /// 装配成功但首次同步失败（开关保持开启，与旧行为一致，可后续重试）
+        case syncFailed
+    }
+
+    /// 首次开启：装配 provider/coordinator、写开关标记、首次双向同步 + 通知重排。
+    @discardableResult
+    public func enableCloudSync() async -> CloudSyncEnableResult {
+        #if canImport(CloudKit)
+        guard let store else { return .unavailable }
+        let provider = RealCloudKitProvider()
+        let available = await provider.isAvailable
+        guard available else {
+            AppLogger.sync.warning("iCloud 不可用：账号或 entitlement 状态异常")
+            return .unavailable
+        }
+        let coordinator = EventSyncCoordinator(eventStore: store, provider: provider)
+        coordinator.isEnabled = true
+        store.syncCoordinator = coordinator
+        syncCoordinator = coordinator
+        UserDefaults.standard.set(true, forKey: "Lunisolar.sync.enabled")
+        do {
+            _ = try await coordinator.syncBidirectional()
+        } catch {
+            AppLogger.sync.error("首次开启 iCloud 同步失败：\(error)")
+            return .syncFailed
+        }
+        // 首次双向同步后：远端可能有新 reminder，需要排本地通知
+        await NotificationManager.shared.rescheduleAllReminders(in: store)
+        return .success
+        #else
+        return .unavailable
+        #endif
+    }
+
+    /// 设置页「启用 iCloud 同步」开关切换（已有 coordinator 后的 enable/disable）。
+    public func setCloudSyncEnabled(_ enabled: Bool) {
+        #if canImport(CloudKit)
+        guard let co = syncCoordinator ?? store?.syncCoordinator else { return }
+        co.isEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "Lunisolar.sync.enabled")
+        if enabled {
+            Task { @MainActor in
+                do {
+                    _ = try await co.syncBidirectional()
+                    if let store {
+                        await NotificationManager.shared.rescheduleAllReminders(in: store)
+                    }
+                } catch {
+                    AppLogger.sync.warning("开启同步后首次同步失败：\(error)")
+                }
+            }
+        }
+        #endif
+    }
+
+    /// 设置页「立即同步」。返回 nil 表示成功；失败返回错误对象（调用方格式化 toast）。
+    @discardableResult
+    public func syncNow() async -> Error? {
+        #if canImport(CloudKit)
+        guard let co = syncCoordinator ?? store?.syncCoordinator else { return nil }
+        do {
+            _ = try await co.syncBidirectional()
+            if let store {
+                await NotificationManager.shared.rescheduleAllReminders(in: store)
+            }
+            return nil
+        } catch {
+            AppLogger.sync.error("立即同步失败：\(error)")
+            return error
+        }
+        #else
+        return nil
         #endif
     }
 }

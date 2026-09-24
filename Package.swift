@@ -20,7 +20,26 @@ let package = Package(
         .target(
             name: "LunarCore",
             path: "Sources/LunisolarCalendarApp",
-            exclude: ["Resources"],
+            // 本 target 只编译纯农历/黄历算法两个文件；sources 显式声明后，
+            // 同目录下其余 Swift 文件 + Info.plist 都会被 SwiftPM 报为
+            // "found N file(s) which are unhandled" 警告，必须显式 exclude。
+            // 按目录排除：新增 View/Service/Support 文件无需再改这里；
+            // Models/ 下新增文件默认视为不属于 LunarCore，若属核心算法需手动加入 sources。
+            exclude: [
+                "App",
+                "Models/CalendarDaySummary.swift",
+                "Models/CalendarEvent.swift",
+                "Models/CountdownEvent.swift",
+                "Resources",
+                "Services",
+                "Stores",
+                "Support",
+                "Sync",
+                "Views",
+                "Widgets",
+                "Info.plist",
+                "PrivacyInfo.xcprivacy"
+            ],
             sources: [
                 "Models/LunarDate.swift",
                 "Models/Huangli.swift"

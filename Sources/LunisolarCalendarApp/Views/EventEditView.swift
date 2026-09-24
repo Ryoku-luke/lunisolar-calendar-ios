@@ -203,13 +203,15 @@ struct EventEditView: View {
             }
         }
         .navigationTitle(isEditing ? String(format: NSLocalizedString("编辑%@", comment: ""), type.uiLabel) : String(format: NSLocalizedString("新建%@", comment: ""), type.uiLabel))
+        #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .platformTopBarLeading) {
                 Button("取消") { dismiss() }
                     .font(.subheadline.weight(.medium))
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .platformTopBarTrailing) {
                 Button(isEditing ? "保存" : "添加") { save() }
                     .fontWeight(.semibold)
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -283,7 +285,6 @@ struct EventEditView: View {
         if end < startDate { end = startDate }
         let reminderOffset: Int? = reminderEnabled ? reminderMinutesBefore : nil
         let now = Date()
-        let resultingEvent: CalendarEvent
         if let ev = original {
             var copy = ev
             copy.title = trimmed; copy.type = type; copy.notes = notes.isEmpty ? nil : notes
@@ -295,21 +296,21 @@ struct EventEditView: View {
             // scheduleNotification 由于 isNotified=true 直接 return，新的提醒永远不会被挂上）
             copy.isNotified = false
             EventService.shared.upsertEvent(copy)
-            resultingEvent = copy
         } else {
             let ev = CalendarEvent(title: trimmed, type: type, startDate: startDate, endDate: end,
                 isAllDay: isAllDay, notes: notes.isEmpty ? nil : notes,
                 repeatRule: repeatRule, priority: priority,
                 reminderOffsetMinutes: reminderOffset)
             EventService.shared.upsertEvent(ev)
-            resultingEvent = ev
         }
         // 只刷新当前事件的通知：避免 O(N) 全量 cancelAll+reschedule 导致
         // badge 短暂闪烁、大事件库下保存卡顿、不必要的 UN 系统调用
         // （文档 #37：View 不直接操作 UNUserNotificationCenter，统一走 EventService）
-        EventService.shared.refreshNotification(for: resultingEvent)
+        // 注意：upsertEvent 内部的 saveEvent 已调用 refreshNotification(for:)，
+        // 此处不再重复调度（消除 cancel+schedule 双份系统调用）。
         // 用户点击保存后立即退出，主动 flush 避免防抖窗口内被系统终止导致数据回滚。
-        EventService.shared.store.flushPendingSave()
+        // P0 收口：不绕过 Service 直连 store。
+        EventService.shared.flushPendingSave()
         // 保存成功计入 App Store 评分引导（阈值 5 次 + 90 天冷却）
         RatingPromptCoordinator.registerMeaningfulAction()
         dismiss()

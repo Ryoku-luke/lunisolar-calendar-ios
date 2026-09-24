@@ -1,17 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
 import Observation
-#if canImport(ActivityKit)
-import ActivityKit
-#endif
-// N5-1 修复：setupCloudSyncIfNeeded 中 AppLogger.sync.warning/error 两条日志走
-// os.Logger，其字符串插值 init(stringInterpolation:) / appendLiteral /
-// appendInterpolation(_:privacy:attributes:) 在 module `os` 内定义；本文件 SwiftUI
-// 在某些 iOS SDK 组合下不自动 transitively 引入 os，Xcode 就把每条日志级联为 6 条
-// "defining module 'os'"错误，共 7 条（warning 有 2 次插值次数不同）。
-#if canImport(os)
-import os
-#endif
 
 // MARK: - App 根视图（宿主复用）
 //
@@ -21,16 +10,15 @@ import os
 // 宿主 App 必须使用本 `AppRootView` 作为 WindowGroup 根视图——
 // iCloud 协调器启动重建、防抖保存后台落盘、通知续排、外观偏好等全部生命周期
 // 接线都挂在这里；宿主只负责 @main、WindowGroup 与 App Group ID 注入。
-extension Notification.Name {
-    public static let qingheDeepLinkOpenEvent = Notification.Name("qinghe.deepLink.openEvent")
-}
-
+//
+// P0 收口说明：launch / scenePhase / 事件 revision / 时间胶囊开关 等生命周期副作用
+// 全部在 AppLifecycleCoordinator；"选候选 → ActivityKit" 在 TimeCapsuleCoordinator；
+// qinghe:// 深链统一走 DeepLinkRouter；跨 Tab / 跨平台导航状态统一在 NavigationCoordinator。
+// 本文件不再直接 import ActivityKit / os（已无对应调用点）。
 public struct AppRootView: View {
 
     @State private var store = EventStore.shared
     @State private var countdownStore = CountdownStore.shared
-    /// 持有同步协调器强引用（EventStore.syncCoordinator 为 weak，需要这里保活）
-    @State private var syncCoordinator: EventSyncCoordinator?
     /// 外观偏好：跟随系统 / 浅色 / 深色
     @AppStorage("Lunisolar.appearance") private var appearanceRaw: String = AppAppearance.system.rawValue
     @AppStorage("Lunisolar.liveActivity.enabled") private var liveActivityEnabled: Bool = true
@@ -44,21 +32,6 @@ public struct AppRootView: View {
     }
 
     public init() {}
-
-    private func handlePendingDeepLink() {
-        guard let raw = UserDefaults.standard.string(forKey: "pending-deeplink"),
-              let url = URL(string: raw),
-              url.host == "event",
-              let uuid = UUID(uuidString: url.lastPathComponent) else { return }
-        if let event = store.events.first(where: { $0.id == uuid }) {
-            NotificationCenter.default.post(
-                name: .qingheDeepLinkOpenEvent,
-                object: nil,
-                userInfo: ["date": event.startDate]
-            )
-        }
-        UserDefaults.standard.removeObject(forKey: "pending-deeplink")
-    }
 
     public var body: some View {
         AdaptiveRootView()
@@ -83,94 +56,6 @@ public struct AppRootView: View {
             }
     }
 
-    // MARK: - 清和时间胶囊（文档 #20-25）
-
-    /// 用当前最值得关注的事件同步灵动岛时间胶囊。
-    /// 无合格候选 → 结束现有胶囊；候选事件内容变化 → 更新；事件切换 → 重建。
-    /// 调用时机：App 启动 / 回到前台 / 事件变更后。
-    #if canImport(ActivityKit) && canImport(WidgetKit)
-    private func syncTimeCapsule() {
-        let now = Date()
-        guard liveActivityEnabled,
-              ActivityAuthorizationInfo().areActivitiesEnabled,
-              let candidate = EventService.shared.timeCapsuleCandidate(now: now) else {
-            QingheLiveActivityManager.sync(target: nil)
-            return
-        }
-        // 节气候选：不从 events 找 title，直接用节气名
-        let title: String
-        if candidate.type == .solarTerm {
-            title = SolarTermProvider.termOn(candidate.startDate)
-                ?? SolarTermProvider.nextTerm(from: now)?.name
-                ?? "节气"
-        } else {
-            guard let event = EventService.shared.store.events.first(where: { $0.id == candidate.eventID }) else {
-                QingheLiveActivityManager.sync(target: nil)
-                return
-            }
-            title = event.title
-        }
-        let display = QingheTimeCapsuleDisplay(
-            eventID: candidate.eventID,
-            type: candidate.type,
-            phase: candidate.startDate <= now ? .live : .upcoming,
-            title: title,
-            icon: QingheLiveActivityManager.icon(for: candidate.type),
-            startDate: candidate.startDate,
-            endDate: candidate.endDate,
-            countdownTarget: candidate.type == .solarTerm ? candidate.startDate : nil,
-            isImportant: candidate.priority >= .important
-        )
-        QingheLiveActivityManager.sync(target: display)
-    }
-    #endif
-
-    // MARK: - iCloud 同步装配（延迟到用户在设置里开启时才真正创建 CloudKit 容器）
-
-    // 注意：绝不在这里无条件调用 CKContainer.default() ——
-    // iOS Simulator 没有 CloudKit entitlement 时会直接 EXC_BREAKPOINT 崩溃。
-    // RealCloudKitProvider 的创建延迟到 SettingsView 的 Toggle 打开时，
-    // 那时用 do/catch 包裹 accountStatus() 探测，失败弹 toast 并保留禁用状态。
-
-    private func setupCloudSyncIfNeeded() async {
-        guard syncCoordinator == nil else { return }
-        #if canImport(CloudKit)
-        // 只读 UserDefaults 里的开关（纯内存操作，不触发任何 CloudKit API）
-        let wasEnabled = UserDefaults.standard.bool(forKey: "Lunisolar.sync.enabled")
-        if !wasEnabled {
-            // 默认不装配 —— 用户从未开启过同步；SettingsView 里开关才会装配
-            return
-        }
-
-        // 用户上次开启过 → 尝试装配，但如果 entitlement 缺失就静默降级
-        do {
-            let provider = RealCloudKitProvider()
-            // 用 isAvailable 探测 entitlement/账号状态（这是第一个真正跟 CloudKit 通信的点）
-            let available = await provider.isAvailable
-            if !available {
-                AppLogger.sync.warning("iCloud entitlement 或账号不可用，跳过同步装配")
-                UserDefaults.standard.set(false, forKey: "Lunisolar.sync.enabled")
-                return
-            }
-            let coordinator = EventSyncCoordinator(
-                eventStore: store,
-                provider: provider
-            )
-            coordinator.isEnabled = true
-            store.syncCoordinator = coordinator
-            syncCoordinator = coordinator
-            // 后台首次同步（pull 增量 + push 本地变更）
-            // N5-2 修复：原来写 `_ = try? await ...`。`try?` 把 throw 的错误吃成 nil，
-            // `do { } catch { }` 的 do-block 中就再没有任何 throwing 语句，
-            // iOS 18 SDK 新诊断会报 "'catch' block is unreachable because no errors are thrown in 'do' block"。
-            // 这里本意是要 catch CloudKit 装配错误 → 改为 `try await`（真的抛）。
-            _ = try await coordinator.syncBidirectional()
-        } catch {
-            AppLogger.sync.error("CloudKit 装配失败：\(error)")
-            UserDefaults.standard.set(false, forKey: "Lunisolar.sync.enabled")
-        }
-        #endif
-    }
 }
 
 // MARK: - 自适应根视图：iPhone NavigationStack / iPad NavigationSplitView
@@ -233,15 +118,6 @@ struct PhoneTabRootView: View {
             .tag(NavigationCoordinator.PhoneTab.me)
         }
         .tint(Color.appTint)
-        .onReceive(NotificationCenter.default.publisher(for: .qingheDeepLinkOpenEvent)) { note in
-            // 优先 eventID（深链精确打开事件）
-            if let eventID = note.userInfo?["eventID"] as? UUID,
-               let event = store.events.first(where: { $0.id == eventID }) {
-                nav.openEventDate(event.startDate)
-            } else if let date = note.userInfo?["date"] as? Date {
-                nav.openEventDate(date)
-            }
-        }
     }
 }
 //
