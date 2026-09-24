@@ -197,14 +197,6 @@ struct SettingsView: View {
                 }
             }
 
-            Button {
-                EventService.shared.rescheduleAllReminders()
-            } label: {
-                Label(NSLocalizedString("重新调度所有提醒", comment: ""), systemImage: "arrow.clockwise.circle.fill")
-            }
-            .disabled(notifStatus != .granted)
-            .opacity(notifStatus == .granted ? 1 : 0.45)
-
             Toggle(isOn: $liveActivityEnabled) {
                 Label(NSLocalizedString("时间胶囊", comment: "Live Activities"), systemImage: "rectangle.topthird.inset.filled")
             }
@@ -409,6 +401,15 @@ struct SettingsView: View {
 
             // 高级数据设置（文档 #13：技术性设置从顶层下放，不与其他普通设置平级）
             Section {
+                // docs #13：技术性操作下放高级数据设置，不与普通通知设置平级
+                Button {
+                    EventService.shared.rescheduleAllReminders()
+                } label: {
+                    Label(NSLocalizedString("重新调度所有提醒", comment: ""), systemImage: "arrow.clockwise.circle.fill")
+                }
+                .disabled(notifStatus != .granted)
+                .opacity(notifStatus == .granted ? 1 : 0.45)
+
                 Picker(NSLocalizedString("冲突处理", comment: ""), selection: $conflictPolicy) {
                     ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
                         Text(p.title).tag(p)
