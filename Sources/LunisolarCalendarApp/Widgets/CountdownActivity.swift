@@ -275,4 +275,31 @@ public enum CountdownActivityManager {
     }
 }
 
+// MARK: - Previews（Xcode 画布；iOS 17+ Widget Preview API，as: 需显式给 ActivityPreviewViewKind）
+
+#Preview("锁屏卡 · 生日倒计时", as: .content, using: CountdownActivityAttributes(
+    eventID: UUID(), title: "生日", emoji: "🎂"
+)) {
+    CountdownLiveActivityWidget()
+} contentStates: {
+    CountdownActivityAttributes.ContentState(endDate: Date().addingTimeInterval(30 * 24 * 3600))
+    CountdownActivityAttributes.ContentState(endDate: Date().addingTimeInterval(45 * 60))
+}
+
+#Preview("灵动岛 · 倒计时（紧凑）", as: .dynamicIsland(.compact), using: CountdownActivityAttributes(
+    eventID: UUID(), title: "生日", emoji: "🎂"
+)) {
+    CountdownLiveActivityWidget()
+} contentStates: {
+    CountdownActivityAttributes.ContentState(endDate: Date().addingTimeInterval(30 * 24 * 3600))
+}
+
+#Preview("灵动岛 · 倒计时（展开）", as: .dynamicIsland(.expanded), using: CountdownActivityAttributes(
+    eventID: UUID(), title: "生日", emoji: "🎂"
+)) {
+    CountdownLiveActivityWidget()
+} contentStates: {
+    CountdownActivityAttributes.ContentState(endDate: Date().addingTimeInterval(45 * 60))
+}
+
 #endif

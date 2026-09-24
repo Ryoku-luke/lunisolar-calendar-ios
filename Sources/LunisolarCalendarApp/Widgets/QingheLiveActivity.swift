@@ -358,4 +358,48 @@ public enum QingheLiveActivityManager {
     }
 }
 
+// MARK: - Previews（Xcode 画布；iOS 17+ Widget Preview API，as: 需显式给 ActivityPreviewViewKind）
+
+#Preview("锁屏卡 · 提醒", as: .content, using: QingheLiveActivityAttributes(
+    activityID: "preview", eventID: UUID().uuidString, title: "时间胶囊", createdAt: Date()
+)) {
+    QingheLiveActivityWidget()
+} contentStates: {
+    QingheLiveActivityAttributes.ContentState(
+        phase: .upcoming, title: "给妈妈打电话", subtitle: nil,
+        startDate: Date().addingTimeInterval(30 * 60), endDate: Date().addingTimeInterval(60 * 60),
+        eventType: .reminder, icon: "bell.fill", countdownTarget: nil, isImportant: true
+    )
+    QingheLiveActivityAttributes.ContentState(
+        phase: .live, title: "给妈妈打电话", subtitle: "进行中",
+        startDate: Date().addingTimeInterval(-5 * 60), endDate: Date().addingTimeInterval(25 * 60),
+        eventType: .reminder, icon: "bell.fill", countdownTarget: nil, isImportant: true
+    )
+}
+
+#Preview("灵动岛 · 提醒（紧凑）", as: .dynamicIsland(.compact), using: QingheLiveActivityAttributes(
+    activityID: "preview", eventID: UUID().uuidString, title: "时间胶囊", createdAt: Date()
+)) {
+    QingheLiveActivityWidget()
+} contentStates: {
+    QingheLiveActivityAttributes.ContentState(
+        phase: .upcoming, title: "给妈妈打电话", subtitle: nil,
+        startDate: Date().addingTimeInterval(30 * 60), endDate: Date().addingTimeInterval(60 * 60),
+        eventType: .reminder, icon: "bell.fill", countdownTarget: nil, isImportant: true
+    )
+}
+
+#Preview("灵动岛 · 节气（展开）", as: .dynamicIsland(.expanded), using: QingheLiveActivityAttributes(
+    activityID: "preview", eventID: UUID().uuidString, title: "时间胶囊", createdAt: Date()
+)) {
+    QingheLiveActivityWidget()
+} contentStates: {
+    QingheLiveActivityAttributes.ContentState(
+        phase: .live, title: "白露已至", subtitle: nil,
+        startDate: Date().addingTimeInterval(-30 * 60), endDate: Date().addingTimeInterval(90 * 60),
+        eventType: .solarTerm, icon: "sun.horizon.fill",
+        countdownTarget: Date().addingTimeInterval(90 * 60), isImportant: false
+    )
+}
+
 #endif
