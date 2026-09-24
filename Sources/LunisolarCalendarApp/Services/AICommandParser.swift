@@ -210,25 +210,36 @@ public enum AICommandParser {
             return .success(.queryAgenda(AIQueryRange(baseDate: base)))
         }
 
-        // 2. 时间：14:30 / 下午3点 / 晚上7点半
+        // 2. 时间：14:30 / 下午3点 / 晚上7点半 / 下午 2:00 / 中午12点 / 早上7点半
         var hour = 9, minute = 0
         var consumedTime = ""
-        var isPM = false
+        var prefixWord: String?
+
         if let r = s.range(of: #"(\d{1,2}):(\d{2})"#, options: .regularExpression) {
             let seg = String(s[r])
             let nums = seg.components(separatedBy: CharacterSet.decimalDigits.inverted).compactMap(Int.init)
-            if nums.count == 2 { hour = nums[0]; minute = nums[1]; consumedTime = seg }
-        } else if let r = s.range(of: #"([上下]午|晚上)?\s*(\d{1,2})\s*[点时](\d{1,2})?分?"#, options: .regularExpression) {
+            if nums.count == 2 {
+                hour = nums[0]; minute = nums[1]
+                consumedTime = seg
+                // "H:MM" 形式此前完全不看前缀 → 「下午 2:00」被当成凌晨 2:00（真机 bug）。
+                // 取前缀时按实际子串整体消费，标题才能把它一并剔掉（含中间空格）
+                if let hit = timeWordAndStart(immediatelyBefore: r, in: s) {
+                    prefixWord = hit.word
+                    consumedTime = String(s[hit.start..<r.upperBound])
+                }
+            }
+        } else if let r = s.range(of: #"([凌晨早上早晨清晨上午中午下午傍晚晚上夜里]+)?\s*(\d{1,2})\s*[点时](\d{1,2})?分?"#, options: .regularExpression) {
             let seg = String(s[r])
             let nums = seg.components(separatedBy: CharacterSet.decimalDigits.inverted).compactMap(Int.init)
             if !nums.isEmpty {
                 hour = nums[0]
                 if nums.count > 1 { minute = nums[1] }
-                if seg.hasPrefix("下午") || seg.hasPrefix("晚上") { isPM = true }
                 consumedTime = seg
+                prefixWord = timeWords.first { seg.hasPrefix($0) }
             }
         }
-        if isPM && hour < 12 { hour += 12 }
+        // 统一的时段换算：下午/傍晚/晚上/夜里 → +12；中午（11 点前）也按下午算
+        hour = applyTimeWord(prefixWord, to: hour)
 
         // 2.5 修改 / 删除意图（P1-6c）
         //     先按"日 + 可选时刻 + 标题关键词"定位目标；修改还需解析"改到"之后的新时间。
@@ -320,26 +331,56 @@ public enum AICommandParser {
         return best
     }
 
-    /// 从文本解析时刻（与主解析器同一套规则：14:30 / 下午3点 / 晚上7点）
+    /// 时段词（长词在前，避免「上午」被短词误配）
+    static let timeWords = ["凌晨", "早上", "早晨", "清晨", "上午", "中午", "下午", "傍晚", "晚上", "夜里"]
+
+    /// 取时刻之前紧邻的时段词（容忍空格，如「下午 2:00」），并给出其在原串中的起始位置，
+    /// 便于把「下午 2:00」整体作为已消费片段从标题里剔除。
+    static func timeWordAndStart(
+        immediatelyBefore range: Range<String.Index>,
+        in s: String
+    ) -> (word: String, start: String.Index)? {
+        var head = s[s.startIndex..<range.lowerBound]
+        while let last = head.last, last.isWhitespace { head = head.dropLast() }
+        for word in timeWords where head.hasSuffix(word) {
+            return (word, head.index(head.endIndex, offsetBy: -word.count))
+        }
+        return nil
+    }
+
+    /// 时段词 → 24 小时制换算（下午/傍晚/晚上/夜里 +12；中午 11 点前按 12 点后算）
+    static func applyTimeWord(_ word: String?, to hour: Int) -> Int {
+        guard let word else { return hour }
+        if ["下午", "傍晚", "晚上", "夜里"].contains(word), hour < 12 { return hour + 12 }
+        if word == "中午", hour < 11 { return hour + 12 }
+        return hour
+    }
+
+    /// 从文本解析时刻（与主解析器同一套规则：14:30 / 下午3点 / 晚上7点半 / 下午 2:00 / 中午12点）
+    ///
+    /// 历史上这里与主解析器各写一份前缀处理，导致「下午 2:00」只在主路径被修过、
+    /// 修改意图的定位/新时刻解析仍按凌晨处理；现在统一走 timeWordAndStart + applyTimeWord。
     static func parseClock(in s: String) -> (hour: Int, minute: Int)? {
         var hour = 0, minute = 0
-        var isPM = false
+        var prefixWord: String?
+
         if let r = s.range(of: #"(\d{1,2}):(\d{2})"#, options: .regularExpression) {
             let nums = String(s[r]).components(separatedBy: CharacterSet.decimalDigits.inverted).compactMap(Int.init)
             guard nums.count == 2 else { return nil }
             hour = nums[0]; minute = nums[1]
-        } else if let r = s.range(of: #"([上下]午|晚上)?\s*(\d{1,2})\s*[点时](\d{1,2})?分?"#, options: .regularExpression) {
+            prefixWord = timeWordAndStart(immediatelyBefore: r, in: s)?.word
+        } else if let r = s.range(of: #"([凌晨早上早晨清晨上午中午下午傍晚晚上夜里]+)?\s*(\d{1,2})\s*[点时](\d{1,2})?分?"#, options: .regularExpression) {
             let seg = String(s[r])
             let nums = seg.components(separatedBy: CharacterSet.decimalDigits.inverted).compactMap(Int.init)
             guard !nums.isEmpty else { return nil }
             hour = nums[0]
             if nums.count > 1 { minute = nums[1] }
-            if seg.hasPrefix("下午") || seg.hasPrefix("晚上") { isPM = true }
+            prefixWord = timeWords.first { seg.hasPrefix($0) }
         } else {
             return nil
         }
-        if isPM && hour < 12 { hour += 12 }
-        return (hour, minute)
+
+        return (applyTimeWord(prefixWord, to: hour), minute)
     }
 
     /// "改到"之后只识别 今天/明天/后天 三种日期词；其余情况沿用定位日（避免过度推断）

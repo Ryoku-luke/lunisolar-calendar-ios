@@ -323,6 +323,44 @@ final class AIAssistantTests: XCTestCase {
         XCTAssertEqual(store.events.count, before + 1, "连点确认不应产生重复日程")
     }
 
+    // MARK: - 1.11 时段词 × H:MM（真机：下午 2:00 被当成凌晨 2:00）
+
+    func testAfternoonWithColonTime() throws {
+        let d = try XCTUnwrap(draft("今天下午 2:00 打球"))
+        XCTAssertEqual(d.title, "打球", "「下午 2:00」应整体从标题剔除")
+        XCTAssertEqual(cal.component(.hour, from: d.startDate), 14)
+        XCTAssertEqual(cal.component(.minute, from: d.startDate), 0)
+    }
+
+    func testOtherTimeWords() throws {
+        let noon = try XCTUnwrap(draft("明天中午12点吃饭"))
+        XCTAssertEqual(cal.component(.hour, from: noon.startDate), 12)
+        XCTAssertEqual(noon.title, "吃饭")
+
+        let morning = try XCTUnwrap(draft("明天早上7点半跑步"))
+        XCTAssertEqual(cal.component(.hour, from: morning.startDate), 7)
+        XCTAssertEqual(cal.component(.minute, from: morning.startDate), 30)
+        XCTAssertEqual(morning.title, "跑步")
+
+        let dawn = try XCTUnwrap(draft("明天凌晨1点睡觉"))
+        XCTAssertEqual(cal.component(.hour, from: dawn.startDate), 1)
+
+        let evening = try XCTUnwrap(draft("明天晚上 8:30 看电影"))
+        XCTAssertEqual(cal.component(.hour, from: evening.startDate), 20)
+        XCTAssertEqual(cal.component(.minute, from: evening.startDate), 30)
+        XCTAssertEqual(evening.title, "看电影")
+    }
+
+    /// 修改意图里的新时刻同样要吃时段词（历史上这段用的是另一份前缀逻辑）
+    func testUpdateNewTimeWithTimeWord() throws {
+        guard case .updateEvent(let draft)? = command("把明天3点的例会改到晚上8:30") else {
+            return XCTFail("应走修改意图")
+        }
+        XCTAssertEqual(cal.component(.hour, from: draft.newStartDate), 20)
+        XCTAssertEqual(cal.component(.minute, from: draft.newStartDate), 30)
+        XCTAssertEqual(draft.criteria.timeHint?.hour, 3, "定位时刻仍取「改到」之前的 3 点")
+    }
+
     func testValidateDeleteWithoutTargetIsRejected() {
         let criteria = AIEventCriteria(day: now, timeHint: nil, keyword: "")
         guard case .failure(let error) =
