@@ -191,6 +191,9 @@ public struct QingheLiveActivityWidget: Widget {
                             .buttonStyle(.plain)
                         }
                     }
+                    // iOS 26 展开态底部区域紧贴灵动岛圆角：不内缩时首尾字符会被圆角裁掉
+                    // （真机现象：首字与末字各缺一半）
+                    .padding(.horizontal, 16)
                 }
             } compactLeading: {
                 // 紧凑态（左侧）：图标 + 纯黑圆角底（SF Symbol → Image）
