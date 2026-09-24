@@ -49,6 +49,8 @@ public final class AIAssistantService {
 
         case .success(.createEvent(let draft)):
             let event = CalendarEvent(
+                // 复用草稿 id：同一份解析结果被重复确认（连点）时按 id 更新而不是再建一条
+                id: draft.id,
                 title: draft.title,
                 startDate: draft.startDate,
                 repeatRule: draft.repeatRule

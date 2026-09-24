@@ -47,11 +47,15 @@ public struct AICommandError: Error, Equatable, Sendable {
 
 /// 创建日程草稿：解析产物，尚未通过校验
 public struct AICreateEventDraft: Equatable, Sendable {
+    /// 草稿身份。同一份解析结果被重复确认时复用同一 id，
+    /// 由 EventService 按 id 走 update 而非 add —— 于是「连点确认」不会产生重复日程。
+    public let id: UUID
     public var title: String
     public var startDate: Date
     public var repeatRule: RepeatRule
 
-    public init(title: String, startDate: Date, repeatRule: RepeatRule) {
+    public init(id: UUID = UUID(), title: String, startDate: Date, repeatRule: RepeatRule) {
+        self.id = id
         self.title = title
         self.startDate = startDate
         self.repeatRule = repeatRule
@@ -192,11 +196,17 @@ public enum AICommandParser {
             }
         }
 
-        // 1.5 查询意图（P1-6b）："明天有什么安排 / 查一下后天日程"。
+        // 1.5 查询意图（P1-6b）："明天有什么安排 / 查一下后天日程 / 明天的日程"。
         // 命中查询短语即返回只读查询命令（不做标题提取、不走写入路径）。
-        // 白名单取保守短语，避免"给我安排一下明天的会"这类创建句被误判为查询。
-        if ["有什么安排", "有哪些安排", "什么安排", "有什么日程", "有哪些日程", "什么日程",
-            "查一下", "查日程", "看下安排", "看看安排", "看下日程", "看看日程"].contains(where: { s.contains($0) }) {
+        // 两个防线：
+        //  - 白名单取保守短语，避免"给我安排一下明天的会"这类创建句被误判；
+        //  - 句中含修改/删除动词时不判为查询，保证"把明天的安排改到4点"走修改意图。
+        let hasMutationVerb = ["删掉", "删除", "取消", "改到", "改为", "改成", "推迟到", "提前到", "挪到"]
+            .contains { s.contains($0) }
+        if !hasMutationVerb,
+           ["有什么安排", "有哪些安排", "什么安排", "有什么日程", "有哪些日程", "什么日程",
+            "查一下", "查日程", "看下安排", "看看安排", "看下日程", "看看日程",
+            "的日程", "的安排", "日程安排"].contains(where: { s.contains($0) }) {
             return .success(.queryAgenda(AIQueryRange(baseDate: base)))
         }
 
@@ -236,8 +246,11 @@ public enum AICommandParser {
         if let range = firstMarkerRange(in: s, among: ["改到", "改为", "改成", "推迟到", "提前到", "挪到"]) {
             let head = String(s[s.startIndex..<range.lowerBound])
             let tail = String(s[range.upperBound...])
-            // 新时刻：优先取"改到"之后的时刻；没有则沿用头部时刻
-            let clock = parseClock(in: tail) ?? (hour, minute)
+            // 定位时刻只取"改到"之前的文本；否则「把明天的安排改到4点」会把新时刻 4:00
+            // 误当成定位条件 → 匹配不到任何日程
+            let criteriaClock = parseClock(in: head)
+            // 新时刻：优先取"改到"之后的时刻；没有则沿用定位时刻（再兜底整句解析结果）
+            let clock = parseClock(in: tail) ?? criteriaClock ?? (hour, minute)
             let newDay = parseShortDayWord(in: tail, defaultDay: base)
             var comps = cal.dateComponents([.year, .month, .day], from: newDay)
             comps.hour = clock.0; comps.minute = clock.1
@@ -246,8 +259,9 @@ public enum AICommandParser {
             }
             // 定位关键词取自"改到"之前的定位部分
             let keyword = cleanedKeyword(from: head, removing: [consumedDate, consumedTime])
+            let criteriaTimeHint = criteriaClock.map { DateComponents(hour: $0.hour, minute: $0.minute) }
             return .success(.updateEvent(AIUpdateEventDraft(
-                criteria: AIEventCriteria(day: base, timeHint: timeHint, keyword: keyword),
+                criteria: AIEventCriteria(day: base, timeHint: criteriaTimeHint, keyword: keyword),
                 newStartDate: newStart
             )))
         }
@@ -276,10 +290,12 @@ public enum AICommandParser {
         // 4. 重复规则：直接在原始输入上判定
         //    （曾把 consumedDate 从探针里剔除，导致"每周一"里的"每周"被一并删掉 → 误判为 .never；
         //      monthly 的判定锚点是"每月"而不是"号"，所以不需要剔除已识别的日期词）
+        //    注意：仅出现"星期"不能判为每周——「星期三 9点 开会」是"下个周三"的一次性语义；
+        //    只有"每星期X / 每周X"才是重复；"周几"语义本身不定，按重复处理。
         var rule: RepeatRule = .never
         if s.contains("每天") || s.contains("每日") { rule = .daily }
         else if s.contains("工作日") { rule = .workday }
-        else if s.contains("每周") || s.contains("星期") || s.contains("周几") { rule = .weekly }
+        else if s.contains("每周") || s.contains("每星期") || s.contains("周几") { rule = .weekly }
         else if s.contains("每月") { rule = .monthly }
 
         return .success(.createEvent(AICreateEventDraft(title: title, startDate: start, repeatRule: rule)))

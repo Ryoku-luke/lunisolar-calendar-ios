@@ -25,8 +25,13 @@ struct AutoFocusTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {
-        if text.isEmpty && uiView.textColor == .placeholderText && focused == false {
-            // 保持 placeholder
+        if text.isEmpty {
+            // 程序化清空（创建成功 / 取消）后恢复占位文案；
+            // 旧实现在此处把文本置空且保留 .label 颜色 → 输入框变成毫无提示的空白
+            if !focused && uiView.textColor != .placeholderText {
+                uiView.text = placeholder
+                uiView.textColor = .placeholderText
+            }
         } else if uiView.text != text {
             uiView.text = text
             uiView.textColor = .label

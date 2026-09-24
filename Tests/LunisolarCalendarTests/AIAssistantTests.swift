@@ -264,6 +264,65 @@ final class AIAssistantTests: XCTestCase {
         XCTAssertEqual(AICommandParser.normalize("十二月三十一日跨年"), "12月31日跨年")
     }
 
+    // MARK: - 1.9 AI 模块审计回归（2026-09-25）
+
+    /// 「星期三」是"下个周三"的一次性语义，不应判为每周重复
+    func testWeekdayWithXingQiIsOneOffNotWeekly() throws {
+        let d = try XCTUnwrap(draft("星期三 9点 开会"))
+        XCTAssertEqual(d.title, "开会")
+        XCTAssertEqual(d.repeatRule, .never, "仅出现「星期」不能推成每周")
+        XCTAssertEqual(cal.component(.weekday, from: d.startDate), 4, "应为周三")
+    }
+
+    /// 「每星期三」才是每周重复
+    func testWeeklyStillDetectedWithEveryPrefix() throws {
+        let d = try XCTUnwrap(draft("每星期三 9点 开会"))
+        XCTAssertEqual(d.title, "开会")
+        XCTAssertEqual(d.repeatRule, .weekly)
+    }
+
+    /// 「明天的日程」也是查询（补白名单，且不得与修改/删除动词冲突）
+    func testQueryPhraseWithDeRiCheng() throws {
+        guard case .queryAgenda(let range)? = command("明天的日程") else {
+            return XCTFail("「明天的日程」应识别为查询")
+        }
+        let c = cal.dateComponents([.month, .day], from: range.baseDate)
+        XCTAssertEqual([c.month, c.day], [9, 25])
+    }
+
+    /// 含修改动词时不得被判为查询；且定位条件不应误取"改到"之后的新时刻
+    func testUpdateCriteriaTimeHintUsesHeadOnly() throws {
+        guard case .updateEvent(let draft)? = command("把明天的安排改到4点") else {
+            return XCTFail("应走修改意图而非查询")
+        }
+        XCTAssertEqual(draft.criteria.keyword, "安排")
+        XCTAssertNil(draft.criteria.timeHint, "用户没给定位时刻，不能把新时刻 4:00 当成定位条件")
+        XCTAssertEqual(cal.component(.hour, from: draft.newStartDate), 4)
+
+        // 有定位时刻时仍应取其作为定位条件
+        guard case .updateEvent(let withHint)? = command("把明天3点的例会改到4点") else {
+            return XCTFail("应走修改意图")
+        }
+        XCTAssertEqual(withHint.criteria.timeHint?.hour, 3)
+        XCTAssertEqual(cal.component(.hour, from: withHint.newStartDate), 4)
+    }
+
+    /// 同一份草稿被重复确认（模拟连点）只应产生一条日程
+    func testDoubleSubmitWithSameDraftCreatesSingleEvent() throws {
+        let store = makeIsolatedEventStore()
+        let service = AIAssistantService(eventService: EventService(store: store))
+        let before = store.events.count
+
+        let d = try XCTUnwrap(draft("明天下午3点提醒我开会"))
+        let cmd = AIStructuredCommand.createEvent(d)
+        guard case .success(.createdEvent(let firstID)) = service.execute(cmd, now: now),
+              case .success(.createdEvent(let secondID)) = service.execute(cmd, now: now) else {
+            return XCTFail("两次执行都应成功")
+        }
+        XCTAssertEqual(firstID, secondID, "同一草稿复用同一 id")
+        XCTAssertEqual(store.events.count, before + 1, "连点确认不应产生重复日程")
+    }
+
     func testValidateDeleteWithoutTargetIsRejected() {
         let criteria = AIEventCriteria(day: now, timeHint: nil, keyword: "")
         guard case .failure(let error) =
