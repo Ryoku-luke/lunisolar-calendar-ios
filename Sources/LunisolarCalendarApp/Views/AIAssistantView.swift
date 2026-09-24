@@ -90,6 +90,12 @@ struct AIAssistantView: View {
     /// P1-6b：查询意图的结果（只读快照）与被查询日期
     @State private var queryResults: [CalendarEvent]?
     @State private var queryDate: Date?
+    /// P1-6c：破坏性操作（删除 / 修改）的确认状态
+    @State private var destructiveTarget: CalendarEvent?
+    @State private var destructiveLabel: String?
+    @State private var pendingCommand: AIStructuredCommand?
+    /// 操作完成提示（删除 / 修改后展示，确认即关闭）
+    @State private var completedMessage: String?
     @State private var showError = false
     @State private var errorText = ""
     @State private var created = false
@@ -167,6 +173,35 @@ struct AIAssistantView: View {
                                     queryDate?.formatted(date: .abbreviated, time: .omitted) ?? ""))
                     }
                 }
+
+                // P1-6c：删除 / 修改的确认区（破坏性操作未确认不执行）
+                if let target = destructiveTarget, let label = destructiveLabel {
+                    Section {
+                        LabeledContent(NSLocalizedString("日程", comment: ""), value: target.title)
+                        LabeledContent(
+                            NSLocalizedString("当前时间", comment: ""),
+                            value: target.startDate.formatted(date: .abbreviated, time: .shortened)
+                        )
+                        HStack {
+                            Button(role: .cancel) {
+                                destructiveTarget = nil
+                                destructiveLabel = nil
+                                pendingCommand = nil
+                            } label: {
+                                Label(NSLocalizedString("取消", comment: ""), systemImage: "xmark.circle")
+                            }
+                            Spacer()
+                            Button {
+                                confirmDestructive()
+                            } label: {
+                                Label(NSLocalizedString("确认", comment: ""), systemImage: "checkmark.circle.fill")
+                            }
+                            .tint(Color.appTint)
+                        }
+                    } header: {
+                        Text(label)
+                    }
+                }
             }
             .navigationTitle(NSLocalizedString("AI 日历助手", comment: ""))
             .onAppear {
@@ -208,6 +243,16 @@ struct AIAssistantView: View {
             } message: {
                 Text(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
             }
+            // P1-6c：删除 / 修改完成提示
+            .alert(NSLocalizedString("已完成", comment: "AI助手"),
+                   isPresented: Binding(
+                       get: { completedMessage != nil },
+                       set: { if !$0 { completedMessage = nil } }
+                   )) {
+                Button(NSLocalizedString("好", comment: "")) { completedMessage = nil }
+            } message: {
+                Text(completedMessage ?? "")
+            }
         }
     }
 
@@ -216,12 +261,15 @@ struct AIAssistantView: View {
     // P1-6：解析逻辑此前在本视图内重复实现（约 115 行，与 AICommandParser 双份维护），
     // 现已收口为 Parser → Validator → AIAssistantService 三层；本视图只保留「预览 + 确认」。
 
-    /// 解析 → 校验 → 预览（创建）/ 立即执行并展示（查询，只读）
+    /// 解析 → 校验 → 预览（创建）/ 立即执行（查询）/ 确认（删除、修改）
     private func parse() {
-        // 新一轮解析：清掉上一轮的预览与查询结果
+        // 新一轮解析：清掉上一轮的预览 / 结果 / 待确认操作
         draft = nil
         queryResults = nil
         queryDate = nil
+        destructiveTarget = nil
+        destructiveLabel = nil
+        pendingCommand = nil
 
         switch AICommandParser.parse(input) {
         case .failure(let error):
@@ -251,8 +299,72 @@ struct AIAssistantView: View {
                 case .success:
                     break
                 }
+
+            case .deleteEvent, .updateEvent:
+                // 破坏性操作：先校验，再解析出**唯一**目标，进入确认步骤（未确认不执行）
+                switch AICommandValidator.validate(command) {
+                case .failure(let error):
+                    present(error)
+                case .success(let validated):
+                    guard let criteria = destructiveCriteria(of: validated) else { return }
+                    switch AIAssistantService.shared.resolveTarget(criteria) {
+                    case .failure(let error):
+                        present(error)
+                    case .success(let target):
+                        destructiveTarget = target
+                        pendingCommand = validated
+                        destructiveLabel = destructiveLabel(for: validated)
+                    }
+                }
             }
         }
+    }
+
+    /// 删除 / 修改命令共用的定位条件
+    private func destructiveCriteria(of command: AIStructuredCommand) -> AIEventCriteria? {
+        switch command {
+        case .deleteEvent(let draft): return draft.criteria
+        case .updateEvent(let draft): return draft.criteria
+        default: return nil
+        }
+    }
+
+    /// 确认区标题（区分删除与修改，并显示将改到的时间）
+    private func destructiveLabel(for command: AIStructuredCommand) -> String {
+        switch command {
+        case .deleteEvent:
+            return NSLocalizedString("确认删除 · 不可撤销", comment: "AI助手")
+        case .updateEvent(let draft):
+            let when = draft.newStartDate.formatted(date: .abbreviated, time: .shortened)
+            return String(format: NSLocalizedString("确认修改 · 改到 %@", comment: "AI助手"), when)
+        default:
+            return ""
+        }
+    }
+
+    /// 确认执行删除 / 修改（唯一写入路径是 AIAssistantService → EventService）
+    private func confirmDestructive() {
+        guard let command = pendingCommand else { return }
+        switch AIAssistantService.shared.execute(command) {
+        case .success(.deletedEvent):
+            completedMessage = NSLocalizedString("已删除该日程。", comment: "AI助手")
+            resetAfterCompletion()
+        case .success(.updatedEvent):
+            completedMessage = NSLocalizedString("已修改时间，提醒已重建。", comment: "AI助手")
+            resetAfterCompletion()
+        case .success:
+            break
+        case .failure(let error):
+            present(error)
+        }
+    }
+
+    private func resetAfterCompletion() {
+        input = ""
+        draft = nil
+        destructiveTarget = nil
+        destructiveLabel = nil
+        pendingCommand = nil
     }
 
     /// 确认创建：唯一写入路径是 AIAssistantService → EventService（AI 不直连数据层）

@@ -28,6 +28,12 @@ public struct AICommandError: Error, Equatable, Sendable {
         case outOfRange
         case inThePast
         case storeFailure
+        /// 修改/删除：指令里既没有标题关键词也没有时间提示，无法定位目标
+        case missingTarget
+        /// 修改/删除：该条件下没有匹配到任何日程
+        case notFound
+        /// 修改/删除：匹配到多条，需要用户补充时间或标题
+        case ambiguous
     }
 
     public let kind: Kind
@@ -61,17 +67,59 @@ public struct AIQueryRange: Equatable, Sendable {
     }
 }
 
+/// 定位某条既有事件的检索条件（删除 / 修改共用）
+public struct AIEventCriteria: Equatable, Sendable {
+    /// 目标日（用户日历日界）
+    public let day: Date
+    /// 可选的时刻提示（hour/minute），用于区分同一天的多条日程
+    public let timeHint: DateComponents?
+    /// 标题关键词（已剔除日期 / 时间 / 动词；可为空 → 需靠 timeHint 区分）
+    public let keyword: String
+
+    public init(day: Date, timeHint: DateComponents?, keyword: String) {
+        self.day = day
+        self.timeHint = timeHint
+        self.keyword = keyword
+    }
+}
+
+/// 删除日程草稿（P1-6c）
+public struct AIDeleteEventDraft: Equatable, Sendable {
+    public let criteria: AIEventCriteria
+    public init(criteria: AIEventCriteria) {
+        self.criteria = criteria
+    }
+}
+
+/// 修改日程草稿（P1-6c）。当前只支持改时间（含日期），标题改写留待后续。
+public struct AIUpdateEventDraft: Equatable, Sendable {
+    public let criteria: AIEventCriteria
+    /// 新的开始时间；时长沿用原事件
+    public let newStartDate: Date
+
+    public init(criteria: AIEventCriteria, newStartDate: Date) {
+        self.criteria = criteria
+        self.newStartDate = newStartDate
+    }
+}
+
 /// 结构化命令：校验通过后由 AIAssistantService 执行
 public enum AIStructuredCommand: Equatable, Sendable {
     /// 创建日程（第一阶段已实现）
     case createEvent(AICreateEventDraft)
     /// 查询某一天的日程（只读，不写数据层）
     case queryAgenda(AIQueryRange)
+    /// 删除日程（需先定位到唯一一条，确认后执行）
+    case deleteEvent(AIDeleteEventDraft)
+    /// 修改日程时间（需先定位到唯一一条，确认后执行）
+    case updateEvent(AIUpdateEventDraft)
 
     public var kind: AIIntentKind {
         switch self {
         case .createEvent: return .createEvent
         case .queryAgenda: return .queryAgenda
+        case .deleteEvent: return .deleteEvent
+        case .updateEvent: return .updateEvent
         }
     }
 }
@@ -172,6 +220,38 @@ public enum AICommandParser {
         }
         if isPM && hour < 12 { hour += 12 }
 
+        // 2.5 修改 / 删除意图（P1-6c）
+        //     先按"日 + 可选时刻 + 标题关键词"定位目标；修改还需解析"改到"之后的新时间。
+        let timeHint: DateComponents? = consumedTime.isEmpty
+            ? nil
+            : DateComponents(hour: hour, minute: minute)
+
+        if let marker = firstMarker(in: s, among: ["删掉", "删除", "取消"]) {
+            let keyword = cleanedKeyword(from: s, removing: [consumedDate, consumedTime, marker])
+            return .success(.deleteEvent(AIDeleteEventDraft(
+                criteria: AIEventCriteria(day: base, timeHint: timeHint, keyword: keyword)
+            )))
+        }
+
+        if let range = firstMarkerRange(in: s, among: ["改到", "改为", "改成", "推迟到", "提前到", "挪到"]) {
+            let head = String(s[s.startIndex..<range.lowerBound])
+            let tail = String(s[range.upperBound...])
+            // 新时刻：优先取"改到"之后的时刻；没有则沿用头部时刻
+            let clock = parseClock(in: tail) ?? (hour, minute)
+            let newDay = parseShortDayWord(in: tail, defaultDay: base)
+            var comps = cal.dateComponents([.year, .month, .day], from: newDay)
+            comps.hour = clock.0; comps.minute = clock.1
+            guard let newStart = cal.date(from: comps) else {
+                return .failure(AICommandError(kind: .badTime, message: "没识别到要改到的时间。"))
+            }
+            // 定位关键词取自"改到"之前的定位部分
+            let keyword = cleanedKeyword(from: head, removing: [consumedDate, consumedTime])
+            return .success(.updateEvent(AIUpdateEventDraft(
+                criteria: AIEventCriteria(day: base, timeHint: timeHint, keyword: keyword),
+                newStartDate: newStart
+            )))
+        }
+
         // 3. 标题：剔除已识别的日期/时间词、重复词与口语前缀
         var title = s
         for w in [consumedDate, consumedTime, "提醒我", "提醒", "帮我", "我要", "记得",
@@ -203,6 +283,64 @@ public enum AICommandParser {
         else if s.contains("每月") { rule = .monthly }
 
         return .success(.createEvent(AICreateEventDraft(title: title, startDate: start, repeatRule: rule)))
+    }
+
+    // MARK: - 修改 / 删除意图的解析辅助
+
+    /// 返回第一个命中的标记词（删除意图）
+    static func firstMarker(in s: String, among markers: [String]) -> String? {
+        markers.first { s.contains($0) }
+    }
+
+    /// 返回最早命中的标记词范围（修改意图：需要切分"定位部分"与"新时间部分"）
+    static func firstMarkerRange(in s: String, among markers: [String]) -> Range<String.Index>? {
+        var best: Range<String.Index>?
+        for m in markers {
+            guard let r = s.range(of: m) else { continue }
+            if best == nil || r.lowerBound < best!.lowerBound {
+                best = r
+            }
+        }
+        return best
+    }
+
+    /// 从文本解析时刻（与主解析器同一套规则：14:30 / 下午3点 / 晚上7点）
+    static func parseClock(in s: String) -> (hour: Int, minute: Int)? {
+        var hour = 0, minute = 0
+        var isPM = false
+        if let r = s.range(of: #"(\d{1,2}):(\d{2})"#, options: .regularExpression) {
+            let nums = String(s[r]).components(separatedBy: CharacterSet.decimalDigits.inverted).compactMap(Int.init)
+            guard nums.count == 2 else { return nil }
+            hour = nums[0]; minute = nums[1]
+        } else if let r = s.range(of: #"([上下]午|晚上)?\s*(\d{1,2})\s*[点时](\d{1,2})?分?"#, options: .regularExpression) {
+            let seg = String(s[r])
+            let nums = seg.components(separatedBy: CharacterSet.decimalDigits.inverted).compactMap(Int.init)
+            guard !nums.isEmpty else { return nil }
+            hour = nums[0]
+            if nums.count > 1 { minute = nums[1] }
+            if seg.hasPrefix("下午") || seg.hasPrefix("晚上") { isPM = true }
+        } else {
+            return nil
+        }
+        if isPM && hour < 12 { hour += 12 }
+        return (hour, minute)
+    }
+
+    /// "改到"之后只识别 今天/明天/后天 三种日期词；其余情况沿用定位日（避免过度推断）
+    static func parseShortDayWord(in s: String, defaultDay: Date) -> Date {
+        let cal = Calendar(identifier: .gregorian)
+        if s.contains("后天") { return cal.date(byAdding: .day, value: 2, to: defaultDay) ?? defaultDay }
+        if s.contains("明天") { return cal.date(byAdding: .day, value: 1, to: defaultDay) ?? defaultDay }
+        return defaultDay
+    }
+
+    /// 关键词清洗：剔除日期 / 时间 / 动词残留，并去掉首尾的口语字（把、的、了、帮我…）
+    static func cleanedKeyword(from s: String, removing tokens: [String]) -> String {
+        var result = s
+        for token in tokens where !token.isEmpty {
+            result = result.replacingOccurrences(of: token, with: "")
+        }
+        return result.trimmingCharacters(in: CharacterSet(charactersIn: " ，,。.!！的了把帮我"))
     }
 
     /// 英/日文关键词与 AM/PM 归一化为中文日期/时段词（纯函数，便于单测）

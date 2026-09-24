@@ -22,6 +22,10 @@ public enum AICommandValidator {
             return validateCreate(draft, now: now).map { .createEvent($0) }
         case .queryAgenda(let range):
             return validateQuery(range).map { .queryAgenda($0) }
+        case .deleteEvent(let draft):
+            return validateCriteria(draft.criteria).map { .deleteEvent(AIDeleteEventDraft(criteria: $0)) }
+        case .updateEvent(let draft):
+            return validateUpdate(draft, now: now).map { .updateEvent($0) }
         }
     }
 
@@ -36,6 +40,52 @@ public enum AICommandValidator {
             ))
         }
         return .success(range)
+    }
+
+    /// 定位条件校验（删除 / 修改共用）：必须有标题关键词或时间提示，
+    /// 否则同一天可能匹配到多条，无法安全地执行破坏性操作。
+    static func validateCriteria(_ criteria: AIEventCriteria) -> Result<AIEventCriteria, AICommandError> {
+        let hasKeyword = !criteria.keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard hasKeyword || criteria.timeHint != nil else {
+            return .failure(AICommandError(
+                kind: .missingTarget,
+                message: "没听清要操作哪条日程，补上标题或时间（如「删掉明天3点的例会」）。"
+            ))
+        }
+        let year = QingheCalendarContext.userCalendar.component(.year, from: criteria.day)
+        guard year >= ChineseCalendar.minYear, year <= ChineseCalendar.maxYear else {
+            return .failure(AICommandError(
+                kind: .outOfRange,
+                message: "日期超出支持范围（\(ChineseCalendar.minYear)–\(ChineseCalendar.maxYear) 年）。"
+            ))
+        }
+        return .success(criteria)
+    }
+
+    /// 修改校验：定位条件 + 新时间必须落在支持范围内且不在过去（改到过去多半是识别错了）。
+    static func validateUpdate(
+        _ draft: AIUpdateEventDraft,
+        now: Date
+    ) -> Result<AIUpdateEventDraft, AICommandError> {
+        switch validateCriteria(draft.criteria) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let criteria):
+            let year = QingheCalendarContext.userCalendar.component(.year, from: draft.newStartDate)
+            guard year >= ChineseCalendar.minYear, year <= ChineseCalendar.maxYear else {
+                return .failure(AICommandError(
+                    kind: .outOfRange,
+                    message: "新时间超出支持范围（\(ChineseCalendar.minYear)–\(ChineseCalendar.maxYear) 年）。"
+                ))
+            }
+            guard draft.newStartDate > now else {
+                return .failure(AICommandError(
+                    kind: .inThePast,
+                    message: "新时间已经过去了，请确认要改到的时刻。"
+                ))
+            }
+            return .success(AIUpdateEventDraft(criteria: criteria, newStartDate: draft.newStartDate))
+        }
     }
 
     /// 创建日程校验规则：

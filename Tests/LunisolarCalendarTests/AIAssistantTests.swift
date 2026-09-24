@@ -25,8 +25,8 @@ final class AIAssistantTests: XCTestCase {
         switch AICommandParser.parse(input, baseDate: now) {
         case .success(.createEvent(let d)):
             return d
-        case .success(.queryAgenda):
-            XCTFail("预期创建意图，实际为查询", file: file, line: line)
+        case .success(let other):
+            XCTFail("预期创建意图，实际为 \(other.kind)", file: file, line: line)
             return nil
         case .failure(let error):
             XCTFail("解析失败：\(error.message)", file: file, line: line)
@@ -167,6 +167,125 @@ final class AIAssistantTests: XCTestCase {
         }
         XCTAssertTrue(events.contains { $0.title == "查询测试会" }, "应包含目标日的事件")
         XCTAssertEqual(store.events.count, before, "查询是只读路径，不得改变 store")
+    }
+
+    // MARK: - 1.6 修改 / 删除意图（P1-6c）
+
+    private func command(_ input: String, file: StaticString = #filePath, line: UInt = #line) -> AIStructuredCommand? {
+        switch AICommandParser.parse(input, baseDate: now) {
+        case .success(let c):
+            return c
+        case .failure(let error):
+            XCTFail("解析失败：\(error.message)", file: file, line: line)
+            return nil
+        }
+    }
+
+    func testParseDeleteIntent() throws {
+        guard case .deleteEvent(let draft)? = command("删掉明天的例会") else {
+            return XCTFail("应解析为删除意图")
+        }
+        XCTAssertEqual(draft.criteria.keyword, "例会")
+        let c = cal.dateComponents([.month, .day], from: draft.criteria.day)
+        XCTAssertEqual([c.month, c.day], [9, 25])
+        XCTAssertNil(draft.criteria.timeHint, "输入未含时刻 → 无时刻提示")
+    }
+
+    func testParseDeleteIntentWithTimeHint() throws {
+        guard case .deleteEvent(let draft)? = command("删除明天下午3点的例会") else {
+            return XCTFail("应解析为删除意图")
+        }
+        XCTAssertEqual(draft.criteria.keyword, "例会")
+        XCTAssertEqual(draft.criteria.timeHint?.hour, 15)
+        XCTAssertEqual(draft.criteria.timeHint?.minute, 0)
+    }
+
+    func testParseUpdateIntent() throws {
+        guard case .updateEvent(let draft)? = command("把明天3点的例会改到4点") else {
+            return XCTFail("应解析为修改意图")
+        }
+        XCTAssertEqual(draft.criteria.keyword, "例会")
+        XCTAssertEqual(draft.criteria.timeHint?.hour, 3, "定位时刻取原时间")
+        XCTAssertEqual(cal.component(.hour, from: draft.newStartDate), 4, "新时间取「改到」之后的时刻")
+    }
+
+    func testPlainCreateSentenceStillCreate() throws {
+        let d = try XCTUnwrap(draft("明天3点开会"))
+        XCTAssertEqual(d.title, "开会")
+    }
+
+    func testValidateDeleteWithoutTargetIsRejected() {
+        let criteria = AIEventCriteria(day: now, timeHint: nil, keyword: "")
+        guard case .failure(let error) =
+            AICommandValidator.validate(.deleteEvent(AIDeleteEventDraft(criteria: criteria)), now: now) else {
+            return XCTFail("既无关键词又无时刻提示应被拒绝（无法安全定位）")
+        }
+        XCTAssertEqual(error.kind, .missingTarget)
+    }
+
+    func testDeleteResolvesUniqueTargetAndRemoves() throws {
+        let store = makeIsolatedEventStore()
+        let service = AIAssistantService(eventService: EventService(store: store))
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 25; dc.hour = 15; dc.minute = 0
+        let target = cal.date(from: dc)!
+        store.add(CalendarEvent(title: "例会", startDate: target), skipSync: true)
+        let before = store.events.count
+
+        let criteria = AIEventCriteria(day: target, timeHint: DateComponents(hour: 15, minute: 0), keyword: "例会")
+        guard case .success(.deletedEvent) =
+            service.execute(.deleteEvent(AIDeleteEventDraft(criteria: criteria)), now: now) else {
+            return XCTFail("应删除成功")
+        }
+        XCTAssertEqual(store.events.count, before - 1)
+    }
+
+    func testResolveTargetReportsNotFoundAndAmbiguous() {
+        let store = makeIsolatedEventStore()
+        let service = AIAssistantService(eventService: EventService(store: store))
+
+        // 未找到
+        guard case .failure(let missing) =
+            service.resolveTarget(AIEventCriteria(day: now, timeHint: nil, keyword: "不存在的会")) else {
+            return XCTFail("应报未找到")
+        }
+        XCTAssertEqual(missing.kind, .notFound)
+
+        // 同一天两条同名 → 歧义（绝不"猜一条"执行）
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 24; dc.hour = 9; dc.minute = 0
+        store.add(CalendarEvent(title: "例会", startDate: cal.date(from: dc)!), skipSync: true)
+        dc.hour = 11
+        store.add(CalendarEvent(title: "例会", startDate: cal.date(from: dc)!), skipSync: true)
+
+        guard case .failure(let ambiguous) =
+            service.resolveTarget(AIEventCriteria(day: now, timeHint: nil, keyword: "例会")) else {
+            return XCTFail("应报歧义")
+        }
+        XCTAssertEqual(ambiguous.kind, .ambiguous)
+    }
+
+    func testUpdateMovesTimeAndKeepsDuration() throws {
+        let store = makeIsolatedEventStore()
+        let service = AIAssistantService(eventService: EventService(store: store))
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 9; dc.day = 25; dc.hour = 15; dc.minute = 0
+        let start = cal.date(from: dc)!
+        store.add(CalendarEvent(title: "例会", startDate: start), skipSync: true)
+
+        var newC = DateComponents()
+        newC.year = 2026; newC.month = 9; newC.day = 25; newC.hour = 16; newC.minute = 0
+        let newStart = cal.date(from: newC)!
+        let criteria = AIEventCriteria(day: start, timeHint: DateComponents(hour: 15, minute: 0), keyword: "例会")
+
+        guard case .success(.updatedEvent(let id)) =
+            service.execute(.updateEvent(AIUpdateEventDraft(criteria: criteria, newStartDate: newStart)), now: now) else {
+            return XCTFail("应修改成功")
+        }
+        let updated = try XCTUnwrap(store.eventBy(idString: id.uuidString))
+        XCTAssertEqual(cal.component(.hour, from: updated.startDate), 16)
+        XCTAssertEqual(updated.endDate.timeIntervalSince(updated.startDate), 3600, "时长应沿用原事件")
+        XCTAssertFalse(updated.isNotified, "改时间后必须重挂提醒")
     }
 
     // MARK: - 2. 校验
