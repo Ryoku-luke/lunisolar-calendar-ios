@@ -10,6 +10,8 @@ import UIKit
 struct AutoFocusTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var focused: Bool
+    /// 回车（Return）提交：与键盘工具栏的「解析」等价，省去"先收键盘再点按钮"
+    let onSubmit: () -> Void
 
     func makeUIView(context: Context) -> UITextView {
         let tv = UITextView()
@@ -53,6 +55,21 @@ struct AutoFocusTextView: UIViewRepresentable {
             parent.text = textView.text
         }
 
+        func textView(
+            _ textView: UITextView,
+            shouldChangeTextIn range: NSRange,
+            replacementText text: String
+        ) -> Bool {
+            // 回车 = 解析。多行文本里回车默认是换行；本页只收"一句话"，
+            // 用回车提交可省掉「先收键盘 → 再点按钮」这一步（真机反馈交互拖沓的主因）
+            if text == "\n" {
+                parent.focused = false
+                parent.onSubmit()
+                return false
+            }
+            return true
+        }
+
         func textViewDidEndEditing(_ textView: UITextView) {
             parent.focused = false
         }
@@ -83,19 +100,27 @@ struct AIAssistantView: View {
     @State private var destructiveTarget: CalendarEvent?
     @State private var destructiveLabel: String?
     @State private var pendingCommand: AIStructuredCommand?
-    /// 操作完成提示（删除 / 修改后展示，确认即关闭）
+    /// 行内成功提示（创建 / 删除 / 修改完成）：2 秒后自动消失，替代模态 alert
     @State private var completedMessage: String?
     @State private var showError = false
     @State private var errorText = ""
-    @State private var created = false
     @State private var inputFocused: Bool = false
 
     var body: some View {
         NavigationStack {
             List {
+                // 行内成功提示：替代「已创建 → 好」这类模态 alert（少两次点击，也不打断连续输入）
+                if let completedMessage {
+                    Section {
+                        Label(completedMessage, systemImage: "checkmark.circle.fill")
+                            .font(AppTheme.Font.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.appTint)
+                    }
+                }
+
                 Section {
                     #if canImport(UIKit)
-                    AutoFocusTextView(text: $input, focused: $inputFocused)
+                    AutoFocusTextView(text: $input, focused: $inputFocused, onSubmit: { parse() })
                         .frame(minHeight: 100)
                         // 占位文案在 SwiftUI 侧渲染：不写进 UITextView，避免被当成用户输入
                         // （对齐 UITextView 的 textContainerInset 12 + 行内 padding 5）
@@ -118,8 +143,15 @@ struct AIAssistantView: View {
 
                 Section {
                     // 不做 disabled：空输入时点击会走 parse() 并给出明确提示；
-                    // 否则按钮静默不可点，用户感受为「点了没反应」
-                    Button(NSLocalizedString("解析并预览", comment: "AI助手")) { parse() }
+                    // 否则按钮静默不可点，用户感受为「点了没反应」。
+                    // 整行可点 + 加粗居中，减少"这个按钮在哪/要不要点"的犹豫
+                    Button {
+                        parse()
+                    } label: {
+                        Text(NSLocalizedString("解析并预览", comment: "AI助手"))
+                            .font(.body.weight(.semibold))
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
                 }
 
                 if let d = draft {
@@ -237,7 +269,9 @@ struct AIAssistantView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button(NSLocalizedString("完成", comment: "")) { inputFocused = false }
+                    // 键盘上的「解析」：省去"先收键盘再点列表里的按钮"这一往返
+                    Button(NSLocalizedString("解析", comment: "AI助手")) { parse() }
+                        .font(.body.weight(.semibold))
                 }
             }
             #endif
@@ -245,21 +279,6 @@ struct AIAssistantView: View {
                 Button(NSLocalizedString("好", comment: ""), role: .cancel) {}
             } message: {
                 Text(errorText)
-            }
-            .alert(NSLocalizedString("已创建", comment: "AI助手"), isPresented: $created) {
-                Button(NSLocalizedString("好", comment: "")) { dismiss() }
-            } message: {
-                Text(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
-            }
-            // P1-6c：删除 / 修改完成提示
-            .alert(NSLocalizedString("已完成", comment: "AI助手"),
-                   isPresented: Binding(
-                       get: { completedMessage != nil },
-                       set: { if !$0 { completedMessage = nil } }
-                   )) {
-                Button(NSLocalizedString("好", comment: "")) { completedMessage = nil }
-            } message: {
-                Text(completedMessage ?? "")
             }
         }
     }
@@ -358,10 +377,10 @@ struct AIAssistantView: View {
         guard let command = pendingCommand else { return }
         switch AIAssistantService.shared.execute(command) {
         case .success(.deletedEvent):
-            completedMessage = NSLocalizedString("已删除该日程。", comment: "AI助手")
+            showSuccess(NSLocalizedString("已删除该日程。", comment: "AI助手"))
             resetAfterCompletion()
         case .success(.updatedEvent):
-            completedMessage = NSLocalizedString("已修改时间，提醒已重建。", comment: "AI助手")
+            showSuccess(NSLocalizedString("已修改时间，提醒已重建。", comment: "AI助手"))
             resetAfterCompletion()
         case .success:
             break
@@ -382,12 +401,22 @@ struct AIAssistantView: View {
     private func create(_ d: AICreateEventDraft) {
         switch AIAssistantService.shared.execute(.createEvent(d)) {
         case .success:
-            created = true
-            // P1：创建成功后清空输入与预览，可继续说下一条
+            // 行内提示替代「已创建 → 好」模态；清空输入并把焦点还给输入框，便于连续录入
+            showSuccess(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
             input = ""
             draft = nil
+            inputFocused = true
         case .failure(let error):
             present(error)
+        }
+    }
+
+    /// 行内成功提示：2 秒后自动消失（不打断连续输入，也省掉模态的两次点击）
+    private func showSuccess(_ text: String) {
+        completedMessage = text
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            if completedMessage == text { completedMessage = nil }
         }
     }
 
