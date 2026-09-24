@@ -17,7 +17,13 @@ public final class EventService {
     public static let shared = EventService()
 
     /// 数据层（只读数据源；写操作走本类业务方法）
-    public let store = EventStore.shared
+    public let store: EventStore
+
+    /// 默认注入 App 单例；测试传入隔离 store，避免写入真实 Documents
+    /// （既有测试统一用 makeIsolatedEventStore() 的临时目录模式）
+    public init(store: EventStore = .shared) {
+        self.store = store
+    }
 
     // MARK: - 事件写操作（数据 + 通知 + Widget 协调）
 
