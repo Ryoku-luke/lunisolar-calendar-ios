@@ -676,8 +676,10 @@ struct SettingsView: View {
         switch await AppLifecycleCoordinator.shared.enableCloudSync() {
         case .success:
             toast = .init(kind: .success, text: "iCloud 同步已开启")
-        case .unavailable:
-            toast = .init(kind: .error, text: "iCloud 不可用：请登录 iCloud 并检查 entitlement 配置")
+        case .unsupportedBuild:
+            toast = .init(kind: .error, text: "当前构建未启用 iCloud 权限，同步暂不可用")
+        case .accountUnavailable:
+            toast = .init(kind: .error, text: "iCloud 不可用：请在系统设置登录 iCloud 后重试")
         case .syncFailed:
             toast = .init(kind: .error, text: "iCloud 同步开启失败")
         }

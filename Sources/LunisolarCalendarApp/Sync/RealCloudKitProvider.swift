@@ -26,12 +26,47 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     public let recordType: String
     public let currentDeviceID: String
 
-    /// iCloud 容器（nil identifier → `CKContainer.default()`）
-    private let container: CKContainer
-    /// 私有数据库（iOS 17+：`database(with: .private)`）
-    private let database: CKDatabase
+    /// iCloud 容器（nil identifier → `CKContainer.default()`）。
+    /// entitlement 缺失时为 nil——`CKContainer.default()`/`CKContainer(identifier:)`
+    /// 在 entitlement 缺失时直接 EXC_BREAKPOINT（非 throw，无法 catch），
+    /// 必须先经 hasCloudKitEntitlements() 预检，任何调用前还会被 isAvailable=false 拦截。
+    private let container: CKContainer?
+    /// 私有数据库（iOS 17+：`database(with: .private)`）；随 container 一起为 nil
+    private let database: CKDatabase?
     /// Custom Zone（事件记录隔离区，支持增量查询与墓碑）
     private let zone: CKRecordZone
+
+    /// 运行环境是否具备 CloudKit container entitlement。
+    ///
+    /// 个人团队（免费账号）不支持 iCloud capability，entitlements 文件已按 docs/ENTITLEMENTS.md
+    /// 移除 iCloud keys；此时若直接创建 CKContainer 会 EXC_BREAKPOINT 崩溃。
+    /// 判定策略（两端都保守：任何无法确认的情况一律禁用，绝不用"可能崩"换"可能能用"）：
+    /// - 有 embedded.mobileprovision（开发 / AdHoc / 企业签名）：解析其 entitlements，
+    ///   声明了 iCloud 容器才放行；解析失败 → 禁用；
+    /// - 无 embedded.mobileprovision：App Store / TestFlight 分发构建会带收据，
+    ///   由签名流程保证 entitlements → 放行；无收据（环境异常）→ 禁用。
+    static func hasCloudKitEntitlements() -> Bool {
+        if let provisionURL = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") {
+            guard let data = try? Data(contentsOf: provisionURL) else { return false }
+            return provisionDeclaresCloudKit(data)
+        }
+        if let receipt = Bundle.main.appStoreReceiptURL,
+           FileManager.default.fileExists(atPath: receipt.path) {
+            return true
+        }
+        return false
+    }
+
+    /// 纯函数：从 provisioning profile 原始字节判定是否声明 iCloud 容器（可单测）。
+    /// 必须按字节定位 `<?xml ... </plist>` 切片再解码——文件头尾是二进制签名，
+    /// 整文件按 ASCII 解码会失败（曾经的实现因此误判为"可用"而触发 EXC_BREAKPOINT）。
+    static func provisionDeclaresCloudKit(_ data: Data) -> Bool {
+        guard let start = data.range(of: Data("<?xml".utf8)),
+              let end = data.range(of: Data("</plist>".utf8)),
+              let text = String(data: data[start.lowerBound..<end.upperBound], encoding: .ascii)
+        else { return false }
+        return text.contains("com.apple.developer.icloud-container-identifiers")
+    }
 
     // MARK: - 内部状态
 
@@ -65,12 +100,18 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
         self.containerIdentifier = containerIdentifier
         self.zoneName = zoneName
         self.recordType = recordType
-        if let cid = containerIdentifier {
-            self.container = CKContainer(identifier: cid)
+        // entitlement 预检：缺失时不创建容器（保持 nil），
+        // isAvailable → false，上层走既有的"iCloud 不可用"降级路径，绝不触发 EXC_BREAKPOINT
+        if Self.hasCloudKitEntitlements() {
+            let resolved: CKContainer = (containerIdentifier != nil)
+                ? CKContainer(identifier: containerIdentifier!)
+                : .default()
+            self.container = resolved
+            self.database = resolved.database(with: .private)
         } else {
-            self.container = .default()
+            self.container = nil
+            self.database = nil
         }
-        self.database = container.database(with: .private)
         self.zone = CKRecordZone(zoneName: zoneName)
 
         // 设备 ID：跨启动稳定，持久化到 UserDefaults
@@ -88,6 +129,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     public var isAvailable: Bool {
         get async {
+            // entitlement 缺失（个人团队签名等）：容器从未创建，恒不可用，不缓存
+            guard let container else { return false }
             let now = Date().timeIntervalSince1970
             // 1) 快路径：读取缓存（queue.sync 包裹，线程安全）
             if let cached = availabilityCacheQueue.sync(execute: { () -> Bool? in
@@ -225,6 +268,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     }
 
     public func setupSubscription(enabled: Bool) async -> Bool {
+        // entitlement 缺失防御：正常路径已被 isAvailable=false 拦截；无容器时订阅直接失败
+        guard let database else { return false }
         guard enabled else {
             do {
                 try await database.deleteSubscription(withID: subscriptionID)
@@ -286,6 +331,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     // MARK: - Zone 管理
 
     private func ensureZoneExists() async throws {
+        // entitlement 缺失防御：静默 no-op（上层 isAvailable=false 本就不会走到这里）
+        guard let database else { return }
         let alreadyEnsured = zoneQueue.sync { zoneEnsured }
         if alreadyEnsured { return }
 
@@ -347,6 +394,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     // MARK: - 批量 fetch（取得 change tag）
 
     private func fetchRecords(ids: [CKRecord.ID]) async -> [CKRecord.ID: Result<CKRecord, Error>] {
+        // entitlement 缺失防御：返回空结果集，push 侧会按"云端无记录"走新建分支
+        guard let database else { return [:] }
         guard !ids.isEmpty else { return [:] }
         let op = CKFetchRecordsOperation(recordIDs: ids)
         op.qualityOfService = .utility
@@ -369,6 +418,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     // MARK: - 批量保存
 
     private func saveBatch(_ records: [CKRecord]) async throws -> (saved: [CKRecord], failed: [(CKRecord.ID, Error)]) {
+        // entitlement 缺失防御：空写空失败，调用方统计为 0
+        guard let database else { return ([], []) }
         guard !records.isEmpty else { return ([], []) }
         let op = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
         op.savePolicy = .ifServerRecordUnchanged
@@ -409,6 +460,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     private func runQuery(query: CKQuery?, cursor: CKQueryOperation.Cursor?) async throws
         -> (records: [SyncRecord], cursor: CKQueryOperation.Cursor?) {
+        // entitlement 缺失防御：空页结果（调用方翻页循环随 cursor=nil 立即结束）
+        guard let database else { return ([], nil) }
 
         let op: CKQueryOperation
         if let cursor = cursor {
@@ -453,6 +506,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     private func runQueryRaw(query: CKQuery?, cursor: CKQueryOperation.Cursor?) async throws
         -> (tombstones: [(CKRecord.ID, Int64)], cursor: CKQueryOperation.Cursor?) {
+        // entitlement 缺失防御：空页结果（调用方翻页循环随 cursor=nil 立即结束）
+        guard let database else { return ([], nil) }
 
         let op: CKQueryOperation
         if let cursor = cursor {
@@ -497,6 +552,8 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     private func deleteBatch(recordIDsToDelete: [CKRecord.ID]) async throws
         -> (deletedIDs: [CKRecord.ID], failed: [(CKRecord.ID, Error)]) {
+        // entitlement 缺失防御：空删空失败，调用方统计为 0
+        guard let database else { return ([], []) }
         guard !recordIDsToDelete.isEmpty else { return ([], []) }
         let op = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: recordIDsToDelete)
         op.savePolicy = .ifServerRecordUnchanged

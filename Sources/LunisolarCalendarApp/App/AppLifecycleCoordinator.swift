@@ -92,6 +92,12 @@ public final class AppLifecycleCoordinator {
     private func setupCloudSyncIfNeeded() async {
         guard let store, syncCoordinator == nil else { return }
         #if canImport(CloudKit)
+        // entitlement 缺失（免费个人团队等）：连 provider 都不构造，直接跳过装配。
+        // 不清除开关标记——这是构建属性而非账号问题，换成付费构建后应自动续用。
+        guard RealCloudKitProvider.hasCloudKitEntitlements() else {
+            AppLogger.sync.warning("当前构建签名不含 iCloud 容器 entitlement，跳过同步装配")
+            return
+        }
         let wasEnabled = UserDefaults.standard.bool(forKey: "Lunisolar.sync.enabled")
         guard wasEnabled else { return }
         do {
@@ -121,12 +127,15 @@ public final class AppLifecycleCoordinator {
     // View 不再 import CloudKit / 构造 RealCloudKitProvider。
     // 设置页仍只读 store.syncCoordinator 的 status/lastResult 做状态展示（只读，允许）。
 
-    /// 首次开启 iCloud 同步的三种结局（设置页按此映射不同 toast）。
+    /// 首次开启 iCloud 同步的结局（设置页按此映射不同 toast）。
     public enum CloudSyncEnableResult: Sendable {
         /// 装配 + 首次双向同步完成
         case success
-        /// iCloud 账号 / entitlement 不可用（未改变任何状态）
-        case unavailable
+        /// 当前构建签名不含 iCloud/CloudKit 权限（如免费个人团队账号）：
+        /// 这是构建/账号类型限制，不是代码缺陷，也不代表设备未登录 iCloud
+        case unsupportedBuild
+        /// 有 iCloud 权限，但账号未登录 / 状态异常（受限、暂时不可用等）
+        case accountUnavailable
         /// 装配成功但首次同步失败（开关保持开启，与旧行为一致，可后续重试）
         case syncFailed
     }
@@ -135,12 +144,17 @@ public final class AppLifecycleCoordinator {
     @discardableResult
     public func enableCloudSync() async -> CloudSyncEnableResult {
         #if canImport(CloudKit)
-        guard let store else { return .unavailable }
+        guard let store else { return .accountUnavailable }
+        // 先判构建能力，再判账号 —— 两者提示文案不同，避免误导用户去登录 iCloud
+        guard RealCloudKitProvider.hasCloudKitEntitlements() else {
+            AppLogger.sync.warning("当前构建签名不含 iCloud 容器 entitlement，CloudKit 同步不可用")
+            return .unsupportedBuild
+        }
         let provider = RealCloudKitProvider()
         let available = await provider.isAvailable
         guard available else {
-            AppLogger.sync.warning("iCloud 不可用：账号或 entitlement 状态异常")
-            return .unavailable
+            AppLogger.sync.warning("iCloud 账号不可用：未登录或状态异常")
+            return .accountUnavailable
         }
         let coordinator = EventSyncCoordinator(eventStore: store, provider: provider)
         coordinator.isEnabled = true
