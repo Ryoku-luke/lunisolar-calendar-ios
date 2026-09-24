@@ -58,21 +58,14 @@ public enum HuangliDBProvider {
     // MARK: - 懒加载 Bundle 数据库
 
     private struct Cache: @unchecked Sendable {
-        // days: yyyy-MM-dd (UTC+0 同日？为了保持与生成时一致，用 Calendar(identifier:.gregorian) + local tz 算 day)
-        // 实际：用生成时同一份 DateFormatter: Asia/Shanghai + yyyy-MM-dd
         static let shared = Cache()
         let root: HuangliDBRoot?
-        let df: DateFormatter
-        let rangeStart: Date?
-        let rangeEnd: Date?   // 含当天 2028-12-31
+        /// 覆盖区间端点（含端点，yyyy-MM-dd）。零填充字符串比较即时间顺序比较，
+        /// 与设备时区无关——避免海外时区在边界日被误判越界而静默退化到算法。
+        let rangeStartKey: String?
+        let rangeEndKey: String?
 
         init() {
-            let df = DateFormatter()
-            df.dateFormat = "yyyy-MM-dd"
-            df.timeZone = QingheCalendarContext.chinaTimeZone
-            df.locale = Locale(identifier: "zh_CN_POSIX")
-            self.df = df
-
             var loaded: HuangliDBRoot?
             if let url = Bundle.resources.url(forResource: "huangli_db", withExtension: "json") {
                 if let data = try? Data(contentsOf: url) {
@@ -80,31 +73,27 @@ public enum HuangliDBProvider {
                 }
             }
             self.root = loaded
-            if let r = loaded, r.range.count == 2 {
-                self.rangeStart = df.date(from: r.range[0])
-                // rangeEnd = 最后一天 2028-12-31 endOfDay 的下一天开始，比较用 < rangeEndExclusive
-                if let last = df.date(from: r.range[1]) {
-                    let cal = Calendar(identifier: .gregorian)
-                    self.rangeEnd = cal.date(byAdding: .day, value: 1, to: last)
-                } else {
-                    self.rangeEnd = nil
-                }
-            } else {
-                self.rangeStart = nil
-                self.rangeEnd = nil
-            }
+            self.rangeStartKey = loaded?.range.first
+            self.rangeEndKey = (loaded?.range.count ?? 0) >= 2 ? loaded?.range.last : loaded?.range.first
         }
 
-        /// 给 date 生成离散库的 key
-        func key(for date: Date) -> String {
-            df.string(from: date)
+        /// key 字符串是否落在覆盖区间（P3 修复保留：range 被外部篡改为空时安全返回 false）
+        func isInRange(_ key: String) -> Bool {
+            guard let s = rangeStartKey, let e = rangeEndKey else { return false }
+            return key >= s && key <= e
         }
+    }
 
-        /// 判断 date 是否落在离散库覆盖区间（按 Asia/Shanghai yyyy-MM-dd 对齐）
-        func isInRange(_ date: Date) -> Bool {
-            guard let s = rangeStart, let e = rangeEnd else { return false }
-            return date >= s && date < e
-        }
+    /// 用户本地日历日的离散库 key：yyyy-MM-dd（公历 + 调用方日历的时区 + POSIX 数字）。
+    ///
+    /// 历史缺陷（docs #7 时区统一）：曾用 Asia/Shanghai 格式化"设备本地午夜"这一时刻，
+    /// UTC+13 设备（如 Pacific/Auckland）会把本地 02-04 映射成 02-03，取到前一天的宜忌；
+    /// 边界日还会因时刻比较被误判越界。改为直接取日历分量后与设备时区完全解耦。
+    static func dayKey(for date: Date, calendar: Calendar) -> String {
+        let y = calendar.component(.year, from: date)
+        let m = calendar.component(.month, from: date)
+        let d = calendar.component(.day, from: date)
+        return String(format: "%04d-%02d-%02d", y, m, d)
     }
 
     // MARK: - 主查询入口
@@ -112,14 +101,18 @@ public enum HuangliDBProvider {
     /// 查询给定公历日期的黄历，返回 resolved 结果（含来源）
     public static func resolve(date: Date) -> Resolved {
         let cache = Cache.shared
-        let normDate = Calendar(identifier: .gregorian).startOfDay(for: date)
+        // 用户"点选的那一天"按设备时区日界取整（docs #7：用户数据走 user 口径）；
+        // DB key 由该日的日历分量生成，与设备时区解耦（海外设备不再错位一天）
+        let userCalendar = Calendar(identifier: .gregorian)
+        let normDate = userCalendar.startOfDay(for: date)
         let lunar = ChineseCalendar.lunarDateSafe(from: normDate)
         // 越界：农历数据就没有，直接给 nil（与算法生成器一致）
         guard let lunar else {
             return Resolved(huangliDay: nil, source: .algorithm)
         }
 
-        if cache.isInRange(normDate), let entry = cache.root?.days[cache.key(for: normDate)] {
+        let key = dayKey(for: normDate, calendar: userCalendar)
+        if cache.isInRange(key), let entry = cache.root?.days[key] {
             let day = HuangliDay(
                 date: normDate,
                 lunar: lunar,
