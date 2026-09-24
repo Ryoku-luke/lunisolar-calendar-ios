@@ -51,13 +51,29 @@ public enum AppTheme {
         public static let thin: CGFloat = 1
     }
     public enum Font {
-        /// P2-8：UIFontMetrics scaled helper —— 固定 pt 基础上随系统 Dynamic Type 缩放
+        /// P2-8：UIFontMetrics scaled helper —— 固定 pt 基础上随系统 Dynamic Type 缩放。
+        /// textStyle 参数类型按平台别名：UIKit 下是 UIFont.TextStyle；
+        /// macOS 无 UIFontMetrics，退化为固定字号（textStyle 仅作占位）。
+        #if canImport(UIKit)
+        private typealias TextStyle = UIFont.TextStyle
+        #else
+        private enum TextStyle: String {
+            case largeTitle, title2, title3, headline, body, subheadline, caption1, caption2
+        }
+        #endif
+
         private static func scaled(_ base: CGFloat, weight: SwiftUI.Font.Weight,
-                                   design: Font.Design = .rounded,
-                                   textStyle: UIFont.TextStyle = .body) -> SwiftUI.Font {
+                                   design: SwiftUI.Font.Design = .rounded,
+                                   textStyle: TextStyle = .body) -> SwiftUI.Font {
             #if canImport(UIKit)
             let metrics = UIFontMetrics(forTextStyle: textStyle)
-            let uiFont = UIFont.systemFont(ofSize: base, weight: weight.uiWeight, design: design.uiDesign)
+            let baseFont = UIFont.systemFont(ofSize: base, weight: weight.uiWeight)
+            let uiFont: UIFont
+            if let descriptor = baseFont.fontDescriptor.withDesign(design.uiDesign) {
+                uiFont = UIFont(descriptor: descriptor, size: base)
+            } else {
+                uiFont = baseFont
+            }
             return SwiftUI.Font(metrics.scaledFont(for: uiFont))
             #else
             return .system(size: base, weight: weight, design: design)
@@ -498,7 +514,7 @@ private extension SwiftUI.Font.Weight {
         }
     }
 }
-private extension Font.Design {
+private extension SwiftUI.Font.Design {
     var uiDesign: UIFontDescriptor.SystemDesign {
         switch self {
         case .rounded: return .rounded

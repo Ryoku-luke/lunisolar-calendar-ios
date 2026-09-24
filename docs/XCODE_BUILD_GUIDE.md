@@ -116,9 +116,14 @@ xcodebuild -scheme LunisolarCalendar \
 
 ```bash
 swift test
-# 期望输出：Test run with 0 tests in 0 suites passed after 0.001 seconds.
-# + LunisolarCalendarTests: 59 tests, 0 failures
+# 期望输出末尾：Test Suite 'LunisolarCalendarTests' passed; 全部 tests, 0 failures
 ```
+
+> ✅ 2026-09-24 起 `swift test` 在 macOS 宿主直接可跑（此前仅 Linux CI 可用）：
+> 已补齐 ActivityKit/WidgetKit 的 `!os(macOS)` 编译守卫、UIKit-only API 的条件编译、
+> `AppTheme.scaled()` 的跨平台 textStyle 参数与 `WeatherService` 的 macOS 授权档判定。
+> iOS SDK 侧另可用 `swift build --triple arm64-apple-ios17.0-simulator --sdk $(xcrun --sdk iphonesimulator --show-sdk-path)` 做纯编译自检。
+
 
 ### Xcode 跑
 

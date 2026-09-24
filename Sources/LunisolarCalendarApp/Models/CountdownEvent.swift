@@ -148,7 +148,7 @@ public final class CountdownStore {
         events.removeAll { $0.id == id }
         // 删除倒数日时同步结束灵动岛活动，避免「幽灵倒计时」残留
         // （所有删除路径统一在 store 层收口，防止未来新增删除入口时漏掉）
-        #if canImport(ActivityKit) && canImport(WidgetKit)
+        #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
         CountdownActivityManager.end(for: id)
         #endif
         save()

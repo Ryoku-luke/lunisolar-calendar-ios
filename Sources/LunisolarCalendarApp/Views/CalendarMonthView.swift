@@ -133,11 +133,13 @@ struct CalendarMonthView: View {
         // inline 模式：导航栏紧凑（减少头部大块空白）、标题必然渲染、
         // 无 large↔inline 折叠动画（过渡更稳定）。月视图内容本身是网格+卡片，
         // 不需要 large title 的空间感。
+        #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbarBackground(.navBar, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .platformTopBarLeading) {
                 Button {
                     withAnimation(AppTheme.Motion.screen) {
                         currentMonth = Date().firstDayOfMonth; selectedDate = Date()
@@ -151,7 +153,7 @@ struct CalendarMonthView: View {
                     .tint(accent)
                     .pressableFeedback()
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .platformTopBarTrailing) {
                 // 原生 iOS 风格：系统「+」进入新建日程（替代原自定义渐变 FAB）
                 NavigationLink {
                     EventEditView(editing: nil, defaultDate: selectedDate).environment(store)
@@ -163,7 +165,7 @@ struct CalendarMonthView: View {
                 .accessibilityLabel("新建日程")
                 .accessibilityIdentifier(AccessibilityID.monthNewEvent)
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .platformTopBarTrailing) {
                 Menu {
                     Button { withAnimation(AppTheme.Motion.screen) {
                         currentMonth = Date().firstDayOfMonth; selectedDate = Date()

@@ -86,7 +86,7 @@ public struct LunisolarWidgetsBundle: WidgetBundle {
         HuangliOverviewWidget(appGroupID: appGroupID)
         LunarCardWidget(appGroupID: appGroupID)
         TodoProgressWidget(appGroupID: appGroupID)
-        #if canImport(ActivityKit)
+        #if canImport(ActivityKit) && !os(macOS)
         if #available(iOS 16.1, *) {
             CountdownLiveActivityWidget()
             QingheLiveActivityWidget()

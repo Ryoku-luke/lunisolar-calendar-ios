@@ -27,7 +27,12 @@ struct CalendarDisplaySettingsView: View {
                 Text("关闭后月历对应标注将隐藏，不影响当日卡片与黄历详情")
             }
         }
+        #if canImport(UIKit)
         .listStyle(.insetGrouped)
+        #else
+        // macOS 无 insetGrouped；产品目标为 iOS，macOS 仅作 SPM 单测宿主
+        .listStyle(.automatic)
+        #endif
         .navigationTitle("日历")
         #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)

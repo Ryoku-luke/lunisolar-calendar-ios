@@ -1,4 +1,4 @@
-#if canImport(ActivityKit) && canImport(WidgetKit)
+#if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
 // @preconcurrency：同 CountdownActivity.swift —— iOS 26/27 SDK 中
 // `Activity.activities` 传入 @concurrent 闭包时 Swift 6 严格并发需要系统框架放宽。
 @preconcurrency import ActivityKit

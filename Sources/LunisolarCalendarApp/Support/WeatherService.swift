@@ -83,6 +83,16 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         manager.delegate = self
     }
 
+    /// 各平台"已授权"集合：iOS/iPadOS 为 WhenInUse 或 Always；
+    /// macOS 的 `authorizedWhenInUse` 被 SDK 标记 unavailable，只有 Always 一档。
+    private static func isAuthorized(_ status: CLAuthorizationStatus) -> Bool {
+        #if os(macOS)
+        return status == .authorizedAlways
+        #else
+        return status == .authorizedWhenInUse || status == .authorizedAlways
+        #endif
+    }
+
     /// 请求单次定位；未授权返回 .denied，超时/失败返回 .failed（最坏 6s，绝不挂起）
     func currentLocation() async -> LocationOutcome {
         // 0) 60s 内直接复用最近定位结果（性能：避免每次天气视图重建都请求 GPS）
@@ -92,16 +102,21 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         }
         // 1) 授权
         switch manager.authorizationStatus {
-        case .authorizedWhenInUse, .authorizedAlways:
+        case .authorizedAlways:
             break
+        #if !os(macOS)
+        // iOS/iPadOS/watchOS：WhenInUse 即满足天气定位需求
+        case .authorizedWhenInUse:
+            break
+        #endif
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
             for _ in 0..<Self.pollCount {
                 if manager.authorizationStatus != .notDetermined { break }
                 try? await Task.sleep(for: .milliseconds(Self.pollStepMS))
             }
-            let status = manager.authorizationStatus
-            if status != .authorizedWhenInUse && status != .authorizedAlways {
+            // macOS 无 WhenInUse 授权档（SDK 标记 unavailable），各平台"已授权"集合不同
+            guard Self.isAuthorized(manager.authorizationStatus) else {
                 return .denied
             }
         case .denied, .restricted:

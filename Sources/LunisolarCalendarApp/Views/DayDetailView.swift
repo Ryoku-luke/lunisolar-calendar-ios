@@ -51,7 +51,7 @@ struct DayDetailView: View {
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .platformTopBarTrailing) {
                     Button { showAdd = true } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title3).foregroundStyle(accent)

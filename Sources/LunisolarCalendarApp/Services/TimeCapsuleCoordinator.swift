@@ -1,5 +1,5 @@
 import Foundation
-#if canImport(ActivityKit)
+#if canImport(ActivityKit) && !os(macOS)
 import ActivityKit
 #endif
 
@@ -17,7 +17,7 @@ public final class TimeCapsuleCoordinator {
 
     /// 根据当前状态刷新时间胶囊（启动 / 回到前台 / 事件变更 / 开关变化时调用）。
     public func refresh() {
-        #if canImport(ActivityKit) && canImport(WidgetKit)
+        #if canImport(ActivityKit) && !os(macOS) && canImport(WidgetKit)
         let now = Date()
         let enabled = UserDefaults.standard.bool(forKey: "Lunisolar.liveActivity.enabled")
         guard enabled,
@@ -55,7 +55,7 @@ public final class TimeCapsuleCoordinator {
 
     /// 结束当前时间胶囊（用户关闭开关 / 无候选）。
     public func end() {
-        #if canImport(ActivityKit) && canImport(WidgetKit)
+        #if canImport(ActivityKit) && !os(macOS) && canImport(WidgetKit)
         QingheLiveActivityManager.endCurrent()
         #endif
     }

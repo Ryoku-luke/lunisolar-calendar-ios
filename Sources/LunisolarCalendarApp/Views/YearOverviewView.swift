@@ -47,9 +47,11 @@ struct YearOverviewView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 24)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(Color.systemGroupedBackground)
             .navigationTitle(String(format: NSLocalizedString("%d 年总览", comment: ""), year))
+            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(NSLocalizedString("完成", comment: "")) { dismiss() }
@@ -94,7 +96,7 @@ struct YearOverviewView: View {
         .padding(8)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                .fill(Color.secondarySystemGroupedBackground)
                 .shadow(color: .black.opacity(0.04), radius: 4, y: 1)
         )
     }

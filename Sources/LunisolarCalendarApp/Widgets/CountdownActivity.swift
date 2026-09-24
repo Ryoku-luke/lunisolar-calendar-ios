@@ -1,4 +1,4 @@
-#if canImport(ActivityKit) && canImport(WidgetKit)
+#if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
 // @preconcurrency：iOS 26 SDK 中 Activity 类型实例（来自 @MainActor 的
 // `Activity.activities`）传给 @concurrent 的 `end(_:dismissalPolicy:)` 时，
 // Swift 6 严格并发会报 "Sending 'activity' risks causing data races"。
