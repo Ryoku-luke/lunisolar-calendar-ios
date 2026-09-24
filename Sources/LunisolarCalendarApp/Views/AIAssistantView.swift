@@ -9,7 +9,6 @@ import UIKit
 #if canImport(UIKit)
 struct AutoFocusTextView: UIViewRepresentable {
     @Binding var text: String
-    let placeholder: String
     @Binding var focused: Bool
 
     func makeUIView(context: Context) -> UITextView {
@@ -19,22 +18,13 @@ struct AutoFocusTextView: UIViewRepresentable {
         tv.layer.cornerRadius = 12
         tv.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         tv.delegate = context.coordinator
-        tv.text = placeholder
-        tv.textColor = .placeholderText
         return tv
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {
-        if text.isEmpty {
-            // 程序化清空（创建成功 / 取消）后恢复占位文案；
-            // 旧实现在此处把文本置空且保留 .label 颜色 → 输入框变成毫无提示的空白
-            if !focused && uiView.textColor != .placeholderText {
-                uiView.text = placeholder
-                uiView.textColor = .placeholderText
-            }
-        } else if uiView.text != text {
+        // 组字中（拼音 / 听写的 marked text）绝不插手文本 —— 程序化改写会中断听写与联想
+        if uiView.markedTextRange == nil, !uiView.isFirstResponder, uiView.text != text {
             uiView.text = text
-            uiView.textColor = .label
         }
         if focused && !uiView.isFirstResponder {
             uiView.becomeFirstResponder()
@@ -45,32 +35,26 @@ struct AutoFocusTextView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    class Coordinator: NSObject, UITextViewDelegate {
+    /// 只做「文本 / 焦点」双向同步。
+    ///
+    /// 占位文案已移出本类，改由 SwiftUI 侧 overlay 渲染。历史实现把 placeholder
+    /// 直接写进 UITextView 并在清空时重新填回，导致：
+    /// - 编辑中清空后，占位串被当作输入内容（下一次按键会拼在占位串后面）；
+    /// - 文本颜色在 .placeholderText / .label 之间来回切换，状态难以自洽。
+    final class Coordinator: NSObject, UITextViewDelegate {
         var parent: AutoFocusTextView
         init(_ p: AutoFocusTextView) { parent = p }
+
         func textViewDidBeginEditing(_ textView: UITextView) {
             parent.focused = true
-            if textView.textColor == .placeholderText {
-                textView.text = ""
-                textView.textColor = .label
-            }
         }
+
         func textViewDidChange(_ textView: UITextView) {
-            // 用户清空文字时立即切回 placeholder 样式（不必等 endEditing）
-            if textView.text.isEmpty {
-                textView.text = parent.placeholder
-                textView.textColor = .placeholderText
-                parent.text = ""
-            } else {
-                parent.text = textView.text
-            }
+            parent.text = textView.text
         }
+
         func textViewDidEndEditing(_ textView: UITextView) {
             parent.focused = false
-            if textView.text.isEmpty {
-                textView.text = parent.placeholder
-                textView.textColor = .placeholderText
-            }
         }
     }
 }
@@ -111,10 +95,20 @@ struct AIAssistantView: View {
             List {
                 Section {
                     #if canImport(UIKit)
-                    AutoFocusTextView(text: $input,
-                                      placeholder: NSLocalizedString("例如：明天下午3点提醒我开会", comment: "AI助手占位"),
-                                      focused: $inputFocused)
+                    AutoFocusTextView(text: $input, focused: $inputFocused)
                         .frame(minHeight: 100)
+                        // 占位文案在 SwiftUI 侧渲染：不写进 UITextView，避免被当成用户输入
+                        // （对齐 UITextView 的 textContainerInset 12 + 行内 padding 5）
+                        .overlay(alignment: .topLeading) {
+                            if input.isEmpty {
+                                Text(NSLocalizedString("例如：明天下午3点提醒我开会", comment: "AI助手占位"))
+                                    .font(AppTheme.Font.body)
+                                    .foregroundStyle(Color.tertiaryLabel)
+                                    .padding(.top, 12)
+                                    .padding(.leading, 16)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                     #endif
                 } header: {
                     Text(NSLocalizedString("用一句话描述", comment: "AI助手"))
@@ -134,9 +128,10 @@ struct AIAssistantView: View {
                         LabeledContent(NSLocalizedString("时间", comment: ""), value: d.startDate.formatted(date: .abbreviated, time: .shortened))
                         HStack {
                             Button(role: .cancel) {
-                                // P1：取消 → 清掉预览，回到输入
+                                // 取消只收起预览并保留原文（此前会清空输入，用户得重新打一遍）；
+                                // 焦点还给输入框，方便直接改词后重新解析
                                 draft = nil
-                                input = ""
+                                inputFocused = true
                             } label: {
                                 Label(NSLocalizedString("取消", comment: ""), systemImage: "xmark.circle")
                             }
