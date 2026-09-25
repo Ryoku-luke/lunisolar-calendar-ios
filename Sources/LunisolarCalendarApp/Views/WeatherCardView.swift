@@ -5,7 +5,8 @@ import UIKit
 #endif
 
 /// 嵌入日期卡片的当日天气文字块：只显示**选中日**当天的天气（城市·天气 + 温度 + 高低温）。
-/// 切换选中日期 → 天气自动跟随该日；今天额外显示当前温度。
+/// 切换选中日期 → 天气自动跟随该日（查快照内的逐日数据，不重新请求）；
+/// 数据整体按「今天」刷新，跨天自动重取（见 refreshDayKey）。今天额外显示当前温度。
 /// 无独立背景、紧凑文字块（配合 WeatherIconView 大图标上下排布，或独立行使用）。
 /// 三态：成功 → 当日天气；定位未授权 → 紧凑提示；失败 → 紧凑重试。
 struct WeatherCardView: View {
@@ -18,6 +19,8 @@ struct WeatherCardView: View {
     /// 否则文字块重试成功后，并排的图标仍停在占位云。
     var onSnapshot: (WeatherSnapshot) -> Void = { _ in }
     @State private var result: WeatherResult?
+    /// 用途只有一个：让「回到前台」成为会触发本视图重算的事件（见 refreshDayKey）
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -50,7 +53,23 @@ struct WeatherCardView: View {
                 .frame(minHeight: 24)
             }
         }
-        .task { await load() }
+        .task(id: refreshDayKey) { await load() }
+    }
+
+    // MARK: - 刷新时机
+
+    /// `.task(id:)` 的刷新键：今天 00:00。
+    ///
+    /// 天气数据整体锚在「今天」——「当前温度」和逐日预报都按请求那一刻算，所以：
+    /// · 切换选中日期**不需要**重新请求：快照里的 days 已覆盖前 3 天 ~ 后 14 天，
+    ///   dayWeatherBlock 直接按日期查表；窗口外的日期重取也拉不到（API 日期参数是固定的）。
+    /// · 跨天**必须**重新请求：否则「当前温度」会一直停在昨天。
+    /// 读一下 scenePhase 没有别的用途——body 里的 Date() 自身不具反应性，借它让
+    /// 「回到前台」也触发本视图重算；同一自然日内键不变，`.task(id:)` 因此不会重复请求
+    /// （inactive 抖动同理不触发，因为刷新键没变）。
+    private var refreshDayKey: Date {
+        _ = scenePhase
+        return Calendar(identifier: .gregorian).startOfDay(for: Date())
     }
 
     // MARK: - 当日天气文字块（图标随天气由 WeatherIconView 承担，这里只放文字）
@@ -132,7 +151,7 @@ struct WeatherCardView: View {
     // MARK: - 动作
 
     private func load() async {
-        // 每次切日期都重新请求，但不清空当前 result（避免闪 loading）
+        // 不清空当前 result（避免闪 loading）；只有新结果成功时才替换，失败/未授权保留上次快照
         let newResult = await WeatherProvider.currentWeather()
         // 只有新结果成功时才替换；失败/未授权保留上次快照
         switch newResult {
