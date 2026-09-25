@@ -175,7 +175,8 @@ struct SettingsView: View {
             }
             .pickerStyle(.navigationLink)
         } header: {
-            QingheSectionHeader(NSLocalizedString("图标", comment: ""), subtitle: "主图标 / 春节限定自动切换")
+            QingheSectionHeader(NSLocalizedString("图标", comment: ""),
+                                subtitle: NSLocalizedString("主图标 / 春节限定自动切换", comment: ""))
         }
     }
     #endif
@@ -685,10 +686,12 @@ struct SettingsView: View {
                 EventService.shared.rescheduleAllReminders()
             }
             toast = .init(kind: .success,
-                          text: "\(source.displayName) 导入：新增 \(r.added) · 更新 \(r.updated)")
+                          text: String(format: NSLocalizedString("%@ 导入：新增 %d · 更新 %d", comment: ""),
+                                       source.displayName, r.added, r.updated))
         } else {
             toast = .init(kind: .warning,
-                          text: "\(source.displayName) 无新增（已存在或被策略跳过）")
+                          text: String(format: NSLocalizedString("%@ 无新增（已存在或被策略跳过）", comment: ""),
+                                       source.displayName))
         }
     }
 

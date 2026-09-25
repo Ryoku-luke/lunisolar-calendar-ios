@@ -37,14 +37,18 @@ struct DateJumpView: View {
                 Section("选择日期") {
                     Picker("年", selection: $year) {
                         ForEach(ChineseCalendar.minYear...ChineseCalendar.maxYear, id: \.self) {
-                            Text("\($0) 年").tag($0)
+                            Text(String(format: NSLocalizedString("%d 年", comment: ""), $0)).tag($0)
                         }
                     }
                     Picker("月", selection: $month) {
-                        ForEach(1...12, id: \.self) { Text("\($0) 月").tag($0) }
+                        ForEach(1...12, id: \.self) {
+                            Text(String(format: NSLocalizedString("%d 月", comment: ""), $0)).tag($0)
+                        }
                     }
                     Picker("日", selection: $day) {
-                        ForEach(1...maxDaysInMonth, id: \.self) { Text("\($0) 日").tag($0) }
+                        ForEach(1...maxDaysInMonth, id: \.self) {
+                            Text(String(format: NSLocalizedString("%d 日", comment: ""), $0)).tag($0)
+                        }
                     }
                     .onChange(of: month, initial: false) { _, _ in
                         if day > maxDaysInMonth { day = maxDaysInMonth }
@@ -82,7 +86,12 @@ struct DateJumpView: View {
                     // 用户自行重新调整日期 picker
                 }
             } message: {
-                Text("清和日历支持的日期范围为 \(ChineseCalendar.minYear) 年 1 月至 \(ChineseCalendar.maxYear) 年 12 月。\n请在此范围内选择，或点击上方「回到今天」直接返回。")
+                // 拆成两行而不是在一个 key 里塞 `\n`：字符串目录里的换行键既难翻译也易出错
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(String(format: NSLocalizedString("清和日历支持的日期范围为 %d 年 1 月至 %d 年 12 月。", comment: ""),
+                                ChineseCalendar.minYear, ChineseCalendar.maxYear))
+                    Text(NSLocalizedString("请在此范围内选择，或点击上方「回到今天」直接返回。", comment: ""))
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .platformTopBarTrailing) {

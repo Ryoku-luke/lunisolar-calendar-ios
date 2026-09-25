@@ -266,7 +266,7 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
     }
 
     public var timeDisplay: String {
-        if isAllDay { return "全天" }
+        if isAllDay { return NSLocalizedString("全天", comment: "") }
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm"
         return "\(fmt.string(from: startDate)) - \(fmt.string(from: endDate))"
@@ -274,6 +274,22 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
 
     /// SwiftUI / Widget 显示用时间（与 timeDisplay 同义，UI 层统一用 display 前缀）
     public var displayTimeRange: String { timeDisplay }
+
+    /// 本地化的星期短名（zh: 周三 / en: Wed / ja: 水）
+    ///
+    /// 用 DateFormatter 而非 `Calendar.shortWeekdaySymbols`：后者的数组顺序随
+    /// 该日历的 `firstWeekday` 变化，按"周日=1"直接取下标会在周一起始的地区错位。
+    /// 这里固定构造 2026-01-04（周日）起的日期，语义无歧义。
+    static func weekdayName(_ weekday: Int) -> String {
+        let fmt = DateFormatter()
+        fmt.locale = .current
+        fmt.calendar = Calendar(identifier: .gregorian)
+        fmt.dateFormat = "EEE"
+        var dc = DateComponents()
+        dc.year = 2026; dc.month = 1
+        dc.day = 3 + max(1, min(7, weekday))
+        return Calendar(identifier: .gregorian).date(from: dc).map(fmt.string(from:)) ?? ""
+    }
 
     // MARK: - 重复规则文本（列表/详情页显示 + 编辑页锚点提示）
 
@@ -283,26 +299,26 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         let cal = Calendar(identifier: .gregorian)
         switch repeatRule {
         case .never:      return ""
-        case .daily:      return "每天"
-        case .workday:    return "每个工作日"
+        case .daily:      return NSLocalizedString("每天", comment: "")
+        case .workday:    return NSLocalizedString("每个工作日", comment: "")
         case .weekly:
             let weekday = cal.component(.weekday, from: startDate)
-            let names = ["周日","周一","周二","周三","周四","周五","周六"]
-            let idx = max(0, min(6, weekday - 1))
-            return "每周\(names[idx])"
+            return String(format: NSLocalizedString("每周%@", comment: ""), Self.weekdayName(weekday))
         case .monthly:
             let day = cal.component(.day, from: startDate)
-            return "每月\(day)日"
+            return String(format: NSLocalizedString("每月%d日", comment: ""), day)
         case .yearly:
             let c = cal.dateComponents([.month, .day], from: startDate)
             let m = max(1, c.month ?? 1)
             let d = max(1, c.day ?? 1)
-            return "公历 \(m)月\(d)日 · 每年"
+            return String(format: NSLocalizedString("公历 %d月%d日 · 每年", comment: ""), m, d)
         case .lunarAnnually:
+            // 农历月/日名（正月/十五…）属历法专名，不随界面语言翻译
             if let lunar = startLunar {
-                return "农历\(lunar.monthName)\(lunar.dayName) · 每年"
+                return String(format: NSLocalizedString("农历%@%@ · 每年", comment: ""),
+                              lunar.monthName, lunar.dayName)
             }
-            return "农历生日 · 每年"
+            return NSLocalizedString("农历生日 · 每年", comment: "")
         }
     }
 
@@ -310,32 +326,38 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
     public static func repeatAnchorDescription(rule: RepeatRule, anchor: Date) -> String {
         // 重复规则语义一律按公历解析（BUG #30 修复）
         let cal = Calendar(identifier: .gregorian)
+        let anchorText = Self.dateShort(anchor)
         switch rule {
         case .never:
-            return "仅在所选日期出现一次"
+            return NSLocalizedString("仅在所选日期出现一次", comment: "")
         case .daily:
-            return "自 \(Self.dateShort(anchor)) 起，每天都会出现"
+            return String(format: NSLocalizedString("自 %@ 起，每天都会出现", comment: ""), anchorText)
         case .workday:
-            return "自 \(Self.dateShort(anchor)) 起，周一至周五（工作日）都会出现"
+            return String(format: NSLocalizedString("自 %@ 起，周一至周五（工作日）都会出现", comment: ""),
+                          anchorText)
         case .weekly:
             let weekday = cal.component(.weekday, from: anchor)
-            let names = ["周日","周一","周二","周三","周四","周五","周六"]
-            let idx = max(0, min(6, weekday - 1))
-            return "每周\(names[idx]) 重复（锚点：\(Self.dateShort(anchor))）"
+            return String(format: NSLocalizedString("每周%@ 重复（锚点：%@）", comment: ""),
+                          Self.weekdayName(weekday), anchorText)
         case .monthly:
             let day = cal.component(.day, from: anchor)
-            return "每月\(day)日 重复（锚点：\(Self.dateShort(anchor))）"
+            return String(format: NSLocalizedString("每月%d日 重复（锚点：%@）", comment: ""),
+                          day, anchorText)
         case .yearly:
             let c = cal.dateComponents([.month, .day], from: anchor)
             let m = max(1, c.month ?? 1)
             let d = max(1, c.day ?? 1)
-            return "公历每年 \(m) 月 \(d) 日 重复（锚点：\(Self.dateShort(anchor))）"
+            return String(format: NSLocalizedString("公历每年 %d 月 %d 日 重复（锚点：%@）", comment: ""),
+                          m, d, anchorText)
         case .lunarAnnually:
             if let lunar = ChineseCalendar.lunarDateSafe(from: anchor) {
-                let leapHint = lunar.isLeapMonth ? "（闰月生日在非闰月年按同月同日过）" : ""
-                return "农历每年 \(lunar.monthName)\(lunar.dayName) 重复\(leapHint)（公历锚点：\(Self.dateShort(anchor))）"
+                let leapHint = lunar.isLeapMonth
+                    ? NSLocalizedString("（闰月生日在非闰月年按同月同日过）", comment: "")
+                    : ""
+                return String(format: NSLocalizedString("农历每年 %@%@ 重复%@（公历锚点：%@）", comment: ""),
+                              lunar.monthName, lunar.dayName, leapHint, anchorText)
             }
-            return "农历每年 重复（公历锚点：\(Self.dateShort(anchor))）"
+            return String(format: NSLocalizedString("农历每年 重复（公历锚点：%@）", comment: ""), anchorText)
         }
     }
 

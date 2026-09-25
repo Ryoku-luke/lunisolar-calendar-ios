@@ -5,15 +5,34 @@ import LunarCore
 struct WeekHeaderView: View {
     /// 每周起始日（Calendar weekday 语义：1=周日，2=周一）
     var weekStart: Int = 1
-    private let weekdays = ["日","一","二","三","四","五","六"]
     @Environment(\.horizontalSizeClass) private var hSizeClass
     private var isRegular: Bool { hSizeClass == .regular }
+
+    /// 本地化的星期窄名（中文「日一二…」/ 英文「S M T…」/ 日文「日月火水木金土」）。
+    ///
+    /// 此前是硬编码数组 `["日","一",…]`：中文看着对，**日文是错的**（日文习惯
+    /// 日月火水木金土），英文界面也不该出现汉字。改用 Locale 的窄名一次算好。
+    /// 静态缓存是安全的：iOS 在用户切换语言时会重启 App，不存在运行期换语言。
+    private static let narrowWeekdays: [String] = {
+        let fmt = DateFormatter()
+        fmt.locale = .current
+        fmt.calendar = Calendar(identifier: .gregorian)
+        fmt.dateFormat = "EEEEE"
+        let cal = Calendar(identifier: .gregorian)
+        // 2026-01-04 是周日 → 依次取周日…周六
+        return (1...7).map { weekday -> String in
+            var dc = DateComponents()
+            dc.year = 2026; dc.month = 1; dc.day = 3 + weekday
+            return cal.date(from: dc).map(fmt.string(from:)) ?? ""
+        }
+    }()
+
     var body: some View {
         HStack(spacing: 0) {
             ForEach(0..<7, id: \.self) { idx in
                 // 按起始日旋转顺序；weekday 1=周日 / 7=周六 恒为红色（周末语义与起始日无关）
                 let wd = ((idx + weekStart - 1) % 7) + 1
-                Text(weekdays[wd - 1])
+                Text(Self.narrowWeekdays[wd - 1])
                     // 复用 AppTheme.Font 阶梯（caption/caption2），避免散落硬编码
                     .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
                     .foregroundStyle(wd == 1 || wd == 7
@@ -181,8 +200,21 @@ struct DayCellView: View {
                    value: isSelected)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(date.day)日 \(lunar.shortDisplayString)\(hasEvents ? " \(eventCount)项日程" : "")\(isToday ? " 今天" : "")")
+        .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// VoiceOver 读到的日期单元格文案。
+    /// 原本是一行内联插值：字符串上下文不会查表，英文界面会念出中文与「项日程」。
+    /// 农历月/日名属历法专名，不随界面语言翻译。
+    private var accessibilityText: String {
+        var parts = [String(format: NSLocalizedString("%d日", comment: ""), date.day),
+                     lunar.shortDisplayString]
+        if hasEvents {
+            parts.append(String(format: NSLocalizedString("%d 项日程", comment: ""), eventCount))
+        }
+        if isToday { parts.append(NSLocalizedString("今天", comment: "")) }
+        return parts.joined(separator: " ")
     }
 
     /// 格子背景（整格包裹公历+农历+事件行）：

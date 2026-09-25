@@ -277,15 +277,16 @@ struct EventEditView: View {
     }
 
     private func reminderLabel(_ minutes: Int) -> String {
+        // String 上下文：必须显式 NSLocalizedString，否则永远显示中文
         switch minutes {
-        case 0: return "准时"
-        case 5: return "5 分钟前"
-        case 10: return "10 分钟前"
-        case 15: return "15 分钟前"
-        case 30: return "30 分钟前"
-        case 60: return "1 小时前"
-        case 1440: return "1 天前"
-        default: return "\(minutes) 分钟前"
+        case 0: return NSLocalizedString("准时", comment: "")
+        case 5: return NSLocalizedString("5 分钟前", comment: "")
+        case 10: return NSLocalizedString("10 分钟前", comment: "")
+        case 15: return NSLocalizedString("15 分钟前", comment: "")
+        case 30: return NSLocalizedString("30 分钟前", comment: "")
+        case 60: return NSLocalizedString("1 小时前", comment: "")
+        case 1440: return NSLocalizedString("1 天前", comment: "")
+        default: return String(format: NSLocalizedString("%d 分钟前", comment: ""), minutes)
         }
     }
 
