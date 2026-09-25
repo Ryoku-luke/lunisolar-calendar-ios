@@ -849,33 +849,39 @@ public final class EventStore {
         writeSet(deletedEventIDs, to: deletedIDsURL)
     }
 
-    /// 仅在 save 成功后触发：把今日统计写成小组件快照
+    /// 仅在 save 成功后触发：把「今天起 windowDays 天」的待办统计写成小组件快照。
+    ///
+    /// 逐日写入而不是只写今天：小组件时间线一次生成 8 条 entry（黄历/农历逐日变化），
+    /// 旧实现只有今天那条有真实数据、其余为 0 —— 过午夜后小组件切到「明天」那条，
+    /// 就会显示 0/0 与「今日还没安排」，与真实数据矛盾。
     private func writeWidgetSnapshotIfNeeded() {
         let cal = Calendar(identifier: .gregorian)
         let today = cal.startOfDay(for: Date())
-        let todays = events.filter { $0.occurs(on: today, cachedStartLunar: lunar(for: $0)) }
-        let completed = todays.filter(\.isCompleted).count
-        let top = todays
-            .sorted { (l, r) -> Bool in
-                if l.priority != r.priority { return l.priority > r.priority }
-                return l.startDate < r.startDate
-            }
-            .prefix(5)
-            .map { ev in
-                WidgetTodoTitle(
-                    id: ev.id.uuidString,
-                    title: ev.title,
-                    isCompleted: ev.isCompleted,
-                    priorityHex: ev.priority.widgetHex
-                )
-            }
-        let snap = WidgetSharedSnapshot(
-            updatedAt: Date(),
-            targetDay: today,
-            todaysEventsCount: todays.count,
-            todaysCompletedCount: completed,
-            topTitles: top
-        )
+        let days: [WidgetDaySnapshot] = (0..<WidgetSnapshotStore.windowDays).compactMap { offset in
+            guard let day = cal.date(byAdding: .day, value: offset, to: today) else { return nil }
+            let dayEvents = events.filter { $0.occurs(on: day, cachedStartLunar: lunar(for: $0)) }
+            let top = dayEvents
+                .sorted { (l, r) -> Bool in
+                    if l.priority != r.priority { return l.priority > r.priority }
+                    return l.startDate < r.startDate
+                }
+                .prefix(5)
+                .map { ev in
+                    WidgetTodoTitle(
+                        id: ev.id.uuidString,
+                        title: ev.title,
+                        isCompleted: ev.isCompleted,
+                        priorityHex: ev.priority.widgetHex
+                    )
+                }
+            return WidgetDaySnapshot(
+                day: day,
+                eventsCount: dayEvents.count,
+                completedCount: dayEvents.filter(\.isCompleted).count,
+                topTitles: top
+            )
+        }
+        let snap = WidgetSharedSnapshot(updatedAt: Date(), targetDay: today, days: days)
         _ = WidgetSnapshotStore.write(snap, appGroupID: widgetAppGroupID)
         #if canImport(WidgetKit)
         // P2 修复：快照写入后主动刷新小组件时间线。否则用户新增/完成日程后，
@@ -883,6 +889,21 @@ public final class EventStore {
         // reloadAllTimelines 由系统节流，防抖后的低频保存不会造成性能问题。
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+    }
+
+    /// 启动 / 回到前台时调用：把小组件快照窗口滑动到当前这一天。
+    ///
+    /// 只有窗口首日已经不是今天时才重写并重载——否则每次回前台都会触发一次
+    /// WidgetKit 重载（会被系统节流），而窗口其实已经覆盖今天。
+    public func refreshWidgetSnapshotIfDayChanged() {
+        let cal = Calendar(identifier: .gregorian)
+        let today = cal.startOfDay(for: Date())
+        if let existing = WidgetSnapshotStore.read(appGroupID: widgetAppGroupID),
+           let first = existing.days.map(\.day).min(),
+           cal.isDate(first, inSameDayAs: today) {
+            return
+        }
+        writeWidgetSnapshotIfNeeded()
     }
 
     private func insertSampleData() {

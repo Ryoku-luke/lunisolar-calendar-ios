@@ -95,7 +95,9 @@ public struct LunisolarWidgetTimelineProvider: TimelineProvider {
 
     /// 单条快照（Widget Gallery 预览）
     public func getSnapshot(in context: Context, completion: @escaping (LunisolarWidgetEntry) -> Void) {
-        completion(makeEntry(for: Date(), useSharedSnapshot: true))
+        let day = Calendar(identifier: .gregorian).startOfDay(for: Date())
+        completion(makeEntry(for: day,
+                             daySnapshot: WidgetSnapshotStore.daySnapshot(for: day, appGroupID: appGroupID)))
     }
 
     /// 完整 Timeline：今日 + 未来 7 天，每天一条
@@ -103,11 +105,15 @@ public struct LunisolarWidgetTimelineProvider: TimelineProvider {
         let cal = Calendar(identifier: .gregorian)
         let today = cal.startOfDay(for: Date())
 
+        // 一次读取整份快照（逐日窗口），时间线里每条 entry 都取真实数据。
+        // 旧实现只让 dayOffset == 0 读快照、其余 7 天硬编码为 0 —— 过午夜小组件
+        // 切到「明天」那条 entry 时就会显示 0/0 与「今日还没安排」。
+        let snapshot = WidgetSnapshotStore.read(appGroupID: appGroupID)
+
         var entries: [LunisolarWidgetEntry] = []
-        for dayOffset in 0..<8 {
+        for dayOffset in 0..<WidgetSnapshotStore.windowDays {
             guard let d = cal.date(byAdding: .day, value: dayOffset, to: today) else { continue }
-            // 仅"今天"尝试从主 App 共享快照读真实数据
-            entries.append(makeEntry(for: d, useSharedSnapshot: dayOffset == 0))
+            entries.append(makeEntry(for: d, daySnapshot: snapshot?.day(for: d)))
         }
 
         // 下一次刷新：明天 00:05（确保不跟系统午夜高峰抢）
@@ -123,36 +129,25 @@ public struct LunisolarWidgetTimelineProvider: TimelineProvider {
 
     // MARK: - 组装单条 Entry
 
-    private func makeEntry(for day: Date, useSharedSnapshot: Bool) -> LunisolarWidgetEntry {
+    /// - Parameter daySnapshot: 该日在共享快照窗口内的待办统计；不在窗口内时（App 已超过
+    ///   窗口天数没运行过）为 nil，此时待办计数回退为 0。
+    private func makeEntry(for day: Date, daySnapshot: WidgetDaySnapshot?) -> LunisolarWidgetEntry {
         let r = HuangliDBProvider.resolve(date: day)
         // P2 优化：复用同一次农历转换，避免 festivals + primaryFestival 各转一次
         let lunar = ChineseCalendar.lunarDateSafe(from: day)
         let fes = FestivalManager.festivals(on: day, lunar: lunar)
         let hex = FestivalManager.primaryFestival(on: day, lunar: lunar)?.accentHex ?? "#C41A1A"
 
-        if useSharedSnapshot,
-           let snap = WidgetSnapshotStore.read(appGroupID: appGroupID) {
-            return LunisolarWidgetEntry(
-                date: day,
-                huangli: r.huangliDay,
-                lunar: r.huangliDay?.lunar,
-                festivals: Array(fes.prefix(2)),
-                primaryFestivalHex: hex,
-                todaysEventsCount: snap.todaysEventsCount,
-                completedCount: snap.todaysCompletedCount,
-                hasFestival: !fes.isEmpty,
-                topTitles: snap.topTitles
-            )
-        }
         return LunisolarWidgetEntry(
             date: day,
             huangli: r.huangliDay,
             lunar: r.huangliDay?.lunar,
             festivals: Array(fes.prefix(2)),
             primaryFestivalHex: hex,
-            todaysEventsCount: 0,
-            completedCount: 0,
-            hasFestival: !fes.isEmpty
+            todaysEventsCount: daySnapshot?.eventsCount ?? 0,
+            completedCount: daySnapshot?.completedCount ?? 0,
+            hasFestival: !fes.isEmpty,
+            topTitles: daySnapshot?.topTitles ?? []
         )
     }
 }

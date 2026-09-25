@@ -46,7 +46,13 @@ public final class AppLifecycleCoordinator {
         TimeCapsuleCoordinator.shared.refresh()
         #endif
 
-        // 3. 装配 CloudKit 同步（如果用户上次开启过）
+        // 3. 小组件快照窗口滑动到「今天」。
+        //    跨天后窗口首日还是昨天，小组件拿不到今天的桶 → 「今日待办」显示 0/0
+        //    与「今日还没安排」，与真实数据矛盾。快照原本只在数据变更时写，
+        //    所以「打开 App」这条路径必须补上。
+        store.refreshWidgetSnapshotIfDayChanged()
+
+        // 4. 装配 CloudKit 同步（如果用户上次开启过）
         await setupCloudSyncIfNeeded()
     }
 
@@ -57,6 +63,7 @@ public final class AppLifecycleCoordinator {
         case .active:
             Task { @MainActor in
                 await NotificationManager.shared.rescheduleAllReminders(in: store)
+                store.refreshWidgetSnapshotIfDayChanged()
                 #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
                 TimeCapsuleCoordinator.shared.refresh()
                 #endif

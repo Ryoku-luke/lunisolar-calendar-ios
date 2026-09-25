@@ -2,108 +2,164 @@ import XCTest
 @testable import LunisolarCalendarApp
 
 // MARK: - Widget 共享快照（主 App ⇄ Widget 跨进程数据桥）
-// （注意：WidgetKit 本身 Linux 编译不可用，所以我们只测 SnapshotStore 读写与过期逻辑；
-//  Widget views + Provider 全部用 #if canImport(WidgetKit) 包着，Linux 不会编译到。）
+//
+// 快照从「只存今天」改为「今天起 windowDays 天的逐日窗口」：
+// 小组件时间线一次生成 8 条 entry（黄历/农历逐日变化），必须每天都有真实统计，
+// 否则过午夜切到「明天」那条 entry 时会显示 0/0 与「今日还没安排」，与数据矛盾。
+// （WidgetKit 在 macOS 命令行不可用，这里只测 SnapshotStore 与 EventStore 的写入。）
 
 final class WidgetSnapshotTests: XCTestCase {
 
-    // 基础读写：写了能读回来，字段全部保留
+    private let cal = Calendar(identifier: .gregorian)
+
+    private func title(_ id: String, _ text: String, done: Bool = false) -> WidgetTodoTitle {
+        WidgetTodoTitle(id: id, title: text, isCompleted: done, priorityHex: "#2563EB")
+    }
+
+    private func bucket(_ offset: Int, count: Int, completed: Int = 0,
+                        titles: [WidgetTodoTitle] = []) -> WidgetDaySnapshot {
+        let today = cal.startOfDay(for: Date())
+        return WidgetDaySnapshot(
+            day: cal.date(byAdding: .day, value: offset, to: today)!,
+            eventsCount: count,
+            completedCount: completed,
+            topTitles: titles
+        )
+    }
+
+    // MARK: 逐日窗口的读写
+
     func testWriteThenReadRoundTrip() {
-        let today = Calendar(identifier: .gregorian).startOfDay(for: Date())
-        let titles = [
-            WidgetTodoTitle(id: "a", title: "读 Swift Concurrency", isCompleted: true,  priorityHex: "#2563EB"),
-            WidgetTodoTitle(id: "b", title: "提交代码",         isCompleted: false, priorityHex: "#C41A1A")
-        ]
+        let today = cal.startOfDay(for: Date())
         let snap = WidgetSharedSnapshot(
             updatedAt: Date(),
             targetDay: today,
-            todaysEventsCount: 8,
-            todaysCompletedCount: 3,
-            topTitles: titles
+            days: [bucket(0, count: 8, completed: 3,
+                          titles: [title("a", "读 Swift Concurrency", done: true), title("b", "提交代码")]),
+                   bucket(1, count: 2)]
         )
         let customName = "widget_snapshot_\(UUID().uuidString).json"
-        let ok = WidgetSnapshotStore.write(snap, appGroupID: nil, fileName: customName)
-        XCTAssertTrue(ok)
-        let got = WidgetSnapshotStore.read(appGroupID: nil, fileName: customName, maxAge: 3600)
+
+        XCTAssertTrue(WidgetSnapshotStore.write(snap, appGroupID: nil, fileName: customName))
+
+        let got = WidgetSnapshotStore.read(appGroupID: nil, fileName: customName)
         XCTAssertNotNil(got)
-        XCTAssertEqual(got?.todaysEventsCount, 8)
-        XCTAssertEqual(got?.todaysCompletedCount, 3)
-        XCTAssertEqual(got?.topTitles.count, 2)
-        XCTAssertEqual(got?.topTitles.first?.title, "读 Swift Concurrency")
-        XCTAssertEqual(got?.topTitles.first?.isCompleted, true)
-        XCTAssertEqual(got?.topTitles.first?.priorityHex, "#2563EB")
+        XCTAssertEqual(got?.days.count, 2)
+        XCTAssertEqual(got?.day(for: today)?.eventsCount, 8)
+        XCTAssertEqual(got?.day(for: today)?.completedCount, 3)
+        XCTAssertEqual(got?.day(for: today)?.topTitles.count, 2)
+        XCTAssertEqual(got?.day(for: today)?.topTitles.first?.title, "读 Swift Concurrency")
+        XCTAssertEqual(got?.day(for: today)?.topTitles.first?.priorityHex, "#2563EB")
     }
 
-    // 过期策略：>6h 的旧快照读不到（手机关机几天的情况）
-    func testReadIgnoresStaleSnapshot() {
-        let cal = Calendar(identifier: .gregorian)
+    /// 回归：明天那份必须能取到（旧实现里明天恒为 0/0，跨天后即穿帮）
+    func testTomorrowBucketIsReadable() {
         let today = cal.startOfDay(for: Date())
-        let old = Date().addingTimeInterval(-8 * 3600) // 8 小时前
-        var snap = WidgetSharedSnapshot(
-            updatedAt: old,
-            targetDay: today,
-            todaysEventsCount: 99,
-            todaysCompletedCount: 99,
-            topTitles: []
-        )
-        // updatedAt 不可改，走 encode → 手动替换字段 → decode 的黑科技不可取；
-        // 直接测另一条：targetDay 不是今天也读不到（更稳定）
-        let yesterday = cal.date(byAdding: .day, value: -1, to: today)!
-        snap = WidgetSharedSnapshot(
-            updatedAt: Date(),
-            targetDay: yesterday,
-            todaysEventsCount: 99,
-            todaysCompletedCount: 99,
-            topTitles: []
-        )
-        let customName = "widget_snapshot_stale_\(UUID().uuidString).json"
-        _ = WidgetSnapshotStore.write(snap, appGroupID: nil, fileName: customName)
-        let got = WidgetSnapshotStore.read(appGroupID: nil, fileName: customName, maxAge: 3600)
-        XCTAssertNil(got, "昨天的快照不应该被读出来（防过期日期错位）")
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today)!
+        let snap = WidgetSharedSnapshot(updatedAt: Date(), targetDay: today,
+                                        days: [bucket(0, count: 1), bucket(1, count: 6, completed: 2)])
+
+        XCTAssertEqual(snap.day(for: tomorrow)?.eventsCount, 6)
+        XCTAssertEqual(snap.day(for: tomorrow)?.completedCount, 2)
     }
 
-    // 不存在的文件 → 读不到（不会崩）
+    /// 窗口外（昨天）取不到桶——而不是像旧实现那样整份快照作废
+    func testDayLookupOutsideWindowReturnsNil() {
+        let today = cal.startOfDay(for: Date())
+        let snap = WidgetSharedSnapshot(updatedAt: Date(), targetDay: today, days: [bucket(0, count: 5)])
+
+        XCTAssertNil(snap.day(for: cal.date(byAdding: .day, value: -1, to: today)!))
+        XCTAssertEqual(snap.day(for: today)?.eventsCount, 5)
+    }
+
+    /// 不存在的文件 → 读不到（不会崩）
     func testReadMissingReturnsNil() {
-        let got = WidgetSnapshotStore.read(
-            appGroupID: nil,
-            fileName: "never_exist_\(UUID().uuidString).json",
-            maxAge: 3600
-        )
-        XCTAssertNil(got)
+        let missing = "never_exist_\(UUID().uuidString).json"
+        XCTAssertNil(WidgetSnapshotStore.read(appGroupID: nil, fileName: missing))
+        XCTAssertNil(WidgetSnapshotStore.daySnapshot(for: Date(), appGroupID: nil, fileName: missing))
     }
 
-    // EventStore.save 后会自动写一份快照：今日统计能真实反映 events 状态
+    /// 旧格式文件（无 days 字段）解码失败 → nil，由调用方回退占位数据（不读出错误数据）
+    func testLegacySnapshotFileDecodesToNil() throws {
+        let customName = "widget_snapshot_legacy_\(UUID().uuidString).json"
+        let legacy = """
+        {"updatedAt":"2026-09-25T00:00:00Z","targetDay":"2026-09-25T00:00:00Z",\
+        "todaysEventsCount":9,"todaysCompletedCount":4,"topTitles":[]}
+        """
+        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(customName)
+        try Data(legacy.utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        XCTAssertNil(WidgetSnapshotStore.read(appGroupID: nil, fileName: customName),
+                     "旧格式没有 days 字段，应解码失败并回退，而不是读出错误数据")
+    }
+
+    // MARK: EventStore 写入（窗口内每天都要真实）
+
     @MainActor
-    func testEventStoreAutoWritesSnapshotTodayCounts() {
+    func testEventStoreWritesWindowWithRealCounts() {
         let store = makeIsolatedEventStore()
-        // 先清空，避免示例数据干扰
         _ = store.clearAll(skipSync: true)
 
-        let cal = Calendar(identifier: .gregorian)
         let today = cal.startOfDay(for: Date())
-        guard let t1 = cal.date(byAdding: .hour, value: 10, to: today),
-              let t2 = cal.date(byAdding: .hour, value: 14, to: today) else {
-            XCTFail("构造今日时间失败"); return
+        guard let t10 = cal.date(byAdding: .hour, value: 10, to: today),
+              let t14 = cal.date(byAdding: .hour, value: 14, to: today),
+              let tomorrow10 = cal.date(byAdding: .day, value: 1, to: t10) else {
+            XCTFail("构造时间失败"); return
         }
 
-        var a = CalendarEvent(id: UUID(), title: "晨会", startDate: t1, isAllDay: false, priority: .urgent)
-        a.isCompleted = true
-        let b = CalendarEvent(id: UUID(), title: "评审", startDate: t2, isAllDay: false, priority: .high)
-        store.add(a, skipSync: true)
-        store.add(b, skipSync: true)
+        var done = CalendarEvent(id: UUID(), title: "晨会", startDate: t10, isAllDay: false, priority: .urgent)
+        done.isCompleted = true
+        store.add(done, skipSync: true)
+        store.add(CalendarEvent(id: UUID(), title: "评审", startDate: t14, isAllDay: false, priority: .high),
+                  skipSync: true)
+        store.add(CalendarEvent(id: UUID(), title: "明日验收", startDate: tomorrow10, isAllDay: false, priority: .high),
+                  skipSync: true)
 
-        // EventStore.save() 内部做了 debounced，Linux XCTest 下 DispatchQueue.main.asyncAfter 不保证执行
-        // 所以用测试专用 flush 接口强制立即落盘 → writeWidgetSnapshotIfNeeded
+        // 防抖在命令行测试下不保证执行，用测试专用接口强制立即落盘
         store._testFlushSave()
 
-        // EventStore.saveNow → writeWidgetSnapshotIfNeeded 写了快照，直接读
-        let got = WidgetSnapshotStore.read(appGroupID: nil, fileName: "widget_snapshot.json", maxAge: 60)
+        let got = WidgetSnapshotStore.read(appGroupID: nil, fileName: "widget_snapshot.json")
         XCTAssertNotNil(got, "EventStore.save 后应已写出 widget_snapshot.json")
-        XCTAssertEqual(got?.todaysEventsCount, 2)
-        XCTAssertEqual(got?.todaysCompletedCount, 1)
-        // 优先级排序：urgent 晨会应该排第一
-        XCTAssertEqual(got?.topTitles.first?.title, "晨会")
-        XCTAssertEqual(got?.topTitles.first?.isCompleted, true)
-        XCTAssertEqual(got?.topTitles.first?.priorityHex, Priority.urgent.widgetHex)
+        XCTAssertEqual(got?.days.count, WidgetSnapshotStore.windowDays, "窗口应覆盖时间线用到的每一天")
+
+        let todayBucket = got?.day(for: today)
+        XCTAssertEqual(todayBucket?.eventsCount, 2)
+        XCTAssertEqual(todayBucket?.completedCount, 1)
+        XCTAssertEqual(todayBucket?.topTitles.first?.title, "晨会", "优先级排序：urgent 晨会排第一")
+        XCTAssertEqual(todayBucket?.topTitles.first?.isCompleted, true)
+
+        // 关键回归：明天那份不能是 0 —— 这正是跨天后小组件显示 0/0 的根因
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today)!
+        XCTAssertEqual(got?.day(for: tomorrow)?.eventsCount, 1, "明日日程必须写进窗口")
+        XCTAssertEqual(got?.day(for: tomorrow)?.topTitles.first?.title, "明日验收")
+    }
+
+    /// 窗口首日仍是今天 → 不该重写（避免每次回前台都触发 WidgetKit 重载）；跨天 → 重写
+    @MainActor
+    func testRefreshOnlyRewritesWhenDayChanged() {
+        let store = makeIsolatedEventStore()
+        let fileName = "widget_snapshot.json"
+        let today = cal.startOfDay(for: Date())
+
+        // 先放一份「首日 = 今天」的窗口
+        let fresh = WidgetSharedSnapshot(updatedAt: Date(), targetDay: today, days: [bucket(0, count: 3)])
+        XCTAssertTrue(WidgetSnapshotStore.write(fresh, appGroupID: nil, fileName: fileName))
+
+        store.refreshWidgetSnapshotIfDayChanged()
+        XCTAssertEqual(WidgetSnapshotStore.read(appGroupID: nil, fileName: fileName)?.days.count, 1,
+                       "窗口已覆盖今天时不应重写（被重写会变成满窗口）")
+
+        // 跨天：窗口首日成了昨天，应重写成以今天开头
+        let stale = WidgetSharedSnapshot(
+            updatedAt: Date().addingTimeInterval(-86400),
+            targetDay: cal.date(byAdding: .day, value: -1, to: today)!,
+            days: [bucket(-1, count: 9)]
+        )
+        XCTAssertTrue(WidgetSnapshotStore.write(stale, appGroupID: nil, fileName: fileName))
+
+        store.refreshWidgetSnapshotIfDayChanged()
+        let after = WidgetSnapshotStore.read(appGroupID: nil, fileName: fileName)
+        XCTAssertNotNil(after?.day(for: today), "跨天后必须把窗口滑动到今天")
     }
 }
