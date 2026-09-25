@@ -107,37 +107,58 @@ Sources/LunisolarCalendarApp/
 ├── Views/                       # 月视图 / 年视图 / 日详情 / 编辑 / 倒数日 / 设置 / 天气卡
 └── Resources/                   # lunar_calendar.json、huangli_db.json、4 套 lproj 本地化
 Tools/                           # 黄历库生成工具 + 图标生成脚本
-Tests/LunisolarCalendarTests/    # 99 个单元测试
+Tests/LunisolarCalendarTests/    # 294 个单元测试（34 个套件）
 UITests/                         # UI 冒烟测试（3 条）
-docs/                            # 上架 / 签名 / 构建指引
+docs/                            # 上架 / 签名 / 构建 / 真机复测清单
 ```
 
 ## 构建与测试
 
 ```bash
 swift build        # 编译所有 Target
-swift test         # 运行 99 个单元测试
+swift test         # 运行 294 个单元测试
 ```
 
-> Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；本仓库**未配置 CI**（无 `.github/workflows`，推送不会触发构建）。本地自检：`swift build` / `swift test`（macOS 宿主，2026-09-24 起可用）+ `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS 视图层与宿主编译），详见 `docs/XCODE_BUILD_GUIDE.md` §4。
+> Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；本仓库**未配置 CI**（无 `.github/workflows`，推送不会触发构建）。本地自检：`swift build` / `swift test`（macOS 宿主，2026-09-24 起可用）+ `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS 视图层与宿主编译），详见 `docs/XCODE_BUILD_GUIDE.md` §4。真机行为验证见 [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md)。
 
-## 测试覆盖（99 条）
+## 测试覆盖（294 条 / 34 个套件）
 
 | 套件 | 数量 | 覆盖内容 |
 |---|---|---|
-| CalendarEventTests | 16 | 事件模型、农历重复规则、ICS 往返、优先级、节日主色 |
-| EventStoreTests | 16 | CRUD、搜索、合并策略、副本防护、toggleCompleted 通知重排 |
+| AIAssistantTests | 43 | AI 解析与执行：中文数字/时间词归一化、创建/查询/删除/修改意图、执行层写入与只读查询 |
+| AICommandParserEdgeCaseTests | 18 | 解析边界：显式年份、下周三、孤立时段词、凌晨/晚上 12 点、head/tail 日期分工 |
+| SolarTermGoldenTests | 17 | 24 节气真值点、交节时刻前后判定 |
+| EventStoreTests | 16 | CRUD、排序不变量、批量添加、合并策略、损坏文件隔离 |
+| CalendarEventTests | 16 | 事件模型、农历重复规则、ICS/CSV 往返、全天时长 |
+| QingheActivityCoordinatorTests | 12 | 时间胶囊候选挑选：优先级、窗口、全天过期、节气两小时 |
 | ICloudSyncTests | 11 | 推送/拉取/冲突/增量/离线上线/墓碑传播 |
-| SystemImportTests | 9 | DTO 映射、确定性 UUID、聚合、端到端无副本 |
-| DataPortabilityTests | 8 | JSON/ICS 往返、伪 UUID 稳定性、合并统计 |
+| SystemImportTests | 9 | DTO 映射、确定性 UUID、聚合、重复导入无副本、农历生日开关 |
+| QingheLiveActivityLifecycleTests | 9 | 实时活动 sync 的 start/update/end/none 判定 |
+| NotificationManagerTests | 9 | 「稍后提醒」ID 往返、保留策略、畸形 ID 安全 |
+| WidgetSnapshotTests | 8 | 快照读写、跨天窗口、过期检测 |
+| LegacyImportNoteCleanupTests | 8 | 旧 ICS 备注污染清理的边界与幂等 |
+| DataPortabilityTests | 8 | JSON/ICS 往返、时区、伪 UUID 稳定、合并计数 |
+| CountdownEventTests | 8 | 纪念日周年、2·29 回退、倒数日文案 |
+| CloudKitEntitlementTests | 8 | entitlement 探测（无 entitlement 不得放行） |
+| AllEventsGroupingTests | 8 | 全部日程分组：跨天不判已过去、组头夹取今天 |
+| HolidayProviderTests | 7 | 2025/2026 放假锚点、调休补班、未发布年份回退 |
+| DeepLinkRouterTests | 7 | qinghe:// 各路由与非法 URL 不受影响 |
+| TimeZoneGoldenTests | 6 | 节气/黄历/干支年与设备时区无关 |
+| SyncDirtyFlagTests | 6 | 脏标记推送后清理、失败集保留、事件时钟下限 |
+| ReminderPolicyTests | 6 | 提醒口径统一（是否排通知） |
+| ICSImportRobustnessTests | 6 | ICS 子块跳过、formatter 固定 locale/calendar |
 | HuangliDBProviderTests | 6 | 离散库命中、边界 fallback、DB↔算法一致性 |
-| LunarDateTests | 5 | 农历真值点、闰月、边界 nil 安全、反向转换 |
 | NotificationLunarAnniversaryTests | 5 | 农历周年提醒边界、闰月回退/匹配 |
-| HolidayProviderTests | 7 | 2025/2026 官方放假安排锚点、调休补班 |
-| CountdownEventTests | 7 | 纪念日周年（今年/跨年/2·29 回退）、倒数日文案 |
-| WidgetSnapshotTests | 4 | 快照读写、过期检测、自动写入 |
-| AccessibilityIDTests | 3 | 无障碍标识目录一致性 |
+| MiniMonthGridTests | 5 | 年视图小月历表头与星期对齐 |
+| LunarDateTests | 5 | 农历真值点、闰月、边界 nil 安全、反向转换 |
+| EventServiceTimeCapsuleTests | 5 | 事件→时间胶囊候选的优先级映射 |
+| FestivalGoldenTests | 4 | 节日农历↔公历往返、闰月不位移 |
+| EventServiceCompletionTests | 4 | 完成/取消完成幂等、批量完成 |
+| AIOccurrenceResolutionTests | 4 | 重复日程「命中那一次」的解析 |
+| LunarDataResourceTests | 3 | lunar_calendar.json 合法性与内置表一致 |
+| AccessibilityIDTests | 3 | 无障碍标识命名与唯一性 |
 | HuangliTests | 2 | 宜忌稳定性、冲煞验证 |
+| EventServiceIsolationTests | 2 | EventService 可注入，不倒向共享单例 |
 
 ## 配置说明
 
@@ -171,7 +192,8 @@ swift test         # 运行 99 个单元测试
 - [ ] 隐私权限文案（定位 / 通讯录 / 日历）已审核
 - [ ] App Icon 1024×1024 无透明通道（App Store 要求）
 - [ ] 春节限定备用图标声明完整
-- [ ] 真机测试：通知 → 提醒锁屏弹窗；iCloud 多设备一致性；Widget 快照刷新；灵动岛上下岛
+- [ ] 真机测试：按 [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md) 逐项走一遍
+      （至少覆盖通知锁屏弹窗、iCloud 多设备一致性、Widget 跨天刷新、灵动岛上下岛与互斥）
 - [ ] 隐私清单（Privacy Manifest）已声明
 - [ ] App Store Connect：截图、描述、关键词、隐私标签已填写
 
