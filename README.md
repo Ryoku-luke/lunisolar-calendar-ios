@@ -180,10 +180,47 @@ swift test         # 运行 309 个单元测试
 - 4 套 `lproj`（zh-Hans / zh-Hant / ja / en）已注册进主 App 与 Widget 两个 target 的 Resources phase
 - 新增语言：复制任一 `lproj` 并翻译键值即可，无需改代码
 
-### UI 测试
+### UI 测试（**target 尚未创建，以下为待办步骤**）
 
-- 新建 **UI Testing Bundle** target（命名 `LunisolarCalendarUITests`），Target Application 选 LunisolarCalendar
-- 将 `UITests/LunisolarCalendarUITests.swift` 加入该 target，Cmd+U 运行 3 条冒烟测试
+现状（2026-09-25 实测）：`UITests/LunisolarCalendarUITests.swift` 是**孤儿文件**——
+`xcodebuild -list` 只有 `LunisolarCalendar` 与 `LunisolarWidget` 两个 target，
+该文件不在任何 target 里，从未被编译或运行过。下面三步在 Xcode 里一次性完成：
+
+1. **File → New → Target…** → 选 **iOS → UI Testing Bundle** → Product Name 填
+   `LunisolarCalendarUITests`。
+2. 向导里 **Target Application** 选 `LunisolarCalendar`；Organization Identifier 随意，
+   Language 选 Swift（向导会顺手生成一个 `LunisolarCalendarUITests/XXXXUITests.swift` 模板文件）。
+3. 删掉向导生成的模板文件，改成把仓库里已有的 `UITests/LunisolarCalendarUITests.swift`
+   拖进工程（或右键 Add Files…），并在弹出的 target 勾选面板里**只勾 UI 测试 target**
+   （不要勾到 App target）。
+
+工程里没有单元测试 target 是**正常**的：309 条单测走 SwiftPM，用 `swift test` 跑。
+
+跑法两种：
+
+```bash
+# 命令行（可用于自动化；我这边也能跑）
+xcodebuild test -project LunisolarCalendar.xcodeproj -scheme LunisolarCalendar \
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
+  -only-testing:LunisolarCalendarUITests
+```
+
+- 或 Xcode 里选中 `LunisolarCalendar` scheme → **Cmd+U**。
+- 接线成功的判据：`xcodebuild -list` 的 Targets 里出现 `LunisolarCalendarUITests`。
+
+⚠️ **建好 target 后现有 3 条测试会失败，这是预期**——它们引用的界面文案已经不存在了：
+
+| 测试 | 问题 |
+|---|---|
+| `testAppLaunchesAndShowsCalendarTitle` | 断言导航栏标题 `「日历」`，与 `CalendarMonthView.swift:146` 的 `navigationTitle("日历")` 一致，**这条应该能过** |
+| `testNewEventEntryOpensEditor` | 断言按钮 `「保存修改」`——**全仓不存在这个文案**。编辑页的按钮是 `EventEditView.swift:219` 的 `isEditing ? 「保存」 : 「添加」`，新建时是「添加」。必然失败 |
+| `testDaySelectionUpdatesTodayCard` | 断言元素 `「月历网格」`——**全仓不存在这个标识**（只在注释里出现过），`grid` 变量取了却没用，实际只断言了 `staticTexts.count > 5`，是**空断言** |
+
+另外这 3 条全都用中文文案做选择器（如 `buttons["新建日程"]`），而代码里已经有稳定的无障碍标识
+（`AccessibilityID.monthNewEvent` = `calendar.month.new`、`todayJump`、`editSave`、`editDelete`）
+却一个都没用上——重写时应改用这些标识，免得文案一改测试就红。
+
+这 3 条需要按 UI 报告 §55 的 5 条真实用户路径重写后再运行。
 
 ## 发布清单（Release Checklist）
 
