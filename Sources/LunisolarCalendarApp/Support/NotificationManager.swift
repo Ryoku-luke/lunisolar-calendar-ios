@@ -195,15 +195,30 @@ public final class NotificationManager {
         return UUID(uuidString: String(rest.prefix(36)))
     }
 
+    /// 从「稍后提醒」ID 中取回其触发时刻序号（ID 尾部的 epoch 秒）；无法解析返回 0。
+    /// 用 `lastIndex`：UUID 自身含连字符（8-4-4-4-12），分隔符是**最后一个**连字符。
+    static func snoozeEpoch(of identifier: String) -> Int {
+        guard identifier.hasPrefix(snoozeIdentifierPrefix) else { return 0 }
+        let rest = identifier.dropFirst(snoozeIdentifierPrefix.count)
+        guard let dash = rest.lastIndex(of: "-") else { return 0 }
+        return Int(rest[rest.index(after: dash)...]) ?? 0
+    }
+
     /// 从一批 pending 通知 ID 中挑出**应当保回**的「稍后提醒」ID：
-    /// 前缀为 snooze- 且其所属事件仍然存在（事件已删除就不该再为它提醒）。
+    /// 前缀为 snooze-、所属事件仍然存在（事件已删除不该继续提醒），
+    /// 且同一事件只保回**最新**的一条（用户连点「稍后提醒」不应叠加多条通知）。
     /// 抽成纯函数，是为了让「重排时哪些 snooze 该留」这条判定可以单测。
     static func snoozeIdentifiersToPreserve(from identifiers: [String],
-                                            existingEventIDs: Set<String>) -> Set<String> {
-        Set(identifiers.filter { identifier in
-            guard let eventID = snoozeEventID(from: identifier) else { return false }
-            return existingEventIDs.contains(eventID.uuidString)
-        })
+                                           existingEventIDs: Set<String>) -> Set<String> {
+        var latestByEvent: [UUID: String] = [:]
+        for identifier in identifiers {
+            guard let eventID = snoozeEventID(from: identifier),
+                  existingEventIDs.contains(eventID.uuidString) else { continue }
+            if let current = latestByEvent[eventID],
+               snoozeEpoch(of: current) >= snoozeEpoch(of: identifier) { continue }
+            latestByEvent[eventID] = identifier
+        }
+        return Set(latestByEvent.values)
     }
 
     /// 灵动岛「稍后提醒」：为指定事件挂一条 `after` 秒后触发的一次性通知。

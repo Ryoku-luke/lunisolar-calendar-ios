@@ -74,4 +74,28 @@ final class NotificationManagerTests: XCTestCase {
         )
         XCTAssertTrue(keep.isEmpty)
     }
+
+    /// 同一事件连点「稍后提醒」只保回最新的一条，避免叠加多条通知
+    func testOnlyLatestSnoozePerEventIsPreserved() {
+        let event = UUID().uuidString
+        let older = NotificationManager.snoozeIdentifier(eventID: event, at: 1_700_000_000)
+        let newer = NotificationManager.snoozeIdentifier(eventID: event, at: 1_700_000_600)
+
+        let keep = NotificationManager.snoozeIdentifiersToPreserve(
+            from: [older, newer],
+            existingEventIDs: [event]
+        )
+
+        XCTAssertEqual(keep, [newer], "应保回触发时刻更新的那条")
+    }
+
+    /// 解析触发时刻序号：UUID 自带连字符，必须取最后一个连字符之后的部分
+    func testSnoozeEpochParsing() {
+        let event = UUID().uuidString
+        XCTAssertEqual(NotificationManager.snoozeEpoch(
+            of: NotificationManager.snoozeIdentifier(eventID: event, at: 1_700_000_000)),
+                       1_700_000_000)
+        XCTAssertEqual(NotificationManager.snoozeEpoch(of: "not-a-snooze-id"), 0)
+        XCTAssertEqual(NotificationManager.snoozeEpoch(of: "snooze-\(event)"), 0)
+    }
 }
