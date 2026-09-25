@@ -4,6 +4,10 @@
 @preconcurrency import ActivityKit
 import SwiftUI
 import WidgetKit
+// AppLogger 的字符串插值定义在 module `os` 内，显式引入避免 SDK 组合差异
+#if canImport(os)
+import os
+#endif
 
 // MARK: - 清和时间胶囊 · 通用 Live Activity（文档 #20-33）
 //
@@ -313,7 +317,9 @@ public enum QingheLiveActivityManager {
     private static func update(display: QingheTimeCapsuleDisplay) -> Result<String, Error> {
         guard let id = UserDefaults.standard.string(forKey: idsKey),
               let activity = Activity<QingheLiveActivityAttributes>.activities
-                .first(where: { $0.id == id }) else {
+                .first(where: { $0.id == id && LiveActivityOccupancy.isShowing($0) }) else {
+            // 记录里的活动已经不在岛上（系统收走 / 用户划掉）→ 更新它等于更新一个
+            // 空气：屏幕上什么都不出现，却返回成功。必须改为重建。
             return start(display: display)
         }
         let state = state(from: display)
@@ -336,10 +342,16 @@ public enum QingheLiveActivityManager {
     }
 
     /// 从岛上活动的 attributes/content 还原当前显示快照（供 diff 决策）。
+    /// 只认**仍在展示**的活动：已结束的残留若被当成 current，决策会落到 `.none`/`.update`，
+    /// 于是永远不去重建 —— 屏幕上什么都没有，日志里也什么都没有。
     private static func currentDisplay() -> QingheTimeCapsuleDisplay? {
         guard let id = UserDefaults.standard.string(forKey: idsKey),
               let activity = Activity<QingheLiveActivityAttributes>.activities
                 .first(where: { $0.id == id }) else {
+            return nil
+        }
+        guard LiveActivityOccupancy.isShowing(activity) else {
+            AppLogger.app.info("时间胶囊活动已不在岛上（系统收走或用户划掉），本次将重建")
             return nil
         }
         let attrs = activity.attributes

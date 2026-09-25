@@ -176,9 +176,12 @@ public enum CountdownActivityManager {
         let target = event.kind == .anniversary
             ? (event.nextAnniversary(from: Date()) ?? event.date)
             : event.date
-        // 幂等复用：关键内容未变 → 保持现有活动原样
+        // 幂等复用：关键内容未变 → 保持现有活动原样。
+        // 必须同时要求「仍在岛上」：留一个已结束的残留实例时复用它是空操作，
+        // 屏幕上不会出现任何东西，用户看到的是「点了上岛却没反应」。
         if let oldID = activeActivityID(for: event.id),
            let old = Activity<CountdownActivityAttributes>.activities.first(where: { $0.id == oldID }),
+           LiveActivityOccupancy.isShowing(old),
            old.attributes.title == event.title,
            old.attributes.emoji == event.emoji,
            old.content.state.endDate == target {
@@ -216,12 +219,15 @@ public enum CountdownActivityManager {
         }
     }
 
-    /// 当前是否已有该事件的活跃活动
+    /// 当前是否已有该事件的活跃活动。
+    /// 「活跃」= 记录里的 id 存在**且仍在展示**：只查 id 是否在列表里会漏掉
+    /// 已结束的残留实例，于是「在岛上」徽标会一直骗着用户，点它去下岛也下不掉。
     public static func activeActivityID(for eventID: UUID) -> String? {
         let dict = UserDefaults.standard.dictionary(forKey: idsKey) as? [String: String] ?? [:]
         guard let id = dict[eventID.uuidString] else { return nil }
-        // 若系统已结束该活动（用户从灵动岛手动移除等），清除记录
-        if Activity<CountdownActivityAttributes>.activities.contains(where: { $0.id == id }) {
+        // 若系统已结束该活动（用户从灵动岛手动移除、系统 8 小时上限等），清除记录
+        if Activity<CountdownActivityAttributes>.activities
+            .contains(where: { $0.id == id && LiveActivityOccupancy.isShowing($0) }) {
             return id
         } else {
             remove(eventID: eventID)
@@ -247,9 +253,10 @@ public enum CountdownActivityManager {
                 dict.removeValue(forKey: idString)
                 continue
             }
-            // 事件已删除，或系统已结束该活动 → 清理记录
+            // 事件已删除，或活动已不在岛上（系统收走 / 已结束的残留）→ 清理记录
             if !validEventIDs.contains(eventID)
-                || !Activity<CountdownActivityAttributes>.activities.contains(where: { $0.id == activityID }) {
+                || !Activity<CountdownActivityAttributes>.activities
+                    .contains(where: { $0.id == activityID && LiveActivityOccupancy.isShowing($0) }) {
                 if !validEventIDs.contains(eventID) {
                     end(id: activityID)  // 结束幽灵活动
                 }
