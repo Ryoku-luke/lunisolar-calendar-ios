@@ -371,7 +371,9 @@ struct AllEventsView: View {
     private func bulkSetCompleted() {
         let targets = store.events.filter { selection.contains($0.id) }
         for event in targets {
-            EventService.shared.setCompleted(event, flush: false)
+            // 必须用幂等的 markCompleted：选中集合里可能混有已完成项，
+            // 走 setCompleted（切换语义）会把它们改回未完成，与按钮文案相反
+            EventService.shared.markCompleted(event, flush: false)
         }
         EventService.shared.flushPendingSave()
         withAnimation(AppTheme.Motion.screen) {

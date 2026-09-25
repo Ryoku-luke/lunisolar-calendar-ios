@@ -72,8 +72,20 @@ public final class EventService {
     }
 
     /// 切换完成状态，并同步通知生命周期。
+    /// ⚠️ 这是**切换**语义（已完成 ↔ 未完成），供「完成圈」「标记完成/取消完成」这类
+    /// 二元操作使用；批量操作请用 `markCompleted(_:flush:)`。
     public func setCompleted(_ event: CalendarEvent, flush: Bool = false) {
         toggleCompleted(event)
+        if flush { store.flushPendingSave() }
+    }
+
+    /// 幂等地把事件置为「已完成」：已完成的条目保持完成，**不会**被反转成未完成。
+    ///
+    /// 用途：批量「完成 N 项」——选中集合里可能混有已完成项，若走 `setCompleted`
+    /// 的切换语义，按钮写着「完成」却把已完成的行改回未完成。
+    public func markCompleted(_ event: CalendarEvent, flush: Bool = false) {
+        guard !event.isCompleted else { return }
+        toggleCompleted(event)   // 复用 store 的完成态副作用（取消该事件的 pending 通知）
         if flush { store.flushPendingSave() }
     }
 

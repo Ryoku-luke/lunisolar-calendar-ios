@@ -156,9 +156,9 @@ struct QingheSectionHeader: View {
 }
 // MARK: - 事件行快速操作（长按菜单）
 
-/// 卡片内事件行（当日安排等）的长按菜单：完成 / 删除。
-/// 说明：卡片里的行不是 List row，用不了 swipeActions；点按编辑由外层 NavigationLink 提供，
-/// 故此处只补最常用的两个动作，不重复放"编辑"。
+/// 卡片内事件行（当日安排等）的长按菜单：编辑 / 完成 / 删除。
+/// 说明：卡片里的行不是 List row，用不了 swipeActions，这几个动作只能放长按菜单里；
+/// 「编辑」用内部 sheet（行外层可能是 NavigationLink，无法命令式 push）。
 private struct EventQuickActionsModifier: ViewModifier {
     let event: CalendarEvent
     /// 长按菜单里的「编辑」需要一个 sheet（行外层可能是 NavigationLink，无法命令式 push）

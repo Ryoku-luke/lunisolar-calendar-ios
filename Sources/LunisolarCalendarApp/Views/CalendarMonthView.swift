@@ -36,12 +36,25 @@ fileprivate struct GridCellModel: Identifiable {
     var id: Date { date }
 }
 
+/// 网格缓存键的**唯一定义**（读、写两侧共用，避免两处字符串拼接各自漂移）。
+///
+/// ⚠️ `weekStart` 必须进键：42 格的前导空格数依赖它，而表头 `WeekHeaderView` 读的是实时值。
+/// 漏掉它时改「每周起始日」只会让表头旋转、网格顺序仍是旧的 → 日期与星期对不上，
+/// 要滑一次月份才自愈。
+fileprivate func monthGridCacheKey(month: Date, revision: Int, weekStart: Int) -> String {
+    "\(month.timeIntervalSince1970)-\(revision)-\(weekStart)"
+}
+
 fileprivate struct MonthGridModel {
     let monthKey: Date
     let revision: Int
+    /// 每周起始日（1=周日，2=周一）：网格前导空格数由它决定，故必须参与缓存键
+    let weekStart: Int
     let cells: [GridCellModel]
-    /// 缓存键：月份时间戳 + 事件版本（用于多月份网格缓存字典）
-    var cacheKey: String { "\(monthKey.timeIntervalSince1970)-\(revision)" }
+    /// 缓存键（用于多月份网格缓存字典）
+    var cacheKey: String {
+        monthGridCacheKey(month: monthKey, revision: revision, weekStart: weekStart)
+    }
 }
 
 struct CalendarMonthView: View {
@@ -304,12 +317,14 @@ struct CalendarMonthView: View {
             ZStack {
                 // 底层：拖动方向的相邻月（左滑=下月在右、右滑=上月在左），跟手同速
                 if let pm = previewMonth {
-                    calendarShell(accent: accent)
+                    // 传 pm：此前 calendarShell 内部恒定取 currentMonth，.id(pm) 只换视图标识
+                    // 不改内容 → 拖动时屏幕上并排的两份是"同一个月"，相邻月等于没预渲染
+                    calendarShell(for: pm, accent: accent)
                         .id(pm)
                         .offset(x: dragOffsetX < 0 ? dragOffsetX + monthWidth : dragOffsetX - monthWidth)
                 }
                 // 顶层：当前月，1:1 跟手
-                calendarShell(accent: accent)
+                calendarShell(for: currentMonth, accent: accent)
                     .id(currentMonth)
                     .offset(x: dragOffsetX)
                     .scaleEffect(isDragging ? 0.992 : 1.0)
@@ -329,7 +344,7 @@ struct CalendarMonthView: View {
             )
             .simultaneousGesture(swipeMonthGesture(width: monthWidth))
             #else
-            calendarShell(accent: accent)
+            calendarShell(for: currentMonth, accent: accent)
                 .id(currentMonth)
                 .padding(.horizontal, AppTheme.Spacing.md)
             #endif
@@ -566,21 +581,24 @@ struct CalendarMonthView: View {
                 eventPriorities: stats.priorities
             ))
         }
-        return MonthGridModel(monthKey: month, revision: store.revision, cells: cells)
+        return MonthGridModel(monthKey: month, revision: store.revision,
+                              weekStart: weekStart, cells: cells)
     }
 
-    /// 缓存键：月份时间戳 + 事件版本
+    /// 缓存键：月份 + 事件版本 + 每周起始日（与 `MonthGridModel.cacheKey` 同源定义）
     private func cacheKey(month: Date) -> String {
-        "\(month.timeIntervalSince1970)-\(store.revision)"
+        monthGridCacheKey(month: month, revision: store.revision, weekStart: weekStart)
     }
 
-    /// 缓存失效键：月份或事件版本变化时重建（用于 .task(id:) 触发）。
+    /// 缓存失效键：月份、事件版本或每周起始日变化时重建（用于 .task(id:) 触发）。
     private var gridCacheKey: String {
-        "\(currentMonth.timeIntervalSince1970)-\(store.revision)"
+        monthGridCacheKey(month: currentMonth, revision: store.revision, weekStart: weekStart)
     }
 
-    private func calendarShell(accent: Color) -> some View {
-        let grid = gridModel(for: currentMonth)
+    /// 单个月份卡片（表头 + 42 格网格）。
+    /// 必须按传入月份取网格：跟手滑动时同一份日历要同时渲染当前月与相邻月。
+    private func calendarShell(for month: Date, accent: Color) -> some View {
+        let grid = gridModel(for: month)
         let columns = [GridItem](repeating: GridItem(.flexible(), spacing: 0), count: 7)
         return VStack(alignment: .leading, spacing: 0) {
             WeekHeaderView(weekStart: weekStart)

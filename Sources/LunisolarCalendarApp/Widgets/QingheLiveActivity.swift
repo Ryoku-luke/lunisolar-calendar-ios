@@ -268,9 +268,17 @@ public enum QingheLiveActivityManager {
             }
             return .failure(NSError(domain: "QingheLiveActivity", code: 0))
         case .end:
+            // ⚠️ 不能只下岛：决策为 .end 有两种来源——target 为 nil（确实没有候选了），
+            // 或 current/target 是**不同事件**（切换候选）。后者的契约由
+            // QingheLiveActivityLifecycle 写明「调用方先 end 再 start」，
+            // 此前只 end 就返回，新候选被静默丢弃 → 岛上留空白直到下一次 refresh()
+            // （用户把当前上岛的提醒标记完成 / 改期后，看不到下一个该上岛的日程）。
             endCurrent()
-            return .failure(NSError(domain: "QingheLiveActivity", code: 1,
-                                    userInfo: [NSLocalizedDescriptionKey: "ended"]))
+            guard let target else {
+                return .failure(NSError(domain: "QingheLiveActivity", code: 1,
+                                        userInfo: [NSLocalizedDescriptionKey: "ended"]))
+            }
+            return start(display: target)
         case .start:
             return start(display: target!)
         case .update:
