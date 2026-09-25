@@ -179,6 +179,9 @@ struct CalendarMonthView: View {
                         Button { showCountdown = true } label: { Label("倒数日", systemImage: "hourglass") }
                         Button { showSettings = true } label: { Label("设置", systemImage: "gearshape") }
                     } else {
+                        // 全部日程：统一管理页（搜索 / 筛选 / 批量查看）
+                        NavigationLink { AllEventsView().environment(store) }
+                            label: { Label("全部日程", systemImage: "list.bullet.rectangle") }
                         NavigationLink { CountdownView() } label: { Label("倒数日", systemImage: "hourglass") }
                         NavigationLink { SettingsView().environment(store) }
                             label: { Label("设置", systemImage: "gearshape") }

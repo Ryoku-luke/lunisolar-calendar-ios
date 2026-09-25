@@ -20,7 +20,7 @@ public final class NavigationCoordinator {
     public var phoneTab: PhoneTab = .calendar
 
     /// iPad Sidebar 选中（List(selection:) 需要 optional binding）
-    public enum iPadSection: Hashable { case calendar, year, countdown, settings }
+    public enum iPadSection: Hashable { case calendar, year, agenda, countdown, settings }
     public var iPadSection: iPadSection? = .calendar
 
     /// AI 助手弹层

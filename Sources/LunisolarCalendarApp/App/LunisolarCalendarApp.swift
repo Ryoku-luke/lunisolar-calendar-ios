@@ -136,12 +136,14 @@ struct iPadRootView: View {
         @Bindable var nav = nav
         return NavigationSplitView {
             List(selection: $nav.iPadSection) {
-                ForEach([NavigationCoordinator.iPadSection.calendar, .year, .countdown, .settings], id: \.self) { s in
+                ForEach([NavigationCoordinator.iPadSection.calendar, .year, .agenda, .countdown, .settings], id: \.self) { s in
                     switch s {
                     case .calendar:
                         Label("日历", systemImage: "calendar").tag(NavigationCoordinator.iPadSection.calendar)
                     case .year:
                         Label("年视图", systemImage: "calendar.circle").tag(NavigationCoordinator.iPadSection.year)
+                    case .agenda:
+                        Label("全部日程", systemImage: "list.bullet.rectangle").tag(NavigationCoordinator.iPadSection.agenda)
                     case .countdown:
                         Label("倒数日", systemImage: "hourglass").tag(NavigationCoordinator.iPadSection.countdown)
                     case .settings:
@@ -165,6 +167,8 @@ struct iPadRootView: View {
                         nav.iPadSection = .calendar
                     }
                 }
+            case .agenda:
+                NavigationStack { AllEventsView().environment(store) }
             case .countdown:
                 NavigationStack { CountdownView() }
             case .settings:

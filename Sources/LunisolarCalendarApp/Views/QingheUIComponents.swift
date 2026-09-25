@@ -154,4 +154,37 @@ struct QingheSectionHeader: View {
         .textCase(nil)
     }
 }
+// MARK: - 事件行快速操作（长按菜单）
+
+/// 卡片内事件行（当日安排等）的长按菜单：完成 / 删除。
+/// 说明：卡片里的行不是 List row，用不了 swipeActions；点按编辑由外层 NavigationLink 提供，
+/// 故此处只补最常用的两个动作，不重复放"编辑"。
+private struct EventQuickActionsModifier: ViewModifier {
+    let event: CalendarEvent
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            Button {
+                EventService.shared.setCompleted(event, flush: true)
+            } label: {
+                Label(event.isCompleted
+                      ? NSLocalizedString("取消完成", comment: "")
+                      : NSLocalizedString("标记完成", comment: ""),
+                      systemImage: event.isCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle")
+            }
+            Button(role: .destructive) {
+                EventService.shared.removeEvent(event, flush: true)
+            } label: {
+                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+            }
+        }
+    }
+}
+
+extension View {
+    /// 事件行快速操作（长按：标记完成 / 删除）
+    func eventQuickActions(_ event: CalendarEvent) -> some View {
+        modifier(EventQuickActionsModifier(event: event))
+    }
+}
 #endif

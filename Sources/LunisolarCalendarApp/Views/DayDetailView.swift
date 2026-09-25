@@ -262,6 +262,7 @@ struct DayDetailView: View {
                             EventRow(event: ev, compact: false).environment(store)
                         }.buttonStyle(.plain)
                             .pressableFeedback()
+                            .eventQuickActions(ev)   // 长按：完成 / 删除
                     }
                 }
             }

@@ -128,6 +128,7 @@ struct SelectedDayCardView: View {
                                 EventRow(event: ev, compact: !isPanelExpanded).environment(store)
                             }.buttonStyle(.plain)
                                 .pressableFeedback()
+                                .eventQuickActions(ev)   // 长按：完成 / 删除
                         }
                     }
                     if todaysEvents.count > 3 {
