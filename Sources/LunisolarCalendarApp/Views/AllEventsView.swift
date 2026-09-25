@@ -307,7 +307,7 @@ struct AllEventsView: View {
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
         .padding(.vertical, AppTheme.Spacing.sm)
-        .background(Capsule().fill(.ultraThinMaterial))
+        .background(AdaptiveMaterialFill(material: .ultraThinMaterial, shape: Capsule()))
         .overlay(Capsule().stroke(Color.separator.opacity(0.5), lineWidth: AppTheme.Stroke.hair))
         .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
         .padding(.bottom, AppTheme.Spacing.sm)

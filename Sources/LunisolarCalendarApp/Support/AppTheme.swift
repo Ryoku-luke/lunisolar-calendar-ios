@@ -26,8 +26,8 @@ public enum AppTheme {
         public static let sm: CGFloat = 8
         public static let md: CGFloat = 12
         public static let lg: CGFloat = 16
-        public static let xl: CGFloat = 22
-        public static let xxl: CGFloat = 28
+        public static let xl: CGFloat = 20
+        public static let xxl: CGFloat = 24
         public static let pill: CGFloat = 999
     }
     public enum Shadow {
@@ -247,22 +247,8 @@ extension View {
         tint: Color = .clear,
         shadow: (color: Color, radius: CGFloat, x: CGFloat, y: CGFloat) = AppTheme.Shadow.resting
     ) -> some View {
-        self
-            .background {
-                ZStack {
-                    RoundedRectangle(cornerRadius: radius, style: .continuous).fill(material)
-                    if tint != .clear {
-                        RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .fill(tint.opacity(0.10))
-                    }
-                }
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(Color.themeSeparator.opacity(0.20), lineWidth: AppTheme.Stroke.hair)
-            )
-            .shadow(color: shadow.color, radius: shadow.radius, x: shadow.x, y: shadow.y)
-            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        modifier(_GlassCardModifier(radius: radius, material: material,
+                                   tint: tint, shadow: shadow))
     }
 
     /// 软标签底（统一散落的 .fill + stroke 写法）
@@ -271,10 +257,7 @@ extension View {
         radius: CGFloat = AppTheme.Radius.lg,
         material: Material = .ultraThinMaterial
     ) -> some View {
-        self
-            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(material))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .stroke(Color.themeSeparator.opacity(0.18), lineWidth: AppTheme.Stroke.hair))
+        modifier(_SoftChipMaterialModifier(radius: radius, material: material))
     }
 
     /// 软标签底 · Color 版本：用于 Color.quaternarySystemFill 等纯色背景
@@ -286,6 +269,75 @@ extension View {
             .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(fill))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .stroke(Color.themeSeparator.opacity(0.20), lineWidth: AppTheme.Stroke.hair))
+    }
+}
+
+/// §44 4c：材质无障碍策略（集中处理，与 Reduce Motion 同一思路）
+/// - Reduce Transparency 开启时：系统材质换成不透明填充，保证可读性
+/// - Increase Contrast 开启时：描边不透明度上调，保证边界可辨
+public struct AdaptiveMaterialFill<S: Shape>: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    public let material: Material
+    public let shape: S
+    public init(material: Material, shape: S) {
+        self.material = material; self.shape = shape
+    }
+    public var body: some View {
+        if reduceTransparency {
+            shape.fill(Color.secondarySystemGroupedBackground)
+        } else {
+            shape.fill(material)
+        }
+    }
+}
+
+private struct _GlassCardModifier: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+    let radius: CGFloat
+    let material: Material
+    let tint: Color
+    let shadow: (color: Color, radius: CGFloat, x: CGFloat, y: CGFloat)
+    /// 高对比度下把分隔线从「装饰性淡线」提到「可辨识边界」
+    private var strokeOpacity: CGFloat {
+        contrast == .increased ? 0.45 : 0.20
+    }
+    func body(content: Content) -> some View {
+        content
+            .background {
+                ZStack {
+                    AdaptiveMaterialFill(
+                        material: material,
+                        shape: RoundedRectangle(cornerRadius: radius, style: .continuous))
+                    if tint != .clear {
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(tint.opacity(0.10))
+                    }
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(Color.themeSeparator.opacity(strokeOpacity), lineWidth: AppTheme.Stroke.hair)
+            )
+            .shadow(color: shadow.color, radius: shadow.radius, x: shadow.x, y: shadow.y)
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+    }
+}
+
+private struct _SoftChipMaterialModifier: ViewModifier {
+    @Environment(\.colorSchemeContrast) private var contrast
+    let radius: CGFloat
+    let material: Material
+    private var strokeOpacity: CGFloat {
+        contrast == .increased ? 0.40 : 0.18
+    }
+    func body(content: Content) -> some View {
+        content
+            .background(AdaptiveMaterialFill(
+                material: material,
+                shape: RoundedRectangle(cornerRadius: radius, style: .continuous)))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .stroke(Color.themeSeparator.opacity(strokeOpacity), lineWidth: AppTheme.Stroke.hair))
     }
 }
 
@@ -374,8 +426,9 @@ public struct SecondaryActionButtonStyle: ButtonStyle {
             .frame(minHeight: AppTheme.Touch.minTarget)
             .foregroundStyle(Color.label)
             .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.thinMaterial)
+                AdaptiveMaterialFill(
+                    material: .thinMaterial,
+                    shape: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)

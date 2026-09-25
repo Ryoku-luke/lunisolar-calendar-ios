@@ -80,7 +80,7 @@
 | # | 问题 | 现状 |
 |---|---|---|
 | 1 | **「全部日程」搜不了**：`.searchable` 在 iOS 26 上不渲染任何搜索入口 | **已修（2026-09-25）**。证据链：整棵无障碍树里**没有 SearchField**（日志里 24 次 `SearchField` 全是测试自身的查询），下拉列表也不出现；把 `.searchable` 与 `.navigationTitle` 调换顺序**同样无效**（A/B 验证过，顺序不是成因）。**成因是 placement**：默认的「自动」抽屉在 iOS 26 上不渲染，显式写 `placement: .navigationBarDrawer(displayMode: .always)` 后搜索框立即出现（UI 测试实测树里出现 `"搜索标题 / 地点 / 备注" SearchField`，Flow 6 全绿）。注意该 placement 是 **iOS 专有**——不加 `#if canImport(UIKit)` 会弄坏 macOS 的 SPM 构建（本轮踩到过一次） |
-| 2 | **`AppTheme.Radius` Token 与 §3.2 的圆角纪律矛盾**：`xl = 22`、`xxl = 28` 都在报告禁止的清单里（报告要求 8/12/16/20/24/999） | **待做**。改 Token 值会小幅改动全站圆角，属视觉变更，需单独一步并肉眼确认 |
+| 2 | **`AppTheme.Radius` Token 与 §3.2 的圆角纪律矛盾**：`xl = 22`、`xxl = 28` 都在报告禁止的清单里（报告要求 8/12/16/20/24/999） | **已修（2026-09-26）**：`xl` 22→20、`xxl` 28→24，两处硬编码违规（图标 22、月卡 14）收编为 Token，全仓圆角落在 8/12/16/20/24/999 内；视觉变更需肉眼确认 |
 
 ## 6. 无障碍（§44）——有对有缺
 
@@ -90,7 +90,7 @@
 | 44pt 触点 | 部分：`touchTarget` **6 处** |
 | VoiceOver 标签 | **13 处** `accessibilityLabel`，对 21 个 View 文件来说偏薄；日期格已合并朗读（好） |
 | Reduce Motion | **已处理（2026-09-25）**：`AppRootView` 用 `@Environment(\.accessibilityReduceMotion)` + `.transaction { disablesAnimations = true }` 在**整棵子树**集中关闭动画；骨架屏另在 `QingheSkeletonBlock` 内单独 gate（呼吸动画）。集中做而不是逐个动画点判断的理由：全仓 22 处动画调用散在 6 个文件，逐处判断易漏且会不一致。代价是开启后「月翻页」也变瞬间切换——这是 reduce motion 的常规解释。**未在真机/模拟器上开启该设置实测过**，需人工确认一次 |
-| Reduce Transparency / 高对比度 | ❌ 仍未处理（`reduceTransparency`、`accessibilityContrast` 全仓无匹配） |
+| Reduce Transparency / 高对比度 | **已处理（2026-09-26）**：`AdaptiveMaterialFill` 在 Reduce Transparency 开启时把材质换成不透明填充；`glassCard`/`softChipBackground` 在 Increase Contrast 下描边上浮（0.20→0.45 / 0.18→0.40）。散点（次操作按钮、两处胶囊、AI 入口卡、`.bar` 删除行）已接入。**未真机开启设置实测**，需人工确认 |
 | 高对比度 / 深色模式 | 深色模式已适配；高对比度未处理 |
 
 ## 7. 验收能力（§54 / §55 / §61）——从 0 到「一小块」
@@ -154,8 +154,8 @@ Flow 6 原本就吃过这个亏：它早期用「筛选到没有数据的类型�
 | 2 | ~~**统一三态组件 + 骨架屏**（§37/§41/§50）~~ **已完成（2026-09-25）** | 组件已建立并接进 4 处界面，Flow 6 已自动化验证空态 + 行动按钮 | 已完成 |
 | 3 | **拆 `CalendarMonthView` 的 6 个 sheet**（§74 禁止项） | 触犯明确禁止项；改成 `navigationDestination` 不如完全重做，但可先收口 | 我 |
 | 4 | ~~**Reduce Motion 降级**（§44）~~ **已完成（2026-09-25）** | 已在根视图集中关闭动画（22 处动画调用散在 6 个文件，逐处判断易漏）；骨架屏单独 gate | 已完成 |
-| 4b | **对齐 `AppTheme.Radius` 与圆角纪律**（§5.1 问题 2） | Token 的 22/28 不在允许清单里；改值会小幅改动全站圆角，需单独一步并肉眼确认 | 我 |
-| 4c | **Reduce Transparency / 高对比度**（§44） | 仍未处理；需要逐个材质点判断（glassCard 用到 material），属设计决策而非机械改动 | 我 |
+| ~~4b~~ | ~~**对齐 `AppTheme.Radius` 与圆角纪律**（§5.1 问题 2）~~ **已完成（2026-09-26）** | Token xl 22→20、xxl 28→24；顺带把两处硬编码违规收编（AboutSectionView 图标 22→`Radius.xl`、YearOverviewView 月卡 14→`Radius.md`），全仓圆角现全部落在 8/12/16/20/24/999；视觉变更需肉眼过一遍 | 已完成 |
+| ~~4c~~ | ~~**Reduce Transparency / 高对比度**（§44）~~ **已完成（2026-09-26）** | 与 Reduce Motion 同一思路集中做：新增 `AdaptiveMaterialFill`（Reduce Transparency 时材质→不透明填充），`glassCard`/`softChipBackground` 改由它取色并新增 Increase Contrast 描边上浮（0.20→0.45 / 0.18→0.40）；次操作按钮、两处 ultraThin 胶囊、AI 入口卡、删除行 `.bar` 共 5 处散点同步接入；未真机开启「降低透明度/增强对比度」实测，需人工确认一次 | 已完成 |
 | 5 | 拆 `SettingsView`（790 行）/ `CalendarMonthView`（725 行）为 Feature 子页 | churn 大、收益偏维护性；应在 2 之后做 | 我 |
 | 6 | 补 VoiceOver 标签（现 13 处）与高对比度 | 上架前建议做；`docs/DEVICE_TEST_CHECKLIST.md` 已有检查项 | 我 |
 | 7 | 用 §54 的 9×7 矩阵逐格走一遍，把「没实现」和「没测」分开记账 | 需要先有 2 的组件，否则走不通 | 我（部分需真机） |

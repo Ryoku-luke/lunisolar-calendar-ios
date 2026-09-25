@@ -11,7 +11,7 @@ struct AboutSectionView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 96, height: 96)
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous))
                 Text(NSLocalizedString("清和日历", comment: "App名"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.label)

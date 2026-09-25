@@ -463,7 +463,7 @@ struct CalendarMonthView: View {
             }
             .padding(.horizontal, AppTheme.Spacing.lg)
             .padding(.vertical, AppTheme.Spacing.xs)
-            .background(Capsule().fill(.ultraThinMaterial))
+            .background(AdaptiveMaterialFill(material: .ultraThinMaterial, shape: Capsule()))
         }
     }
 

@@ -57,8 +57,8 @@ struct QingheSettingsHeroCard: View {
         }
         .padding(16)
         .background {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.regularMaterial)
+            AdaptiveMaterialFill(material: .regularMaterial,
+                                 shape: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .stroke(Color.appTint.opacity(0.10), lineWidth: 0.6)

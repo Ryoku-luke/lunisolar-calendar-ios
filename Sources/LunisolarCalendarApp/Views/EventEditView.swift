@@ -237,7 +237,7 @@ struct EventEditView: View {
                         .padding(.vertical, 14)
                 }
                 .buttonStyle(.plain)
-                .background(.bar)
+                .background(AdaptiveMaterialFill(material: .bar, shape: Rectangle()))
                 .accessibilityIdentifier(AccessibilityID.editDelete)
             }
         }

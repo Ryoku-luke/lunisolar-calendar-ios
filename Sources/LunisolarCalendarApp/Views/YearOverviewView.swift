@@ -132,7 +132,7 @@ struct YearOverviewView: View {
         }
         .padding(8)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
                 .fill(Color.secondarySystemGroupedBackground)
                 .shadow(color: .black.opacity(0.04), radius: 4, y: 1)
         )
