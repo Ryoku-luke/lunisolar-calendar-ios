@@ -159,14 +159,18 @@ struct DayDetailView: View {
             if holidayInfo.type != .normal || termName != nil {
                 HStack(spacing: AppTheme.Spacing.xs) {
                     if holidayInfo.type == .holiday {
-                        ChipLabel(title: String(format: NSLocalizedString("休 %@", comment: ""), holidayInfo.name), systemImage: "sun.max.fill",
+                        ChipLabel(title: String(format: NSLocalizedString("休 %@", comment: ""),
+                                                NSLocalizedString(holidayInfo.name, comment: "")), systemImage: "sun.max.fill",
                                   tint: Color.systemGreen, font: AppTheme.Font.caption)
                     } else if holidayInfo.type == .workday {
-                        ChipLabel(title: String(format: NSLocalizedString("班 %@", comment: ""), holidayInfo.name), systemImage: "briefcase.fill",
+                        ChipLabel(title: String(format: NSLocalizedString("班 %@", comment: ""),
+                                                NSLocalizedString(holidayInfo.name, comment: "")), systemImage: "briefcase.fill",
                                   tint: Color.systemOrange, font: AppTheme.Font.caption)
                     }
                     if let term = termName {
-                        ChipLabel(title: term, systemImage: "leaf.fill",
+                        // 节气名来自 SolarTermProvider 的原始中文串，必须显式查表
+                        // （24 个节气名的 key 都已存在）
+                        ChipLabel(title: NSLocalizedString(term, comment: ""), systemImage: "leaf.fill",
                                   tint: Color.systemTeal, font: AppTheme.Font.caption)
                     }
                 }

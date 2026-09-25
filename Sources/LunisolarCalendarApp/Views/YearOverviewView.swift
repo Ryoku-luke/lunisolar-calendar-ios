@@ -212,7 +212,8 @@ struct YearOverviewView: View {
                     m.termDays[day] = term
                 }
                 if let fest = FestivalManager.festivals(on: date).first {
-                    m.festivalDays[day] = fest.name
+                    // 同上：走 localizedName，否则年视图里的节日名在英文界面仍是中文
+                    m.festivalDays[day] = fest.localizedName
                 }
             }
             result[month] = m

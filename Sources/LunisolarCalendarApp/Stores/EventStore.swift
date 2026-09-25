@@ -918,11 +918,11 @@ public final class EventStore {
         var built: [CalendarEvent] = []
         built.append(
             CalendarEvent(
-                title: "阅读《平凡的世界》30分钟",
+                title: NSLocalizedString("阅读《平凡的世界》30分钟", comment: ""),
                 type: .note,
                 startDate: todayAllDayDate,
                 isAllDay: true,
-                notes: "今日必读，保持学习节奏",
+                notes: NSLocalizedString("今日必读，保持学习节奏", comment: ""),
                 priority: .normal
             )
         )
@@ -934,12 +934,12 @@ public final class EventStore {
         let e1 = cal.date(from: comps1e) ?? s1.addingTimeInterval(3600)
         built.append(
             CalendarEvent(
-                title: "产品需求评审会",
+                title: NSLocalizedString("产品需求评审会", comment: ""),
                 type: .schedule,
                 startDate: s1,
                 endDate: e1,
-                location: "3号会议室",
-                notes: "讨论Q4产品计划，提前准备方案",
+                location: NSLocalizedString("3号会议室", comment: ""),
+                notes: NSLocalizedString("讨论Q4产品计划，提前准备方案", comment: ""),
                 priority: .high
             )
         )
@@ -951,10 +951,10 @@ public final class EventStore {
         let s2 = cal.date(from: comps2) ?? tomorrow
         built.append(
             CalendarEvent(
-                title: "给妈妈打电话",
+                title: NSLocalizedString("给妈妈打电话", comment: ""),
                 type: .reminder,
                 startDate: s2,
-                notes: "问候身体情况",
+                notes: NSLocalizedString("问候身体情况", comment: ""),
                 priority: .urgent
             )
         )
@@ -965,11 +965,11 @@ public final class EventStore {
         let s3 = cal.date(from: comps3) ?? today
         built.append(
             CalendarEvent(
-                title: "瑜伽课",
+                title: NSLocalizedString("瑜伽课", comment: ""),
                 type: .schedule,
                 startDate: s3,
                 endDate: s3.addingTimeInterval(3600),
-                location: "阳光健身工作室",
+                location: NSLocalizedString("阳光健身工作室", comment: ""),
                 repeatRule: .weekly,
                 priority: .low
             )

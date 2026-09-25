@@ -60,7 +60,9 @@ struct SelectedDayCardView: View {
                     if !todayFestivals.isEmpty {
                         HStack(spacing: AppTheme.Spacing.xs) {
                             ForEach(Array(todayFestivals.prefix(2)), id: \.name) { f in
-                                Text("\(f.emoji) \(f.name)")
+                                // 用 localizedName（= L10n.str(name)）而不是 f.name ——
+                                // 节日名的 key 早已存在，直接取原始中文会在英文界面显示中文
+                                Text("\(f.emoji) \(f.localizedName)")
                                     .font(AppTheme.Font.caption).fontWeight(.bold)
                                     .capsuleTag(fill: Color(hex: f.accentHex).opacity(0.16),
                                                 border: Color(hex: f.accentHex).opacity(0.25))
