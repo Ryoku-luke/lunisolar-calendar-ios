@@ -166,7 +166,9 @@ final class LunisolarCalendarUITests: XCTestCase {
 
     // MARK: - Flow 3：AI 助手必须对输入有反应（用户反馈过「点了没反应」）
 
-    func testFlow3_aiAssistantReactsToInput() {
+    func testFlow3_aiAssistantReactsToInput() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "仅在 iPhone 上运行（iPad 为侧栏布局，无 TabBar；AI 助手在 iPad 的入口路径不同）")
         let app = launchApp()
 
         app.tabBars.buttons["AI 助手"].tap()
@@ -205,6 +207,8 @@ final class LunisolarCalendarUITests: XCTestCase {
     /// 为什么不用 `app.keyboards`：模拟器（xcodebuild 驱动）不显示软件键盘，
     /// `app.keyboards` 恒为空，用它断言会永远失效或永远跳过。用「完成」按钮才可以真正断言。
     func testFlow3b_aiInputFocusBehavior() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "仅在 iPhone 上运行（iPad 为侧栏布局，无 TabBar；AI 助手在 iPad 的入口路径不同）")
         let app = launchApp()
 
         app.tabBars.buttons["AI 助手"].tap()
@@ -365,7 +369,9 @@ final class LunisolarCalendarUITests: XCTestCase {
 
     // MARK: - Flow 5：设置页 iCloud 同步区块必须给出明确状态
 
-    func testFlow5_settingsShowsDefiniteICloudState() {
+    func testFlow5_settingsShowsDefiniteICloudState() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "仅在 iPhone 上运行（iPad 为侧栏布局，无 TabBar；设置在 iPad 走月历菜单的 sheet 入口）")
         let app = launchApp()
 
         app.tabBars.buttons["我的"].tap()

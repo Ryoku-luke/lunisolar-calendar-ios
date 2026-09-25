@@ -73,7 +73,7 @@
 | §42 Toast/Alert 分工 | **部分统一**：AI 助手的行内成功提示改用 `QingheToast`。其余页仍混用 `.alert(`（10 处） |
 | §50 `UI/` 目录六组组件 | 仍未建目录；组件放在 `Views/` 下（`QingheStateViews` / `QingheUIComponents` / `SettingsViewComponents` / `CalendarComponents` / `EventRow`） |
 | §54 成品级状态矩阵（9 Feature × 7 状态） | 仍**无法逐格评估**；但空态/错误态现在有了统一断言锚点（`state.empty` / `state.error` / `state.toast`），可以逐页补齐 |
-| §74 禁止「大量 .sheet 堆叠导航」 | **经核查：基本是误报，已更正**（2026-09-25）。全仓 14 个 `.sheet` 里 **13 个是真正的模态**（选日期、新建/编辑事件、文档、倒数日编辑器、AI 助手工具）；只有 2 处是「用 sheet 做导航」，且都限在 iPad，`CalendarMonthView` 里有明确理由（侧栏内 push 会被挤在窄列）。另外删掉了 1 处**死代码**：`CalendarMonthView` 的 `showAIAssistant` sheet 全仓无处置为 true（AI 助手在 iPhone 是独立 Tab、iPad 无此节）。分类已写进 `CalendarMonthView` 的注释，避免下次审计再次误报 |
+| §74 禁止「大量 .sheet 堆叠导航」 | **经核查：基本是误报，已更正**（2026-09-25）。全仓 14 个 `.sheet` 里 **13 个是真正的模态**（选日期、新建/编辑事件、文档、倒数日编辑器、AI 助手工具）；只有 2 处是「用 sheet 做导航」，且都限在 iPad，`CalendarMonthView` 里有明确理由（侧栏内 push 会被挤在窄列）。另外删掉了 1 处**死代码**：`CalendarMonthView` 的 `showAIAssistant` sheet 全仓无处置为 true（AI 助手在 iPhone 是独立 Tab、iPad 无此节）。**已收口（2026-09-26）**：月历页 sheet 集中到新文件 `CalendarMonthSheets.swift`，5 个布尔/可选状态收敛为 `showDateJump` + 两个枚举驱动的 `.sheet(item:)`（`MonthAuxiliaryPage` / `MonthEventEditSheet`），同一时刻至多一类 sheet，分工注释随代码走 |
 
 ## 5.1 本轮发现的两个真问题（1 已修，2 待做）
 
@@ -152,7 +152,7 @@ Flow 6 原本就吃过这个亏：它早期用「筛选到没有数据的类型�
 | ~~0~~ | ~~**修「全部日程搜不了」**~~ **已完成（2026-09-25）** | 成因是 `.searchable` 的默认 placement 在 iOS 26 不渲染；显式 `.navigationBarDrawer(displayMode: .always)` 修复，Flow 6 已把它变成回归保护 | 已完成 |
 | 1 | **裁决 iPad 右栏语义**（= 我上一轮的裁决项 A） | 卡住 P0-2、§33–§38、P1「iPad Inspector」四条 | 你 |
 | 2 | ~~**统一三态组件 + 骨架屏**（§37/§41/§50）~~ **已完成（2026-09-25）** | 组件已建立并接进 4 处界面，Flow 6 已自动化验证空态 + 行动按钮 | 已完成 |
-| 3 | **拆 `CalendarMonthView` 的 6 个 sheet**（§74 禁止项） | 触犯明确禁止项；改成 `navigationDestination` 不如完全重做，但可先收口 | 我 |
+| ~~3~~ | ~~**拆 `CalendarMonthView` 的 6 个 sheet**（§74 禁止项）~~ **已完成（2026-09-26）** | 实际剩 5 个（第 6 个是已删的死代码）。收口而非重做：sheet 本体抽到新文件 `CalendarMonthSheets.swift`，5 个状态收敛为 3 个 `.sheet(item:)`（日期跳转 + 枚举 `MonthAuxiliaryPage` 倒数日/设置 + 枚举 `MonthEventEditSheet` 新建/编辑），iPad 用 sheet 而非 push 的理由随注释保留。iPhone 7 条 UI 测试全过；iPad 4 过 0 失败（另修正 3 条 iPhone 专属用例在 iPad 上缺 skip 的测试缺口——基线上即失败，非本次回归） | 已完成 |
 | 4 | ~~**Reduce Motion 降级**（§44）~~ **已完成（2026-09-25）** | 已在根视图集中关闭动画（22 处动画调用散在 6 个文件，逐处判断易漏）；骨架屏单独 gate | 已完成 |
 | ~~4b~~ | ~~**对齐 `AppTheme.Radius` 与圆角纪律**（§5.1 问题 2）~~ **已完成（2026-09-26）** | Token xl 22→20、xxl 28→24；顺带把两处硬编码违规收编（AboutSectionView 图标 22→`Radius.xl`、YearOverviewView 月卡 14→`Radius.md`），全仓圆角现全部落在 8/12/16/20/24/999；视觉变更需肉眼过一遍 | 已完成 |
 | ~~4c~~ | ~~**Reduce Transparency / 高对比度**（§44）~~ **已完成（2026-09-26）** | 与 Reduce Motion 同一思路集中做：新增 `AdaptiveMaterialFill`（Reduce Transparency 时材质→不透明填充），`glassCard`/`softChipBackground` 改由它取色并新增 Increase Contrast 描边上浮（0.20→0.45 / 0.18→0.40）；次操作按钮、两处 ultraThin 胶囊、AI 入口卡、删除行 `.bar` 共 5 处散点同步接入；未真机开启「降低透明度/增强对比度」实测，需人工确认一次 | 已完成 |

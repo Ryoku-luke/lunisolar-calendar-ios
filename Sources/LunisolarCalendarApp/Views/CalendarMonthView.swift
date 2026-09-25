@@ -58,13 +58,13 @@ fileprivate struct MonthGridModel {
 }
 
 struct CalendarMonthView: View {
-    @State private var currentMonth: Date = Date().firstDayOfMonth
+    @State var currentMonth: Date = Date().firstDayOfMonth
     /// 本地选中日期（唯一真相，@State 保证点击后必然重绘）。
     /// 外部传入 binding 时（iPad 双栏）通过 onChange 双向同步，不在 init 里手动接线，
     /// 彻底规避"点击日期无反应"（此前 @Binding←局部引用/投影接线的运行时失效问题）。
-    @State private var selectedDate: Date = Date()
+    @State var selectedDate: Date = Date()
     @State private var isPanelExpanded: Bool = false
-    @State private var showDateJump = false
+    @State var showDateJump = false
     /// 月份卡片滑动的进入方向：.trailing=下月从右侧滑入，.leading=上月从左侧滑入
     @State private var monthSlideEdge: Edge = .trailing
     #if canImport(UIKit)
@@ -95,14 +95,13 @@ struct CalendarMonthView: View {
     private let embedsInNavigationStack: Bool
     /// 可选外部绑定（iPad 双栏与 DayDetailView 联动）；本地 @State 为唯一真相，onChange 双向同步
     private var externalSelectedDate: Binding<Date>?
-    // iPad 侧栏内「倒数日 / 设置」改用 sheet 弹出（push 会挤在窄列里）
-    @State private var showCountdown = false
-    /// P1：卡片点击深链进来时高亮的倒数日条目（sheet 关闭后重置）
-    @State private var countdownFocusID: UUID?
-    @State private var showSettings = false
-    @State private var showNewEventForContextMenu: Date?
-    /// P1：深链 / 通知 / Live Activity 点击后要打开的事件详情
-    @State private var pendingOpenEvent: CalendarEvent?
+    // iPad 侧栏内「倒数日 / 设置」改用 sheet 弹出（push 会挤在窄列里）。
+    // 两类模态各收一个枚举驱动（MonthAuxiliaryPage / MonthEventEditSheet），
+    // 5 个 sheet 收敛为 3 个 `.sheet(item:)`，sheet 本体见 CalendarMonthSheets.swift。
+    /// 程序化入口的辅助页（导航性质：倒数日 / 设置）
+    @State var auxiliaryPage: MonthAuxiliaryPage?
+    /// 事件编辑模态的两种目标（长按日期格新建 / 深链打开已有事件）
+    @State var eventEditSheet: MonthEventEditSheet?
 
     init(selectedDate: Binding<Date>? = nil, embedsInNavigationStack: Bool = true) {
         self.embedsInNavigationStack = embedsInNavigationStack
@@ -187,8 +186,8 @@ struct CalendarMonthView: View {
                     Divider()
                     if isIPadSplit {
                         // iPad 侧栏内 push 会被挤在窄列，改为 sheet 弹出
-                        Button { showCountdown = true } label: { Label("倒数日", systemImage: "hourglass") }
-                        Button { showSettings = true } label: { Label("设置", systemImage: "gearshape") }
+                        Button { auxiliaryPage = .countdown(focusID: nil) } label: { Label("倒数日", systemImage: "hourglass") }
+                        Button { auxiliaryPage = .settings } label: { Label("设置", systemImage: "gearshape") }
                     } else {
                         // 全部日程：统一管理页（搜索 / 筛选 / 批量查看）
                         NavigationLink { AllEventsView().environment(store) }
@@ -209,49 +208,16 @@ struct CalendarMonthView: View {
             }
         }
         #endif
-        // 本页 sheet 的分工（报告 §74 禁止「用大量 .sheet 堆叠**导航**」，故逐条说明）：
-        // - showDateJump / showNewEventForContextMenu / pendingOpenEvent：真正的**模态**
-        //   （选日期、长按日期格新建、深链打开某事件编辑），不是导航，保留 sheet；
-        // - showCountdown / showSettings：是导航，但只服务于**程序化入口**（深链、iPad 菜单），
-        //   iPhone 上的常规入口走工具栏菜单里的 NavigationLink。
-        //   iPad 侧刻意用 sheet 而非 push：侧栏内 push 会被挤在窄列（见上方工具栏菜单的注释）。
-        // 曾经还有一个 showAIAssistant 的 sheet，全仓无处置为 true（AI 助手在 iPhone 是独立 Tab，
-        // iPad 没有该节），属死代码，已删除。
+        // sheet 分工与本体已收口到 CalendarMonthSheets.swift：
+        // 5 个布尔/可选状态收敛为 auxiliaryPage / eventEditSheet 两个枚举驱动的 .sheet(item:)
         .tint(accent)
-        .sheet(isPresented: $showDateJump) {
-            DateJumpView(targetDate: Binding(
-                get: { selectedDate },
-                set: { newDate in
-                    selectedDate = newDate
-                    currentMonth = newDate.firstDayOfMonth
-                }
-            ))
-        }
-        .sheet(isPresented: $showCountdown, onDismiss: { countdownFocusID = nil }) {
-            // CountdownView 的列表自身不包导航栈，sheet 中补一层；
-            // focusID：卡片点击深链进来时高亮对应条目（关闭后重置，避免下次从菜单进入仍高亮）
-            NavigationStack { CountdownView(focusID: countdownFocusID) }
-        }
-        .sheet(isPresented: $showSettings) {
-            // SettingsView 自身不再包导航栈，sheet 场景补一层（push 场景继承外层导航）
-            NavigationStack { SettingsView().environment(store) }
-        }
-        .sheet(item: $showNewEventForContextMenu) { date in
-            NavigationStack {
-                EventEditView(editing: nil, defaultDate: date).environment(store)
-            }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-        }
-        .sheet(item: $pendingOpenEvent) { ev in
-            NavigationStack {
-                EventEditView(editing: ev, defaultDate: ev.startDate).environment(store)
-            }
-            // P1-8a：iPad regular 下用中 detent，避免全屏 sheet 遮挡主日历
-            // （iOS 17 无 .inspector，这是最接近 Inspector 的体验）
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-        }
+        .modifier(MonthSheetsModifier(
+            showDateJump: $showDateJump,
+            auxiliaryPage: $auxiliaryPage,
+            eventEditSheet: $eventEditSheet,
+            selectedDate: $selectedDate,
+            currentMonth: $currentMonth
+        ))
         // P1：深链 / 通知 / Live Activity 点击 → 直接打开事件详情
         // initial: true —— 深链可能在视图出现之前就写好了 ID（冷启动、iPad 切侧栏到日历节时
         // 中间栏是新建的），此时 onChange 默认不会触发，必须让首次求值也消费一次。
@@ -261,15 +227,14 @@ struct CalendarMonthView: View {
                 // 同步选中日期到该事件所在月
                 selectedDate = ev.startDate
                 currentMonth = ev.startDate.firstDayOfMonth
-                pendingOpenEvent = ev
+                eventEditSheet = .existing(ev)
             }
             NavigationCoordinator.shared.pendingOpenEventID = nil
         }
         // P1：倒数日 / 纪念日卡片点击 → 打开倒数日列表并聚焦该条（同上，需 initial 消费）
         .onChange(of: NavigationCoordinator.shared.pendingOpenCountdownID, initial: true) { _, id in
             guard let id else { return }
-            countdownFocusID = id
-            showCountdown = true
+            auxiliaryPage = .countdown(focusID: id)
             NavigationCoordinator.shared.pendingOpenCountdownID = nil
         }
         // 本地选中 → 同步外部（iPad 双栏联动 DayDetailView）
@@ -661,7 +626,7 @@ struct CalendarMonthView: View {
                             }
                             Button {
                                 selectedDate = d
-                                showNewEventForContextMenu = d
+                                eventEditSheet = .new(d)
                             } label: {
                                 Label("新建日程", systemImage: "plus.circle")
                             }
