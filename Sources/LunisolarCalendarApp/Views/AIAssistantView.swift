@@ -24,8 +24,11 @@ struct AutoFocusTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {
-        // 组字中（拼音 / 听写的 marked text）绝不插手文本 —— 程序化改写会中断听写与联想
-        if uiView.markedTextRange == nil, !uiView.isFirstResponder, uiView.text != text {
+        // 组字中（拼音 / 听写的 marked text）绝不插手文本 —— 程序化改写会中断听写与联想。
+        // 其余情况按"文本是否一致"同步：正常输入时两者恒等（delegate 已回写），
+        // 只有程序化清空/恢复才会走到回写分支（若额外用 isFirstResponder 门挡掉，
+        // 一键清空后字段会停留在旧文本）。
+        if uiView.markedTextRange == nil, uiView.text != text {
             uiView.text = text
         }
         if focused && !uiView.isFirstResponder {
@@ -132,6 +135,26 @@ struct AIAssistantView: View {
                                     .padding(.top, 12)
                                     .padding(.leading, 16)
                                     .allowsHitTesting(false)
+                            }
+                        }
+                        // 一键清空：改词或取消重来（此前只能逐字删除）
+                        .overlay(alignment: .topTrailing) {
+                            if !input.isEmpty {
+                                Button {
+                                    input = ""
+                                    inputFocused = true
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundStyle(Color.tertiaryLabel)
+                                        .frame(width: 32, height: 32)
+                                        .contentShape(Rectangle())
+                                }
+                                // List 行内的按钮需显式样式，否则点击会被整行吞掉
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel(NSLocalizedString("清空输入", comment: "AI助手"))
+                                .padding(.top, 4)
+                                .padding(.trailing, 4)
                             }
                         }
                     #endif
