@@ -70,6 +70,8 @@ struct DayCellView: View {
     @AppStorage("Lunisolar.showSolarTerm") private var showSolarTerm = true
     @AppStorage("Lunisolar.showHoliday") private var showHoliday = true
     private var isRegular: Bool { hSizeClass == .regular }
+    /// 事件圆点的数量上限：紧凑 5 个 / regular 6 个（详见事件指示器处的宽度计算）
+    private var maxIndicatorDots: Int { isRegular ? 6 : 5 }
     private var numeralFont: Font { isRegular ? AppTheme.Font.numeralL : AppTheme.Font.numeralM }
     /// 底色：仅「选中」实心填充；今日态红描边区分；**节日/节气不再浅染背景**
     /// （用户要求：除点击选择的日期外都不要"选择框"式展示）
@@ -142,10 +144,13 @@ struct DayCellView: View {
                         .lineLimit(1).minimumScaleFactor(0.6)
                 }
                 if hasEvents {
+                    // 圆点比横条窄得多，同一行可容纳更多指示器：
+                    // iPhone 紧凑格宽约 50pt → 5 个圆点占 5×5 + 4×3 = 37pt（留余量）；
+                    // iPad regular 格更宽 → 6 个。超出上限的不再绘制，
+                    // 完整清单在下方「当日安排」卡片中可查（避免用 "+N" 增加格内噪音）。
                     HStack(spacing: 3) {
-                        ForEach(0..<min(eventCount, 3), id: \.self) { i in
+                        ForEach(0..<min(eventCount, maxIndicatorDots), id: \.self) { i in
                             // 事件圆点：逐个按各自事件优先级着色，与"当日安排"列表竖线颜色对应
-                            // （此前用 Capsule 画成短横条，视觉上像下划线；改为实心圆点更清晰）
                             Circle().fill(i < eventPriorities.count
                                           ? eventPriorities[i].tintColor
                                           : Color.appTint)
