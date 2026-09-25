@@ -121,4 +121,91 @@ final class AICommandParserEdgeCaseTests: XCTestCase {
         XCTAssertEqual(dayOffset(d.startDate), 1)
         XCTAssertEqual(cal.component(.hour, from: d.startDate), 15, "下午3点 = 15:00（回归）")
     }
+
+    // MARK: 3. 年份不再被静默忽略
+
+    func testExplicitYearIsHonoured() throws {
+        // 旧实现只取「M月D日」、年份沿用 base → 「2027年10月1日」被建成 2026-10-01，
+        // 且标题里还残留「2027年」
+        guard case .createEvent(let d)? = command("2027年10月1日 出国") else {
+            return XCTFail("应解析为创建意图")
+        }
+        XCTAssertEqual(cal.component(.year, from: d.startDate), 2027)
+        XCTAssertEqual(cal.component(.month, from: d.startDate), 10)
+        XCTAssertEqual(cal.component(.day, from: d.startDate), 1)
+        XCTAssertEqual(d.title, "出国", "年份也应从标题里剔除")
+    }
+
+    func testExplicitFutureYearIsNotRejectedAsPast() throws {
+        guard case .createEvent(let d)? = command("2027年1月1日 元旦") else {
+            return XCTFail("应解析为创建意图（2027 年仍在未来）")
+        }
+        XCTAssertEqual(cal.component(.year, from: d.startDate), 2027)
+    }
+
+    func testMonthDayWithoutYearStillUsesCurrentYear() throws {
+        guard case .createEvent(let d)? = command("10月1日 出游") else {
+            return XCTFail("应解析为创建意图")
+        }
+        XCTAssertEqual(cal.component(.year, from: d.startDate), 2026, "未写年份时沿用当前年")
+    }
+
+    // MARK: 4. 「下周三」的方向词
+
+    /// now = 2026-09-24（周四）：最近的下一个周三是 09-30，
+    /// 「下周三」应为再往后一周的 10-07（+13 天），且「下」要从标题里剔除
+    func testNextWeekDirectionWordShiftsAndIsConsumed() throws {
+        guard case .createEvent(let d)? = command("下周三 9点 开会") else {
+            return XCTFail("应解析为创建意图")
+        }
+        XCTAssertEqual(dayOffset(d.startDate), 13, "下周三 = 最近周三再 +7 天")
+        XCTAssertEqual(d.title, "开会", "方向词「下」不得残留")
+        XCTAssertEqual(cal.component(.weekday, from: d.startDate), 4, "应落在周三")
+    }
+
+    func testThisWeekDirectionWordDoesNotShift() throws {
+        guard case .createEvent(let d)? = command("本周三 9点 开会") else {
+            return XCTFail("应解析为创建意图")
+        }
+        XCTAssertEqual(dayOffset(d.startDate), 6, "「本」不额外偏移")
+        XCTAssertEqual(d.title, "开会")
+    }
+
+    // MARK: 5. 只有时段词、没有具体时刻时的定位关键词
+
+    func testLoneTimeModifierIsStrippedFromKeyword() throws {
+        // 旧实现 keyword = "下午的会议" → 永远匹配不到任何标题
+        guard case .deleteEvent(let d)? = command("取消今天下午的会议") else {
+            return XCTFail("应解析为删除意图")
+        }
+        XCTAssertEqual(d.criteria.keyword, "会议", "孤立时段修饰语应被剔除")
+        XCTAssertEqual(dayOffset(d.criteria.day), 0)
+    }
+
+    /// 时段词是标题一部分时不得误伤（「下午茶」不是「下午的」）
+    func testTitleContainingTimeWordIsNotDamaged() throws {
+        guard case .deleteEvent(let d)? = command("删掉明天的下午茶") else {
+            return XCTFail("应解析为删除意图")
+        }
+        XCTAssertEqual(d.criteria.keyword, "下午茶")
+    }
+
+    // MARK: 6. 「删了…」不再被降级成创建
+
+    func testDeletePhrasingWithLeIsRecognised() throws {
+        // 旧实现的删除标记只有 删掉/删除/取消 → 「删了明天的会议」落到创建分支，
+        // 生成一条标题为「删了的会议」的垃圾日程
+        guard case .deleteEvent(let d)? = command("删了明天的会议") else {
+            return XCTFail("「删了」应识别为删除意图")
+        }
+        XCTAssertEqual(d.criteria.keyword, "会议")
+        XCTAssertEqual(dayOffset(d.criteria.day), 1)
+    }
+
+    func testRemovePhrasingWithDiaoIsRecognised() throws {
+        guard case .deleteEvent(let d)? = command("去掉明天的会议") else {
+            return XCTFail("「去掉」应识别为删除意图")
+        }
+        XCTAssertEqual(d.criteria.keyword, "会议")
+    }
 }

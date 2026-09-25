@@ -161,12 +161,19 @@ public enum AICommandParser {
             consumedDate = "明天"
         } else if s.contains("今天") {
             consumedDate = "今天"
-        } else if let r = s.range(of: #"(\d{1,2})月(\d{1,2})[日号]"#, options: .regularExpression) {
+        } else if let r = s.range(of: #"(\d{4}\s*年)?\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]"#, options: .regularExpression) {
+            // ⚠️ 年份捕获组此前不存在：「2027年10月1日 出国」只取月日、年份沿用 base，
+            // 于是建成 2026-10-01（差一年），且标题里还留着「2027年」——预览自相矛盾；
+            // 「2027年1月1日 元旦」更会被判成"已经过去了，请加具体日期"。
             let seg = String(s[r])
             let nums = seg.components(separatedBy: CharacterSet.decimalDigits.inverted).compactMap(Int.init)
-            if nums.count == 2 {
+            if nums.count == 2 || nums.count == 3 {
                 var c = cal.dateComponents([.year, .month, .day], from: base)
-                c.month = nums[0]; c.day = nums[1]
+                if nums.count == 3 {
+                    c.year = nums[0]; c.month = nums[1]; c.day = nums[2]
+                } else {
+                    c.month = nums[0]; c.day = nums[1]
+                }
                 if let d = cal.date(from: c) { base = d; consumedDate = seg }
             }
         } else if let r = s.range(of: #"(\d{1,2})[号日](?!\d)"#, options: .regularExpression) {
@@ -184,9 +191,23 @@ public enum AICommandParser {
                 }
             }
         } else if let r = s.range(of: #"(周|星期)([一二三四五六日天])"#, options: .regularExpression) {
+            // 前导方向词「下 / 本 / 这 / 该」（可叠加成「下下」）必须一起消费：
+            // 既让标题剔除干净（否则残留「下 开会」），也决定偏移周数 ——
+            // 「下周三」= 最近的下一个周三再往后一周，周初说时比"最近的周三"晚一周。
+            var start = r.lowerBound
+            var weekOffset = 0
+            walk: while start > s.startIndex {
+                let prev = s.index(before: start)
+                switch s[prev] {
+                case "下":                weekOffset += 7
+                case "本", "这", "该":    break
+                default:                 break walk
+                }
+                start = prev
+            }
             // "每周一"：把前导"每"一起纳入 consumedDate，既让标题剔除干净，也是 weekly 的判定依据
-            var seg = String(s[r])
-            if r.lowerBound > s.startIndex, s[s.index(before: r.lowerBound)] == "每" {
+            var seg = String(s[start..<r.upperBound])
+            if start > s.startIndex, s[s.index(before: start)] == "每" {
                 seg = "每" + seg
             }
             let weekdaySegment = String(s[r])
@@ -195,7 +216,10 @@ public enum AICommandParser {
                 for delta in 1...7 {
                     if let d = cal.date(byAdding: .day, value: delta, to: base),
                        cal.component(.weekday, from: d) == target {
-                        base = d; consumedDate = seg; break
+                        // 「下/下下周」的偏移量叠加在"最近的下一个目标星期"之上
+                        base = cal.date(byAdding: .day, value: weekOffset, to: d) ?? d
+                        consumedDate = seg
+                        break
                     }
                 }
             }
@@ -206,7 +230,11 @@ public enum AICommandParser {
         // 两个防线：
         //  - 白名单取保守短语，避免"给我安排一下明天的会"这类创建句被误判；
         //  - 句中含修改/删除动词时不判为查询，保证"把明天的安排改到4点"走修改意图。
-        let hasMutationVerb = ["删掉", "删除", "取消", "改到", "改为", "改成", "推迟到", "提前到", "挪到"]
+        // 删除意图的标记词：在这里定义一次，供「删除分支」与「查询排除判断」共用，
+        // 避免两处列表漂移 —— 「删了明天的会」曾因不在列表里而被降级成
+        // 「创建一条标题为『删了的会』的日程」，用户说删除却得到一条垃圾日程。
+        let deleteMarkers = ["删掉", "删了", "删除", "去掉", "取消"]
+        let hasMutationVerb = (deleteMarkers + ["改到", "改为", "改成", "推迟到", "提前到", "挪到"])
             .contains { s.contains($0) }
         if !hasMutationVerb,
            ["有什么安排", "有哪些安排", "什么安排", "有什么日程", "有哪些日程", "什么日程",
@@ -252,8 +280,13 @@ public enum AICommandParser {
             ? nil
             : DateComponents(hour: hour, minute: minute)
 
-        if let marker = firstMarker(in: s, among: ["删掉", "删除", "取消"]) {
-            let keyword = cleanedKeyword(from: s, removing: [consumedDate, consumedTime, marker])
+        if let marker = firstMarker(in: s, among: deleteMarkers) {
+            // 只有时段词、没有具体时刻时（「取消今天下午的会议」），时间正则需要数字才命中，
+            // 「下午的」便残留在关键词里 → 永远匹配不到任何标题。
+            // 只在时段词**紧邻"的"**时剔除（形如「下午的会议」），避免误伤「下午茶」这类标题。
+            let loneModifier = consumedTime.isEmpty ? timeWords.first { s.contains($0 + "的") } : nil
+            let keyword = cleanedKeyword(from: s,
+                                         removing: [consumedDate, consumedTime, marker, loneModifier ?? ""])
             return .success(.deleteEvent(AIDeleteEventDraft(
                 criteria: AIEventCriteria(day: base, timeHint: timeHint, keyword: keyword)
             )))
@@ -284,8 +317,11 @@ public enum AICommandParser {
                                                message: NSLocalizedString("没识别到要改到的时间。", comment: "")))
             }
             // 定位关键词取自"改到"之前的定位部分，并剔除 head **自己**的日期词
-            // （consumedDate 可能来自 tail，用它剔除会漏掉 head 里的日期词）
-            let keyword = cleanedKeyword(from: head, removing: [shortDayWord(in: head), consumedTime])
+            // （consumedDate 可能来自 tail，用它剔除会漏掉 head 里的日期词）；
+            // 同样剔除 head 里孤立的时段修饰语（「把今天下午的会改到明天」）
+            let loneModifier = consumedTime.isEmpty ? timeWords.first { head.contains($0 + "的") } : nil
+            let keyword = cleanedKeyword(from: head,
+                                         removing: [shortDayWord(in: head), consumedTime, loneModifier ?? ""])
             let criteriaTimeHint = criteriaClock.map { DateComponents(hour: $0.hour, minute: $0.minute) }
             return .success(.updateEvent(AIUpdateEventDraft(
                 criteria: AIEventCriteria(day: criteriaDay, timeHint: criteriaTimeHint, keyword: keyword),
