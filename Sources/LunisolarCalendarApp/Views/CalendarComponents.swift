@@ -142,13 +142,14 @@ struct DayCellView: View {
                         .lineLimit(1).minimumScaleFactor(0.6)
                 }
                 if hasEvents {
-                    HStack(spacing: 2) {
+                    HStack(spacing: 3) {
                         ForEach(0..<min(eventCount, 3), id: \.self) { i in
-                            // 事件点逐个按各自事件优先级着色，与"当日安排"列表竖线颜色对应
-                            Capsule().fill(i < eventPriorities.count
-                                           ? eventPriorities[i].tintColor
-                                           : Color.appTint)
-                                .frame(width: isRegular ? 12 : 9, height: isRegular ? 5 : 4)
+                            // 事件圆点：逐个按各自事件优先级着色，与"当日安排"列表竖线颜色对应
+                            // （此前用 Capsule 画成短横条，视觉上像下划线；改为实心圆点更清晰）
+                            Circle().fill(i < eventPriorities.count
+                                          ? eventPriorities[i].tintColor
+                                          : Color.appTint)
+                                .frame(width: isRegular ? 5 : 4, height: isRegular ? 5 : 4)
                         }
                     }
                     .frame(height: isRegular ? 6 : 5)
