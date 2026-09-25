@@ -42,26 +42,44 @@ final class TimeZoneGoldenTests: XCTestCase {
     /// 设备时区列表：本土 / UTC / 美洲 / 大洋洲（含 UTC+13，跨日界最容易暴露问题）
     private let deviceTimeZones = ["Asia/Shanghai", "UTC", "America/New_York", "Pacific/Auckland"]
 
-    // MARK: - 1. 干支年边界（立春 = Asia/Shanghai 绝对时刻）
+    // MARK: - 1. 干支年以**春节**为界，且与设备时区无关
+    //
+    // 口径说明：本 App 有意采用「春节换年」（与大众生肖 / 年命习惯一致，见 Huangli.swift 注释）。
+    // 原先此处还锁过一套「立春换年柱」的精确实现（YearBoundaryProvider），但它从未接入生产；
+    // 2026-09 按决策删除该未启用实现，本用例改为锁定**真正生效**的那条口径——
+    // 同一绝对时刻，四种设备时区下的农历年与干支年必须一致。
+    func testGanZhiYearIsSpringFestivalBasedAndDeviceTimeZoneIndependent() {
+        // 2026 春节 = 02-17（农历丙午年正月初一）：前一天属乙巳（2025 年柱），当天起属丙午
+        let beforeSpringFestival = instant(2026, 2, 16, 12, 0, tz: "Asia/Shanghai")
+        let onSpringFestival = instant(2026, 2, 17, 12, 0, tz: "Asia/Shanghai")
 
-    /// 2026 立春 = 02-04 04:02 Asia/Shanghai：
-    /// 03:59 属乙巳（2025 年柱）、04:03 属丙午（2026 年柱）——四种设备时区下结论必须一致。
-    func testGanZhiYearBoundaryIsDeviceTimeZoneIndependent() {
-        let before = instant(2026, 2, 4, 3, 59, tz: "Asia/Shanghai")
-        let after = instant(2026, 2, 4, 4, 3, tz: "Asia/Shanghai")
-
+        var ganZhiBefore: String?
+        var ganZhiOn: String?
         for deviceTZ in deviceTimeZones {
             withDeviceTimeZone(deviceTZ) {
-                XCTAssertEqual(YearBoundaryProvider.effectiveGanZhiYear(for: before), 2025,
-                               "设备时区 \(deviceTZ)：立春前应为 2025 年柱")
-                XCTAssertEqual(YearBoundaryProvider.effectiveGanZhiYear(for: after), 2026,
-                               "设备时区 \(deviceTZ)：立春后应为 2026 年柱")
-                XCTAssertEqual(YearBoundaryProvider.ganZhiString(for: before), "乙巳",
-                               "设备时区 \(deviceTZ)：立春前应为乙巳")
-                XCTAssertEqual(YearBoundaryProvider.ganZhiString(for: after), "丙午",
-                               "设备时区 \(deviceTZ)：立春后应为丙午")
+                let a = ChineseCalendar.lunarDateSafe(from: beforeSpringFestival)
+                let b = ChineseCalendar.lunarDateSafe(from: onSpringFestival)
+                XCTAssertNotNil(a, "设备时区 \(deviceTZ)：农历转换不应失败")
+                XCTAssertNotNil(b)
+                XCTAssertEqual(a?.year, 2025, "设备时区 \(deviceTZ)：春节前应属农历 2025 年")
+                XCTAssertEqual(b?.year, 2026, "设备时区 \(deviceTZ)：春节起应属农历 2026 年")
+
+                let gzA = a.map { ChineseCalendar.ganZhiOfYear($0.year) }
+                let gzB = b.map { ChineseCalendar.ganZhiOfYear($0.year) }
+                if let ganZhiBefore {
+                    XCTAssertEqual(gzA, ganZhiBefore, "设备时区 \(deviceTZ)：干支年不得随设备时区变化")
+                } else {
+                    ganZhiBefore = gzA
+                }
+                if let ganZhiOn {
+                    XCTAssertEqual(gzB, ganZhiOn, "设备时区 \(deviceTZ)：干支年不得随设备时区变化")
+                } else {
+                    ganZhiOn = gzB
+                }
             }
         }
+        XCTAssertEqual(ganZhiBefore, "乙巳")
+        XCTAssertEqual(ganZhiOn, "丙午")
     }
 
     // MARK: - 2. 节气：同一绝对时刻，各时区读数不同
