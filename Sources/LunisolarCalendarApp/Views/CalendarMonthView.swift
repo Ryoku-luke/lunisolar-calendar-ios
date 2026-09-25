@@ -235,7 +235,9 @@ struct CalendarMonthView: View {
             .presentationDragIndicator(.visible)
         }
         // P1：深链 / 通知 / Live Activity 点击 → 直接打开事件详情
-        .onChange(of: NavigationCoordinator.shared.pendingOpenEventID) { _, id in
+        // initial: true —— 深链可能在视图出现之前就写好了 ID（冷启动、iPad 切侧栏到日历节时
+        // 中间栏是新建的），此时 onChange 默认不会触发，必须让首次求值也消费一次。
+        .onChange(of: NavigationCoordinator.shared.pendingOpenEventID, initial: true) { _, id in
             guard let id else { return }
             if let ev = store.events.first(where: { $0.id == id }) {
                 // 同步选中日期到该事件所在月
@@ -245,8 +247,8 @@ struct CalendarMonthView: View {
             }
             NavigationCoordinator.shared.pendingOpenEventID = nil
         }
-        // P1：倒数日 / 纪念日卡片点击 → 打开倒数日列表并聚焦该条
-        .onChange(of: NavigationCoordinator.shared.pendingOpenCountdownID) { _, id in
+        // P1：倒数日 / 纪念日卡片点击 → 打开倒数日列表并聚焦该条（同上，需 initial 消费）
+        .onChange(of: NavigationCoordinator.shared.pendingOpenCountdownID, initial: true) { _, id in
             guard let id else { return }
             countdownFocusID = id
             showCountdown = true

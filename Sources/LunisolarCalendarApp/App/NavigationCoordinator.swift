@@ -23,9 +23,6 @@ public final class NavigationCoordinator {
     public enum iPadSection: Hashable { case calendar, year, agenda, countdown, settings }
     public var iPadSection: iPadSection? = .calendar
 
-    /// AI 助手弹层
-    public var showAI: Bool = false
-
     /// P1：待打开的事件详情 ID（深链 / 通知 / Live Activity 点击设置）。
     /// CalendarMonthView 监听此字段并 sheet 出 EventEditView；消费后置 nil。
     public var pendingOpenEventID: UUID?
@@ -41,12 +38,30 @@ public final class NavigationCoordinator {
         selectedDate = date
     }
 
+    /// 切到日历入口（三个桌面小组件的 widgetURL `qinghe://calendar` 专用）
+    public func openCalendar() {
+        #if os(iOS)
+        phoneTab = .calendar
+        #endif
+        self.iPadSection = .calendar
+    }
+
+    /// 打开 AI 助手（深链 `qinghe://ai`）。
+    /// iPad 侧栏目前没有 AI 节，故改动只对 iPhone 的 Tab 生效。
+    public func openAIAssistant() {
+        #if os(iOS)
+        phoneTab = .ai
+        #endif
+    }
+
     /// 切换到日历 Tab 并显示指定事件日期
     public func openEventDate(_ date: Date) {
         selectedDate = date
         #if os(iOS)
         phoneTab = .calendar
         #endif
+        // iPad：日期只在日历节可见，同步切侧栏（与 openEventDetail 一致）
+        self.iPadSection = .calendar
     }
 
     /// P1：直接打开某事件的详情编辑页（深链 qinghe://event/<UUID> 专用）

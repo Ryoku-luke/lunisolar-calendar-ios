@@ -48,6 +48,9 @@ public struct AppRootView: View {
                 await AppLifecycleCoordinator.shared.onLaunch()
             }
             .onAppear { DeepLinkRouter.handlePendingDeepLink() }
+            // 深链统一入口：App 已在前台时 scenePhase 不会变化，必须在这里立即消费，
+            // 否则灵动岛 / 小组件的点击会被静默丢弃到下一次前后台切换才生效。
+            .onOpenURL { url in DeepLinkRouter.receive(url) }
             .onChange(of: scenePhase, initial: false) { _, newPhase in
                 if newPhase == .active { DeepLinkRouter.handlePendingDeepLink() }
                 AppLifecycleCoordinator.shared.onScenePhase(newPhase)

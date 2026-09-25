@@ -20,11 +20,10 @@ struct HostApp: App {
         WindowGroup {
             // 生命周期接线（iCloud 启动重建/后台落盘/通知续排/外观偏好）
             // 全部封装在框架内 AppRootView，宿主不重复实现。
+            // 深链（qinghe://）交由框架内的 AppRootView 统一处理（onOpenURL → DeepLinkRouter）。
+            // 宿主不再自己转存 UserDefaults：原先"只写键、等 onAppear / scenePhase 消费"的写法，
+            // 在 App 已处于前台时没有任何消费点，表现为点灵动岛 / 小组件没反应。
             AppRootView()
-                .onOpenURL { url in
-                    // 灵动岛/锁屏点击深链：qinghe://event/<eventID>
-                    UserDefaults.standard.set(url.absoluteString, forKey: "pending-deeplink")
-                }
         }
     }
 }
