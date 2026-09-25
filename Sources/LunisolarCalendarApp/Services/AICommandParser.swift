@@ -262,23 +262,33 @@ public enum AICommandParser {
         if let range = firstMarkerRange(in: s, among: ["改到", "改为", "改成", "推迟到", "提前到", "挪到"]) {
             let head = String(s[s.startIndex..<range.lowerBound])
             let tail = String(s[range.upperBound...])
+            // 定位日与新日期分别取自「改到」两侧。
+            // 上面第 1 步的整句日期检测是按「后天 > 明天 > 今天」优先级抓词的、不看位置，
+            // 对修改句会抓错：「把今天的会改到明天」里它抓到 tail 的「明天」，
+            // 于是定位日变成明天、关键词里还残留「今天的」→ 必然 notFound；
+            // 「把3点的会改到明天」甚至会去改明天那条同名日程。
+            // 这里以 head 为准重算定位日（head 里没有日期词则回落到今天）。
+            let today = cal.startOfDay(for: baseDate)
+            let criteriaDay = parseShortDayWord(in: head, defaultDay: today)
             // 定位时刻只取"改到"之前的文本；否则「把明天的安排改到4点」会把新时刻 4:00
             // 误当成定位条件 → 匹配不到任何日程
             let criteriaClock = parseClock(in: head)
-            // 新时刻：优先取"改到"之后的时刻；没有则沿用定位时刻（再兜底整句解析结果）
+            // 新时刻：优先取"改到"之后的时刻；没有则沿用定位时刻
             let clock = parseClock(in: tail) ?? criteriaClock ?? (hour, minute)
-            let newDay = parseShortDayWord(in: tail, defaultDay: base)
+            // 新日期同样相对"今天"计算，而不是已按整句移动过的 base
+            let newDay = parseShortDayWord(in: tail, defaultDay: today)
             var comps = cal.dateComponents([.year, .month, .day], from: newDay)
             comps.hour = clock.0; comps.minute = clock.1
             guard let newStart = cal.date(from: comps) else {
                 return .failure(AICommandError(kind: .badTime,
                                                message: NSLocalizedString("没识别到要改到的时间。", comment: "")))
             }
-            // 定位关键词取自"改到"之前的定位部分
-            let keyword = cleanedKeyword(from: head, removing: [consumedDate, consumedTime])
+            // 定位关键词取自"改到"之前的定位部分，并剔除 head **自己**的日期词
+            // （consumedDate 可能来自 tail，用它剔除会漏掉 head 里的日期词）
+            let keyword = cleanedKeyword(from: head, removing: [shortDayWord(in: head), consumedTime])
             let criteriaTimeHint = criteriaClock.map { DateComponents(hour: $0.hour, minute: $0.minute) }
             return .success(.updateEvent(AIUpdateEventDraft(
-                criteria: AIEventCriteria(day: base, timeHint: criteriaTimeHint, keyword: keyword),
+                criteria: AIEventCriteria(day: criteriaDay, timeHint: criteriaTimeHint, keyword: keyword),
                 newStartDate: newStart
             )))
         }
@@ -363,9 +373,21 @@ public enum AICommandParser {
         return nil
     }
 
-    /// 时段词 → 24 小时制换算（下午/傍晚/晚上/夜里 +12；中午 11 点前按 12 点后算）
+    /// 时段词 → 24 小时制换算。
+    ///
+    /// - 下午 / 傍晚 / 晚上 / 夜里：hour < 12 → +12（下午3点 = 15:00）
+    /// - 中午：hour < 11 → +12（中午12点保持 12:00）
+    /// - **12 点这一档必须显式处理**：旧实现只在 `hour < 12` 时加 12，`hour == 12`
+    ///   时对任何时段词都原样返回 → 「凌晨12点」被算成正午 12:00（差 12 小时）。
+    ///   现在：凌晨/早上/早晨/清晨 + 12 点 → 0 点（当日零点）；
+    ///   晚上/夜里/傍晚 + 12 点 → 24 点（Calendar 会规整为次日 00:00）。
     static func applyTimeWord(_ word: String?, to hour: Int) -> Int {
         guard let word else { return hour }
+        if hour == 12 {
+            if ["凌晨", "早上", "早晨", "清晨"].contains(word) { return 0 }
+            if ["晚上", "夜里", "傍晚"].contains(word) { return 24 }
+            return hour
+        }
         if ["下午", "傍晚", "晚上", "夜里"].contains(word), hour < 12 { return hour + 12 }
         if word == "中午", hour < 11 { return hour + 12 }
         return hour
@@ -398,12 +420,26 @@ public enum AICommandParser {
         return (applyTimeWord(prefixWord, to: hour), minute)
     }
 
-    /// "改到"之后只识别 今天/明天/后天 三种日期词；其余情况沿用定位日（避免过度推断）
+    /// 短日期词（今天/明天/后天）→ 相对 `defaultDay` 的日期；无日期词则沿用 defaultDay。
+    ///
+    /// ⚠️ 必须识别「今天」——「把后天的会改到今天」是合法诉求，旧实现只认明天/后天，
+    /// 于是「改到今天」算出来仍是基准日那侧的值，等于没改。
     static func parseShortDayWord(in s: String, defaultDay: Date) -> Date {
         let cal = Calendar(identifier: .gregorian)
-        if s.contains("后天") { return cal.date(byAdding: .day, value: 2, to: defaultDay) ?? defaultDay }
-        if s.contains("明天") { return cal.date(byAdding: .day, value: 1, to: defaultDay) ?? defaultDay }
-        return defaultDay
+        switch shortDayWord(in: s) {
+        case "后天": return cal.date(byAdding: .day, value: 2, to: defaultDay) ?? defaultDay
+        case "明天": return cal.date(byAdding: .day, value: 1, to: defaultDay) ?? defaultDay
+        default:     return defaultDay   // 含「今天」与无日期词两种情况
+        }
+    }
+
+    /// 取文本里出现的短日期词原文（用于从关键词中剔除）；无则空串。
+    /// 与 `parseShortDayWord(in:defaultDay:)` 共用同一份判定，避免两处口径漂移。
+    static func shortDayWord(in s: String) -> String {
+        if s.contains("后天") { return "后天" }
+        if s.contains("明天") { return "明天" }
+        if s.contains("今天") { return "今天" }
+        return ""
     }
 
     /// 关键词清洗：剔除日期 / 时间 / 动词残留，并去掉首尾的口语字（把、的、了、帮我…）
