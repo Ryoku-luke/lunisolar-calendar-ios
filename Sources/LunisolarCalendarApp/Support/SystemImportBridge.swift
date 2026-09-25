@@ -195,10 +195,17 @@ public struct StubSystemImportProvider: SystemImportProviding {
 
 public enum SystemImportAggregator {
 
-    /// 并发拉取所有 Provider（任意一个失败不阻塞其他源，错误计入 failures）
+    /// 依次拉取各个 Provider（任意一个失败不阻塞其他源，错误计入 failures）。
+    ///
+    /// 刻意**串行**而非并发：
+    /// - 调用方（SettingsView）每次只传 1 个 provider（系统日历 / 联系人二选一），并发无收益；
+    /// - 串行能让系统的权限弹窗按顺序出现，不会同时弹两个。
+    ///
+    /// 注：冲突策略**不在这里**裁决 —— 本方法只把各源结果规范化成 `CalendarEvent`，
+    /// 由调用方交给 `EventService.mergeImportedEvents(policy:)` 统一处理（复用既有 LWW 与提示）。
+    /// 原先这里还挂着一个从未被使用的 `conflictPolicy` 参数，容易让人以为聚合层已做裁决，已移除。
     public static func gather(
-        providers: [SystemImportProviding],
-        conflictPolicy: ImportConflictPolicy = .keepLatest
+        providers: [SystemImportProviding]
     ) async -> (events: [CalendarEvent], failures: [SystemImportError]) {
         var dtos: [SystemImportEvent] = []
         var failures: [SystemImportError] = []

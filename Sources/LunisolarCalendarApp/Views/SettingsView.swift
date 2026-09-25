@@ -30,7 +30,10 @@ struct SettingsView: View {
     // 系统导入
     @State private var isImportingSystem = false
     @State private var importingSystemSource: SystemImportSource = .systemCalendar
-    @State private var importLunarToggle = false
+    /// 联系人生日是否按农历每年（跨启动保留）。
+    /// 旧实现是 `@State`：每次冷启复位为 false，而用户往往"导入一次就不再想这事"，
+    /// 于是这个偏好等于设不上。
+    @AppStorage("Lunisolar.contactsImport.lunarAnnually") private var importLunarToggle = false
     // 外观
     @AppStorage("Lunisolar.appearance") private var appearanceSelection: AppAppearance = .system
     /// 每周起始日（Calendar weekday 语义：1=周日，2=周一；默认周日起始，保持既有用户布局）
@@ -313,12 +316,14 @@ struct SettingsView: View {
             }
             .disabled(isImportingSystem)
 
-            if importingSystemSource == .contacts || !store.events.isEmpty {
-                Toggle(isOn: $importLunarToggle) {
-                    Label(NSLocalizedString("联系人生日按农历每年", comment: ""), systemImage: "moon.stars.fill")
-                }
-                .tint(Color.systemIndigo)
+            // 始终可见（去掉了 `importingSystemSource == .contacts || !store.events.isEmpty` 的门槛）：
+            // `importingSystemSource` 只有**点过**联系人导入按钮才会变成 .contacts，因此全新用户
+            // （0 事件）根本看不到这个开关 —— 而它必须在点按钮**之前**就能设，否则第一次导入
+            // 必然按公历入库，恰恰是最需要它的那一次用错口径。
+            Toggle(isOn: $importLunarToggle) {
+                Label(NSLocalizedString("联系人生日按农历每年", comment: ""), systemImage: "moon.stars.fill")
             }
+            .tint(Color.systemIndigo)
         } header: {
             QingheSectionHeader(NSLocalizedString("数据与同步", comment: ""), subtitle: "导入、恢复与系统数据")
         } footer: {
@@ -655,10 +660,7 @@ struct SettingsView: View {
         )
         #endif
 
-        let (events, failures) = await SystemImportAggregator.gather(
-            providers: [provider],
-            conflictPolicy: conflictPolicy
-        )
+        let (events, failures) = await SystemImportAggregator.gather(providers: [provider])
 
         if events.isEmpty {
             if failures.contains(where: { if case .unauthorized = $0 { return true } else { return false } }) {
