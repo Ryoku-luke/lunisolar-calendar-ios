@@ -678,7 +678,9 @@ struct SettingsView: View {
 
         // P0 收口：批量合并导入走 EventService（内部转 EventStore.merge）
         let r = EventService.shared.mergeImportedEvents(events, policy: conflictPolicy, skipSync: true)
-        importedResult = r
+        // 系统导入的结果用**行内 toast** 呈现（见下），不走「导入结果」alert：
+        // 原先这里还给 importedResult 赋值、紧接着 showImportResult = false，
+        // 那个状态永远不会被展示（死赋值），已移除；这行只做防御性收起。
         showImportResult = false
         // 系统导入成功后重排所有 pending 通知，把新增 reminder 挂到 UNUserNotificationCenter
         if r.added + r.updated > 0 {

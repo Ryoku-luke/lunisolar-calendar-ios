@@ -21,8 +21,12 @@ public final class EventService {
 
     /// 默认注入 App 单例；测试传入隔离 store，避免写入真实 Documents
     /// （既有测试统一用 makeIsolatedEventStore() 的临时目录模式）
-    public init(store: EventStore = .shared) {
+    /// - Parameter countdownStore: 倒数日数据层。同样支持注入 —— 此前硬编码 `.shared`，
+    ///   导致 `EventService(store: isolated)` 的倒数日写入仍落到真实共享 store
+    ///   （「UI → Service → Store」收口在倒数日这条线上是假的，且测试会污染真实数据）。
+    public init(store: EventStore = .shared, countdownStore: CountdownStore = .shared) {
         self.store = store
+        self.countdownStore = countdownStore
     }
 
     // MARK: - 事件写操作（数据 + 通知 + Widget 协调）
@@ -142,7 +146,7 @@ public final class EventService {
     // MARK: - 倒数日业务（P0：收口 CountdownView 直连 CountdownStore）
 
     /// 倒数日数据源（写操作走本类业务方法，保持 UI → Service → Store 单向依赖）。
-    private let countdownStore = CountdownStore.shared
+    private let countdownStore: CountdownStore
 
     /// 新增或更新倒数日（按 id 是否已存在决定 add/update）。
     /// flush=true：编辑页保存后立即 dismiss，很可能马上进后台；0.5s 防抖的

@@ -23,6 +23,13 @@ public final class AppLifecycleCoordinator {
     private var countdownStore: CountdownStore?
     private var syncCoordinator: EventSyncCoordinator?
 
+    /// 本次「前台周期」是否已做过全量通知重排。
+    ///
+    /// 冷启动时 `.task(onLaunch)` 与 `scenePhase → .active` 会各触发一次
+    /// （cancelAll + 遍历全部 reminder 重挂 → badge 闪两次、系统调用翻倍）。
+    /// 回到后台时复位，保证下一次回前台仍会重排。
+    private var didRescheduleThisForeground = false
+
     private init() {}
 
     /// AppRootView 启动时调用
@@ -31,12 +38,19 @@ public final class AppLifecycleCoordinator {
         self.countdownStore = countdownStore
     }
 
+    /// 全量重排本地提醒：同一「前台周期」内只做一次（冷启动的两条触发路径共用）
+    private func rescheduleRemindersOnce(in store: EventStore) async {
+        guard !didRescheduleThisForeground else { return }
+        didRescheduleThisForeground = true   // 先置位：并发的第二路调用直接跳过
+        await NotificationManager.shared.rescheduleAllReminders(in: store)
+    }
+
     /// 启动后异步任务
     public func onLaunch() async {
         guard let store else { return }
 
-        // 1. 重排所有本地提醒
-        await NotificationManager.shared.rescheduleAllReminders(in: store)
+        // 1. 重排所有本地提醒（与 scenePhase→.active 去重，避免冷启动排两遍）
+        await rescheduleRemindersOnce(in: store)
 
         // 2. 清理孤儿倒数日灵动岛 + 刷新时间胶囊
         #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
@@ -68,13 +82,15 @@ public final class AppLifecycleCoordinator {
         switch phase {
         case .active:
             Task { @MainActor in
-                await NotificationManager.shared.rescheduleAllReminders(in: store)
+                await rescheduleRemindersOnce(in: store)
                 store.refreshWidgetSnapshotIfDayChanged()
                 #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
                 TimeCapsuleCoordinator.shared.refresh()
                 #endif
             }
         case .background, .inactive:
+            // 进入后台：复位"本前台周期已重排"标记，回到前台时再排一次
+            didRescheduleThisForeground = false
             store.flushPendingSave()
             countdownStore.flushPendingSave()
         @unknown default:
@@ -184,7 +200,11 @@ public final class AppLifecycleCoordinator {
         await NotificationManager.shared.rescheduleAllReminders(in: store)
         return .success
         #else
-        return .unavailable
+        // 未编译 CloudKit 的平台：能力缺失等价于「当前构建不含 iCloud 权限」。
+        // 旧代码返回的 `.unavailable` 在 CloudSyncEnableResult 里**根本不存在**
+        // （枚举只有 success / unsupportedBuild / accountUnavailable / syncFailed），
+        // 属死分支 —— 假想平台一接就编译失败。
+        return .unsupportedBuild
         #endif
     }
 
