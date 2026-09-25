@@ -148,15 +148,14 @@ struct AllEventsView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
-        .confirmationDialog(
-            String(format: NSLocalizedString("删除选中的 %d 条日程？", comment: ""), selection.count),
-            isPresented: $confirmBulkDelete,
-            titleVisibility: .visible
-        ) {
+        // 与管理页既有危险操作确认保持一致：alert + 破坏性按钮 + 取消（不用 confirmationDialog，
+        // 后者的底部弹出样式与本 App 其他确认框风格不一致）
+        .alert(String(format: NSLocalizedString("删除选中的 %d 条日程？", comment: ""), selection.count),
+               isPresented: $confirmBulkDelete) {
             Button(NSLocalizedString("删除", comment: ""), role: .destructive) { bulkDelete() }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {
-            Text(NSLocalizedString("此操作不可撤销。", comment: ""))
+            Text(NSLocalizedString("此操作不可恢复。重复日程会删除整条重复规则。", comment: ""))
         }
         // 筛选变化时清空选择：避免"看不见的行也被批量操作"
         .onChange(of: query) { _, _ in exitSelection() }
@@ -205,7 +204,9 @@ struct AllEventsView: View {
         }
     }
 
-    /// 多选操作条
+    /// 多选操作条：沿用月历底部悬浮胶囊的视觉语言（.ultraThinMaterial + Capsule + 细描边 + 轻阴影），
+    /// 不再用"全宽材质条 + 分隔线"（在列表里显得突兀）。
+    /// 两个动作都做了"选中为空时降级为次要色"的处理，避免禁用态看起来像坏掉。
     private var selectionBar: some View {
         HStack(spacing: AppTheme.Spacing.lg) {
             Button {
@@ -214,26 +215,34 @@ struct AllEventsView: View {
                 Label(String(format: NSLocalizedString("完成 %d 项", comment: ""), selection.count),
                       systemImage: "checkmark.circle")
                     .font(AppTheme.Font.subheadline.weight(.semibold))
+                    .foregroundStyle(selection.isEmpty ? Color.tertiaryLabel : Color.appTint)
             }
+            .buttonStyle(.plain)
+            .pressableFeedback()
             .disabled(selection.isEmpty)
 
-            Spacer(minLength: 0)
+            Rectangle()
+                .fill(Color.separator)
+                .frame(width: AppTheme.Stroke.hair, height: 18)
 
-            Button(role: .destructive) {
+            Button {
                 confirmBulkDelete = true
             } label: {
                 Label(String(format: NSLocalizedString("删除 %d 项", comment: ""), selection.count),
                       systemImage: "trash")
                     .font(AppTheme.Font.subheadline.weight(.semibold))
+                    .foregroundStyle(selection.isEmpty ? Color.tertiaryLabel : Color.systemRed)
             }
+            .buttonStyle(.plain)
+            .pressableFeedback()
             .disabled(selection.isEmpty)
         }
-        .padding(.horizontal, AppTheme.Spacing.xl)
-        .padding(.vertical, AppTheme.Spacing.md)
-        .background(.regularMaterial)
-        .overlay(alignment: .top) {
-            Divider()
-        }
+        .padding(.horizontal, AppTheme.Spacing.lg)
+        .padding(.vertical, AppTheme.Spacing.sm)
+        .background(Capsule().fill(.ultraThinMaterial))
+        .overlay(Capsule().stroke(Color.separator.opacity(0.5), lineWidth: AppTheme.Stroke.hair))
+        .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
+        .padding(.bottom, AppTheme.Spacing.sm)
     }
 
     // MARK: - 数据
