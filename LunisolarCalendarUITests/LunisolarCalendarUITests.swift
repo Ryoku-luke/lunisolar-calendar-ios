@@ -185,37 +185,50 @@ final class LunisolarCalendarUITests: XCTestCase {
         }
     }
 
-    // MARK: - Flow 3b：AI 助手的键盘必须关得掉（用户反馈「键盘无法关闭」）
+    // MARK: - Flow 3b：AI 助手的输入焦点行为（点里面保持 / 点外面收起 / 「完成」收起）
 
-    /// 回归用户反馈「键盘无法关闭」，同时锁住修复过程中修坏过的竞态。
+    /// 回归两条用户反馈：「点输入框没反应」与「键盘无法关闭」。
     ///
     /// 焦点态的可观测代理：**导航栏的「完成」按钮只在输入框聚焦时出现**。
     /// 为什么不用 `app.keyboards`：模拟器（xcodebuild 驱动）不显示软件键盘，
     /// `app.keyboards` 恒为空，用它断言会永远失效或永远跳过。用「完成」按钮才可以真正断言。
-    func testFlow3b_aiKeyboardCanBeDismissedByDoneButton() throws {
+    func testFlow3b_aiInputFocusBehavior() throws {
         let app = launchApp()
 
         app.tabBars.buttons["AI 助手"].tap()
 
         let input = element(app, ID.aiInput)
         XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
-        input.tap()
-
         let done = element(app, ID.aiDone)
-        // 点输入框**本身**之后焦点必须还在。
-        // 历史 bug：整页「点空白收键盘」手势会把刚点起来的键盘立刻收掉（症状时好时坏）。
+
+        // ① 点输入框**本身** → 必须保持焦点
+        //    （历史 bug：整页「点空白收键盘」手势会把刚点起来的键盘立刻收掉）
+        input.tap()
         XCTAssertTrue(done.waitForExistence(timeout: 5),
                       "点输入框后应保持焦点，导航栏出现「完成」按钮")
 
-        // 明确的收起入口：点导航栏「完成」→ 失去焦点（真机上即键盘收起）
-        done.tap()
+        // ② 点输入框**之外**（分区标题）→ 应收起键盘
+        app.staticTexts["用一句话描述"].firstMatch.tap()
         XCTAssertFalse(done.waitForExistence(timeout: 3),
-                       "点「完成」后应收起键盘（导航栏「完成」随之消失）")
+                       "点输入框之外应能收起键盘（导航栏「完成」随之消失）")
 
-        // 反向：再点输入框应能重新聚焦（收起之后不能变成「再也点不开」）
+        // ③ 再点输入框 → 应能重新聚焦（不能变成「点不开」）
         input.tap()
         XCTAssertTrue(done.waitForExistence(timeout: 5),
                       "收起后应能重新点开输入框")
+
+        // ④ 点「完成」按钮 → 同样收起
+        done.tap()
+        XCTAssertFalse(done.waitForExistence(timeout: 3),
+                       "点「完成」后应收起键盘")
+
+        // ⑤ 键盘收起状态下点行内「解析并预览」→ 按钮必须真的被点到
+        //    （历史 bug：onTapGesture 时代这个按钮的点击会被整页手势吞掉）
+        app.staticTexts["用一句话描述"].firstMatch.tap()   // 确保先失焦
+        element(app, ID.aiParse).tap()
+        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5)
+                      || element(app, ID.aiConfirm).exists,
+                      "点「解析并预览」必须有反应（预览或明确错误）")
     }
 
     // MARK: - Flow 4：iPad 三栏与侧栏导航（iPhone 上跳过）

@@ -231,11 +231,14 @@ xcodebuild test -project LunisolarCalendar.xcodeproj -scheme LunisolarCalendar \
 - iPad **竖屏**下侧栏是浮层且默认收起，展开后会盖住中栏（日期格 `isHittable == false`），
   所以 Flow 4 固定在横屏跑；竖屏那套交互仍走人工复测
   （`docs/DEVICE_TEST_CHECKLIST.md` 第 11 节）。
-- **不要在 AI 助手页加「整页点空白收键盘」的手势**。试过三种写法全部有副作用
-  （simultaneousGesture 抢输入框焦点 / onTapGesture 吞按钮点击 / SpatialTapGesture 的
-  frame 拿不到），详情见 `AIAssistantView.swift` 里的注释。键盘收起只走**明确入口**：
-  导航栏「完成」（聚焦时出现）、键盘工具栏「完成」、滚动收起、回车提交。
-  Flow 3b 就是锁这组行为的。
+- **AI 助手的「点空白收键盘」用的是 UIKit 手势，不要改回 SwiftUI 手势**。
+  SwiftUI 三种写法全部有副作用（`simultaneousGesture` 抢输入框焦点 / `onTapGesture` 吞按钮点击 /
+  `SpatialTapGesture` 靠 PreferenceKey 拿不到输入框 frame）。现方案是
+  `TapOutsideKeyboardDismisser`：挂在 List 底层滚动视图上的 `UITapGestureRecognizer`，
+  `cancelsTouchesInView = false`（不吞按钮点击）+ `shouldReceive` 里按命中区域排除输入框内部。
+  另外键盘还有三个明确入口：导航栏「完成」（聚焦时出现）、键盘工具栏「完成」、回车提交。
+  这组行为由 Flow 3b 的五条断言锁住（点里面保持 / 点外面收起 / 能重新聚焦 / 「完成」收起 /
+  行内按钮仍可点）。
 - 模拟器（xcodebuild 驱动）**不显示软件键盘**，`app.keyboards` 恒为空，
   不要用它做焦点断言（会永远失效或永远跳过）。改用「导航栏『完成』按钮是否出现」作为
   焦点态的可观测代理——见 Flow 3b。
