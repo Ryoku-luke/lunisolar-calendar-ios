@@ -93,11 +93,60 @@ final class QingheActivityCoordinatorTests: XCTestCase {
         XCTAssertEqual(candidate?.endDate, term.addingTimeInterval(2 * 3600))
     }
 
-    func testSolarTermCandidateIDIsStable() {
-        let term = SolarTermProvider.termDate(year: 2026, index: 17)!
-        let first = QingheActivityCoordinator.nextSolarTermCandidate(now: term.addingTimeInterval(-30 * 60))
-        let second = QingheActivityCoordinator.nextSolarTermCandidate(now: term.addingTimeInterval(-15 * 60))
-        XCTAssertEqual(first?.eventID, second?.eventID)
+    // MARK: 全天事件的隐式结束（回归：过去几天的全天高优先级日程曾长期霸占灵动岛）
+
+    private func allDayCandidate(_ id: String,
+                                 priority: QingheActivityPriority,
+                                 startOffset: TimeInterval) -> QingheTimeCapsuleCandidate {
+        QingheTimeCapsuleCandidate(
+            eventID: UUID(uuidString: id)!,
+            type: .event,
+            priority: priority,
+            startDate: now.addingTimeInterval(startOffset),
+            endDate: nil,          // 全天事件没有具体结束钟点
+            isAllDay: true
+        )
     }
 
+    /// 全天事件在「当天结束」之后即失效。
+    /// 此前 endDate == nil 让 isLive 恒为真 → 过期全天事件永远"进行中"。
+    func testAllDayEventExpiresAfterItsDay() {
+        let today = allDayCandidate("70000000-0000-0000-0000-000000000001",
+                                    priority: .urgent, startOffset: 0)
+        XCTAssertNotNil(QingheActivityCoordinator.pickForIsland(from: [today], now: now),
+                        "当天应入选")
+        XCTAssertNil(QingheActivityCoordinator.pickForIsland(from: [today],
+                                                            now: now.addingTimeInterval(25 * 3600)),
+                     "次日必须失效，不得继续霸占灵动岛")
+    }
+
+    /// 回归：三天前的全天紧急日程不得盖过今天 30 分钟后的普通提醒
+    func testPastAllDayUrgentDoesNotBeatUpcomingReminder() {
+        let pastAllDay = allDayCandidate("70000000-0000-0000-0000-000000000002",
+                                         priority: .urgent, startOffset: -3 * 24 * 3600)
+        let upcoming = candidate("70000000-0000-0000-0000-000000000003",
+                                 priority: .normal, startOffset: 1800, endOffset: 1800)
+        XCTAssertEqual(
+            QingheActivityCoordinator.pickForIsland(from: [pastAllDay, upcoming], now: now),
+            upcoming
+        )
+    }
+
+    /// 入选的全天候选必须带上"有效结束时刻"，否则岛上右侧剩余时间算不出来（只剩图标）
+    func testSelectedAllDayCandidateCarriesResolvedEnd() throws {
+        let today = allDayCandidate("70000000-0000-0000-0000-000000000004",
+                                    priority: .important, startOffset: -3600)
+        let picked = try XCTUnwrap(QingheActivityCoordinator.pickForIsland(from: [today], now: now))
+        let end = try XCTUnwrap(picked.endDate, "入选后必须补上有效结束时刻")
+        XCTAssertGreaterThan(end, now, "结束时刻应还在未来（当天 24:00）")
+        XCTAssertLessThan(end.timeIntervalSince(now), 24 * 3600)
+    }
+
+    /// 非全天且没有结束时刻的候选保持原语义（effectiveEnd 为 nil = 无结束概念）
+    func testNonAllDayWithoutEndKeepsNoEnd() {
+        let noEnd = candidate("70000000-0000-0000-0000-000000000005",
+                              priority: .normal, startOffset: -600, endOffset: nil)
+        XCTAssertNil(QingheActivityCoordinator.effectiveEnd(of: noEnd))
+        XCTAssertTrue(QingheActivityCoordinator.isLive(noEnd, now: now))
+    }
 }

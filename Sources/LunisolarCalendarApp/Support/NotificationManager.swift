@@ -175,6 +175,37 @@ public final class NotificationManager {
         #endif
     }
 
+    /// 「稍后提醒」通知 ID 前缀。
+    ///
+    /// 这是一条**由用户主动触发的一次性通知**，不属于任何事件的常规通知组
+    /// （`notificationIdentifiers(for:)` 那套）。因此 `cancelAll()` 会把它一并清掉，
+    /// 需要 `rescheduleAllReminders` 显式保下来。
+    static let snoozeIdentifierPrefix = "snooze-"
+
+    /// 构造「稍后提醒」通知 ID（与 `snoozeEventID(from:)` 成对，务必同源）
+    static func snoozeIdentifier(eventID: String, at epoch: TimeInterval) -> String {
+        "\(snoozeIdentifierPrefix)\(eventID)-\(Int(epoch))"
+    }
+
+    /// 从「稍后提醒」ID 中取回所属事件 UUID；前缀不符或格式异常返回 nil
+    static func snoozeEventID(from identifier: String) -> UUID? {
+        guard identifier.hasPrefix(snoozeIdentifierPrefix) else { return nil }
+        let rest = identifier.dropFirst(snoozeIdentifierPrefix.count)
+        guard rest.count >= 36 else { return nil }
+        return UUID(uuidString: String(rest.prefix(36)))
+    }
+
+    /// 从一批 pending 通知 ID 中挑出**应当保回**的「稍后提醒」ID：
+    /// 前缀为 snooze- 且其所属事件仍然存在（事件已删除就不该再为它提醒）。
+    /// 抽成纯函数，是为了让「重排时哪些 snooze 该留」这条判定可以单测。
+    static func snoozeIdentifiersToPreserve(from identifiers: [String],
+                                            existingEventIDs: Set<String>) -> Set<String> {
+        Set(identifiers.filter { identifier in
+            guard let eventID = snoozeEventID(from: identifier) else { return false }
+            return existingEventIDs.contains(eventID.uuidString)
+        })
+    }
+
     /// 灵动岛「稍后提醒」：为指定事件挂一条 `after` 秒后触发的一次性通知。
     /// **不修改事件本身的时间**（避免"稍后提醒"把用户日程挪走）。
     /// - Returns: true 表示已挂载；事件不存在 / 测试环境无通知中心 / 无权限时为 false。
@@ -188,7 +219,7 @@ public final class NotificationManager {
         let content = buildContent(for: event)
         content.body = content.body.isEmpty ? "稍后提醒" : "\(content.body)（稍后提醒）"
         let request = UNNotificationRequest(
-            identifier: "snooze-\(eventID)-\(Int(Date().timeIntervalSince1970))",
+            identifier: Self.snoozeIdentifier(eventID: eventID, at: Date().timeIntervalSince1970),
             content: content,
             trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(seconds, 1), repeats: false)
         )
@@ -207,12 +238,31 @@ public final class NotificationManager {
     /// 重新调度所有未完成的提醒
     public func rescheduleAllReminders(in store: EventStore) async {
         #if canImport(UserNotifications)
+        // 先把「稍后提醒」摘出来：它是用户主动挂的一次性通知（ID 前缀 snooze-），
+        // 不属于任何事件的常规通知组，而 cancelAll() 会连它一起清掉 →
+        // 用户点了「稍后提醒」后，10 分钟内只要 App 回到前台或冷启动
+        // （两者都会走到这里），这条就永远不送达，且没有任何提示。
+        // 只保留「对应事件仍然存在」的那些，避免为已删除的事件继续提醒。
+        let pending = await currentCenterIfAvailable?.pendingNotificationRequests() ?? []
+        let keepIDs = Self.snoozeIdentifiersToPreserve(
+            from: pending.map(\.identifier),
+            existingEventIDs: Set(store.events.map { $0.id.uuidString })
+        )
+        let keptSnoozes = pending.filter { keepIDs.contains($0.identifier) }
+
         cancelAll()
         // 注意：.never && isNotified 的事件不应该再被调度
         for event in store.events
             where Self.shouldScheduleNotification(for: event) && !event.isCompleted {
             if event.repeatRule == .never && event.isNotified { continue }
             await scheduleNotification(for: event)
+        }
+
+        // 原样放回「稍后提醒」（内容与触发时刻都不变）
+        if let center = currentCenterIfAvailable {
+            for request in keptSnoozes {
+                try? await center.add(request)
+            }
         }
         #endif
     }

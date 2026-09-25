@@ -74,6 +74,27 @@ public enum QingheActivityCoordinator {
         return UUID(uuidString: "00000000-0000-5000-8000-\(suffix)")!
     }
 
+    /// 候选的**有效结束时刻**：显式结束时间优先；全天事件补一个隐式结束 = 当天 24:00。
+    ///
+    /// 为什么必须补：全天候选的 `endDate` 是 nil（表示"没有具体结束钟点"），而 `isLive`
+    /// 的判据是 `endDate == nil || endDate >= now`，于是它一旦进入当天就**永远**「进行中」——
+    /// 上周的全天高优先级日程会盖过今天真正相关的提醒、长期霸占灵动岛；
+    /// 又因为没有结束时刻，岛上右侧的剩余时间三档文案全部落空，只剩图标和旧标题。
+    static func effectiveEnd(of candidate: QingheTimeCapsuleCandidate) -> Date? {
+        if let end = candidate.endDate { return end }
+        guard candidate.isAllDay else { return nil }
+        return QingheCalendarContext.userCalendar
+            .startOfDay(for: candidate.startDate)
+            .addingTimeInterval(24 * 60 * 60)
+    }
+
+    /// 该候选此刻是否「进行中」（live 判定与排序共用同一判据）
+    static func isLive(_ candidate: QingheTimeCapsuleCandidate, now: Date) -> Bool {
+        guard candidate.startDate <= now else { return false }
+        guard let end = effectiveEnd(of: candidate) else { return true }
+        return end >= now
+    }
+
     /// 从候选集中选出最值得上岛的一个。
     public static func pickForIsland(
         from candidates: [QingheTimeCapsuleCandidate],
@@ -81,17 +102,23 @@ public enum QingheActivityCoordinator {
     ) -> QingheTimeCapsuleCandidate? {
         let horizon = now.addingTimeInterval(lookaheadWindow)
 
-        let eligible = candidates.filter { c in
-            let isLive = c.startDate <= now && (c.endDate == nil || c.endDate! >= now)
+        // 入选时把「有效结束时刻」写回候选：下游（岛的剩余时间文案 / staleDate / 展开态）
+        // 与 live 判定因此用的是同一份时间，不会一个说"进行中"、另一个算不出剩余时间。
+        let eligible = candidates.compactMap { c -> QingheTimeCapsuleCandidate? in
+            let live = isLive(c, now: now)
             let isUpcoming = c.startDate > now && c.startDate <= horizon
-            return isLive || isUpcoming
+            guard live || isUpcoming else { return nil }
+            return QingheTimeCapsuleCandidate(
+                eventID: c.eventID, type: c.type, priority: c.priority,
+                startDate: c.startDate, endDate: effectiveEnd(of: c), isAllDay: c.isAllDay
+            )
         }
         guard !eligible.isEmpty else { return nil }
 
         return eligible.sorted { a, b in
             if a.priority != b.priority { return a.priority > b.priority }
-            let aLive = a.startDate <= now && (a.endDate == nil || a.endDate! >= now)
-            let bLive = b.startDate <= now && (b.endDate == nil || b.endDate! >= now)
+            let aLive = isLive(a, now: now)
+            let bLive = isLive(b, now: now)
             if aLive != bLive { return aLive }
             // 同优先级、同进行状态：先开始的优先（距当前最近的）
             return a.startDate < b.startDate
