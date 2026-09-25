@@ -98,19 +98,20 @@ public final class AIAssistantService {
     /// 0 条 → .notFound；多条 → .ambiguous（让用户补充时间或标题，绝不"猜一条"执行）。
     public func resolveTarget(_ criteria: AIEventCriteria) -> Result<CalendarEvent, AICommandError> {
         let matched = matches(criteria)
-        let targetDescription = criteria.keyword.isEmpty ? "该时间" : "「\(criteria.keyword)」"
+        let targetDescription = criteria.keyword.isEmpty ? NSLocalizedString("该时间", comment: "") : "「\(criteria.keyword)」"
         switch matched.count {
         case 0:
             return .failure(AICommandError(
                 kind: .notFound,
-                message: "这一天没有匹配到\(targetDescription)相关的日程。"
+                message: String(format: NSLocalizedString("这一天没有匹配到%@相关的日程。", comment: ""), targetDescription)
             ))
         case 1:
             return .success(matched[0])
         default:
             return .failure(AICommandError(
                 kind: .ambiguous,
-                message: "找到 \(matched.count) 条匹配\(targetDescription)的日程，补充具体时间或标题再试。"
+                message: String(format: NSLocalizedString("找到 %d 条匹配%@的日程，补充具体时间或标题再试。", comment: ""),
+                                matched.count, targetDescription)
             ))
         }
     }

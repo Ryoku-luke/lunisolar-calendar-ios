@@ -135,14 +135,16 @@ public enum HuangliDBProvider {
     public static var coverageDescription: String {
         let c = Cache.shared
         guard let r = c.root else {
-            return "黄历数据：按传统干支规则实时推导（未加载预生成数据）"
+            return NSLocalizedString("黄历数据：按传统干支规则实时推导（未加载预生成数据）", comment: "")
         }
         // P3 修复：JSON 被外部篡改/损坏时 r.range.count 可能 < 2，
         //   旧代码直接 r.range[1] 会触发 Swift Array index out of range precondition
         //   → 整个 SettingsView 进程崩溃。改用 first/last 安全访问。
-        let start = r.range.first ?? "未知"
+        let start = r.range.first ?? NSLocalizedString("未知", comment: "")
         let end = r.range.count >= 2 ? r.range.last! : start
-        return "黄历数据：\(start) ~ \(end) 为预生成（按传统干支规则推导）\(r.count) 条；范围外按同一规则实时推导"
+        return String(format:
+            NSLocalizedString("黄历数据：%@ ~ %@ 为预生成（按传统干支规则推导）%d 条；范围外按同一规则实时推导", comment: ""),
+                      start, end, r.count)
     }
 }
 

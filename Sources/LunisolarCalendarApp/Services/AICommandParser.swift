@@ -144,7 +144,7 @@ public enum AICommandParser {
         guard !s.isEmpty else {
             return .failure(AICommandError(
                 kind: .emptyInput,
-                message: "请先输入一句话，例如「明天下午3点提醒我开会」。"
+                message: NSLocalizedString("请先输入一句话，例如「明天下午3点提醒我开会」。", comment: "")
             ))
         }
 
@@ -271,7 +271,8 @@ public enum AICommandParser {
             var comps = cal.dateComponents([.year, .month, .day], from: newDay)
             comps.hour = clock.0; comps.minute = clock.1
             guard let newStart = cal.date(from: comps) else {
-                return .failure(AICommandError(kind: .badTime, message: "没识别到要改到的时间。"))
+                return .failure(AICommandError(kind: .badTime,
+                                               message: NSLocalizedString("没识别到要改到的时间。", comment: "")))
             }
             // 定位关键词取自"改到"之前的定位部分
             let keyword = cleanedKeyword(from: head, removing: [consumedDate, consumedTime])
@@ -297,14 +298,15 @@ public enum AICommandParser {
         guard !title.isEmpty else {
             return .failure(AICommandError(
                 kind: .missingTitle,
-                message: "没识别到日程标题，换个说法试试。"
+                message: NSLocalizedString("没识别到日程标题，换个说法试试。", comment: "")
             ))
         }
 
         var c = cal.dateComponents([.year, .month, .day], from: base)
         c.hour = hour; c.minute = minute
         guard let start = cal.date(from: c) else {
-            return .failure(AICommandError(kind: .badTime, message: "时间格式无法识别。"))
+            return .failure(AICommandError(kind: .badTime,
+                                           message: NSLocalizedString("时间格式无法识别。", comment: "")))
         }
 
         // 4. 重复规则：直接在原始输入上判定

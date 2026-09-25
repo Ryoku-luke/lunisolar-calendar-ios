@@ -36,7 +36,8 @@ public enum AICommandValidator {
         guard year >= ChineseCalendar.minYear, year <= ChineseCalendar.maxYear else {
             return .failure(AICommandError(
                 kind: .outOfRange,
-                message: "日期超出支持范围（\(ChineseCalendar.minYear)–\(ChineseCalendar.maxYear) 年）。"
+                message: String(format: NSLocalizedString("日期超出支持范围（%d–%d 年）。", comment: ""),
+                                ChineseCalendar.minYear, ChineseCalendar.maxYear)
             ))
         }
         return .success(range)
@@ -49,14 +50,15 @@ public enum AICommandValidator {
         guard hasKeyword || criteria.timeHint != nil else {
             return .failure(AICommandError(
                 kind: .missingTarget,
-                message: "没听清要操作哪条日程，补上标题或时间（如「删掉明天3点的例会」）。"
+                message: NSLocalizedString("没听清要操作哪条日程，补上标题或时间（如「删掉明天3点的例会」）。", comment: "")
             ))
         }
         let year = QingheCalendarContext.userCalendar.component(.year, from: criteria.day)
         guard year >= ChineseCalendar.minYear, year <= ChineseCalendar.maxYear else {
             return .failure(AICommandError(
                 kind: .outOfRange,
-                message: "日期超出支持范围（\(ChineseCalendar.minYear)–\(ChineseCalendar.maxYear) 年）。"
+                message: String(format: NSLocalizedString("日期超出支持范围（%d–%d 年）。", comment: ""),
+                                ChineseCalendar.minYear, ChineseCalendar.maxYear)
             ))
         }
         return .success(criteria)
@@ -75,13 +77,14 @@ public enum AICommandValidator {
             guard year >= ChineseCalendar.minYear, year <= ChineseCalendar.maxYear else {
                 return .failure(AICommandError(
                     kind: .outOfRange,
-                    message: "新时间超出支持范围（\(ChineseCalendar.minYear)–\(ChineseCalendar.maxYear) 年）。"
+                    message: String(format: NSLocalizedString("新时间超出支持范围（%d–%d 年）。", comment: ""),
+                                    ChineseCalendar.minYear, ChineseCalendar.maxYear)
                 ))
             }
             guard draft.newStartDate > now else {
                 return .failure(AICommandError(
                     kind: .inThePast,
-                    message: "新时间已经过去了，请确认要改到的时刻。"
+                    message: NSLocalizedString("新时间已经过去了，请确认要改到的时刻。", comment: "")
                 ))
             }
             return .success(AIUpdateEventDraft(criteria: criteria, newStartDate: draft.newStartDate))
@@ -102,7 +105,7 @@ public enum AICommandValidator {
         guard !normalized.title.isEmpty else {
             return .failure(AICommandError(
                 kind: .missingTitle,
-                message: "没识别到日程标题，换个说法试试。"
+                message: NSLocalizedString("没识别到日程标题，换个说法试试。", comment: "")
             ))
         }
         if normalized.title.count > maxTitleLength {
@@ -114,7 +117,8 @@ public enum AICommandValidator {
         guard year >= ChineseCalendar.minYear, year <= ChineseCalendar.maxYear else {
             return .failure(AICommandError(
                 kind: .outOfRange,
-                message: "日期超出支持范围（\(ChineseCalendar.minYear)–\(ChineseCalendar.maxYear) 年）。"
+                message: String(format: NSLocalizedString("日期超出支持范围（%d–%d 年）。", comment: ""),
+                                ChineseCalendar.minYear, ChineseCalendar.maxYear)
             ))
         }
 
@@ -124,7 +128,7 @@ public enum AICommandValidator {
             )
             return .failure(AICommandError(
                 kind: .inThePast,
-                message: "「\(stamp)」已经过去了，加上「明天」「后天」或具体日期再试。"
+                message: String(format: NSLocalizedString("「%@」已经过去了，加上「明天」「后天」或具体日期再试。", comment: ""), stamp)
             ))
         }
 

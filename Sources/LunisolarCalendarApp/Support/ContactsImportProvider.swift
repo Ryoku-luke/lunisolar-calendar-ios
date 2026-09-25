@@ -81,7 +81,8 @@ public struct ContactsImportProvider: SystemImportProviding, @unchecked Sendable
             let name = [contact.givenName, contact.familyName]
                 .filter { !$0.isEmpty }
                 .joined(separator: " ")
-            let displayName = name.isEmpty ? "联系人" : name
+            // String 三元 → 必须显式 NSLocalizedString，否则英文界面显示中文
+            let displayName = name.isEmpty ? NSLocalizedString("联系人", comment: "") : name
 
             if self.fetchBirthday, let bd = contact.birthday {
                 // Swift 6 / iOS 18：NSDateComponents → DateComponents 隐式桥接已移除，
@@ -133,10 +134,10 @@ public struct ContactsImportProvider: SystemImportProviding, @unchecked Sendable
                                                     hour: 9)) else { return nil }
         return SystemImportEvent(
             sourceID: "contact-birthday:\(contactID)",
-            title: "\(name) 生日",
+            title: String(format: NSLocalizedString("%@ 生日", comment: ""), name),
             startDate: s,
             isAllDay: false,
-            notes: "从联系人导入",
+            notes: NSLocalizedString("从联系人导入", comment: ""),
             repeatRule: asLunarAnnually ? .lunarAnnually : .yearly,
             eventType: .reminder,
             priority: .high
@@ -162,13 +163,16 @@ public struct ContactsImportProvider: SystemImportProviding, @unchecked Sendable
                                                     month: month,
                                                     day: day,
                                                     hour: 10)) else { return nil }
-        let labelName = (label ?? "纪念日").isEmpty ? "纪念日" : (label ?? "纪念日")
+        // 「纪念日」是缺省标签；标题用 %@ %@ 以便英文得到 `John's Anniversary`
+        // （String 三元与插值都不查表，必须显式 NSLocalizedString / String(format:)）
+        let fallbackLabel = NSLocalizedString("纪念日", comment: "")
+        let labelName = (label ?? fallbackLabel).isEmpty ? fallbackLabel : (label ?? fallbackLabel)
         return SystemImportEvent(
             sourceID: "contact-\(labelName):\(contactID)",
-            title: "\(name) \(labelName)",
+            title: String(format: NSLocalizedString("%@ %@", comment: ""), name, labelName),
             startDate: s,
             isAllDay: false,
-            notes: "从联系人导入",
+            notes: NSLocalizedString("从联系人导入", comment: ""),
             repeatRule: asLunarAnnually ? .lunarAnnually : .yearly,
             eventType: .reminder,
             priority: .normal

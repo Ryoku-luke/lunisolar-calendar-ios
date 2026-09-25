@@ -1,10 +1,12 @@
 /* 清和日历 Localizable.strings (en) — 自动生成，key=简体中文原文 */
 
+"%@ %@" = "%@'s %@";
 "%@ 中没有可导入的事件" = "Nothing to import from %@";
 "%@ 导入：新增 %d · 更新 %d" = "%@ Import: %d added · %d updated";
 "%@ 已上灵动岛，点击下岛" = "%@ is on the Dynamic Island. Tap to remove.";
 "%@ 无新增（已存在或被策略跳过）" = "Nothing new from %@ (already exist or skipped by policy)";
 "%@ 权限未授权，请前往系统设置开启" = "%@ permission not granted. Enable it in System Settings.";
+"%@ 生日" = "%@'s Birthday";
 "%@（今天）" = "%@ (Today)";
 "%@（稍后提醒）" = "%@ (Remind Later)";
 "%d 分钟前" = "%d minutes before";
@@ -32,6 +34,7 @@
 "↑↓双向" = "↑↓ Two-Way";
 "↑推送" = "↑ Push";
 "↓拉取" = "↓ Pull";
+"「%@」已经过去了，加上「明天」「后天」或具体日期再试。" = "“%@” has already passed. Add “tomorrow”, “the day after tomorrow” or a specific date.";
 "「时间胶囊」已关闭。请在 App 内「我的 → 提醒与时间胶囊」中开启后重试。" = "Live Activities is off. Turn it on in the app under Me → Reminders & Live Activities, then try again.";
 "一年后" = "In 1 Year";
 "七夕节" = "Qixi Festival";
@@ -61,6 +64,7 @@
 "从 .json 备份恢复" = "Restore from .json Backup";
 "从系统日历 / 联系人导入，重复导入不会产生副本；闰月生日会匹配平月同日" = "Import from System Calendar / Contacts. Re-importing creates no duplicates; leap-month birthdays match the same day in regular months.";
 "从系统日历导入" = "Import from System Calendar";
+"从联系人导入" = "Imported from Contacts";
 "从联系人导入生日/纪念日" = "Import Birthdays / Anniversaries from Contacts";
 "休" = "Off";
 "休 %@" = "Off %@";
@@ -213,6 +217,7 @@
 "打开 App 查看今日日程" = "Open App to View Today's Schedule";
 "打开日历 ›" = "Open Calendar ›";
 "打开日期跳转面板" = "Open Date Picker";
+"找到 %d 条匹配%@的日程，补充具体时间或标题再试。" = "%d events match %@. Add a specific time or title.";
 "按 updatedAt 谁更新就用谁" = "Use whichever has the newer updatedAt";
 "换个关键词，或打开「显示已完成」。" = "Try another keyword, or turn on “Show Completed”.";
 "换个关键词，或调整类型筛选。" = "Try another keyword, or change the type filter.";
@@ -233,6 +238,8 @@
 "新建%@" = "New %@";
 "新建倒数日" = "New Countdown";
 "新建日程" = "New Event";
+"新时间已经过去了，请确认要改到的时刻。" = "That new time has already passed. Check the time you want.";
+"新时间超出支持范围（%d–%d 年）。" = "New time out of range (%d–%d).";
 "无" = "None";
 "无效 %d" = "Invalid %d";
 "无法解析" = "Couldn't Parse";
@@ -242,9 +249,11 @@
 "日历显示" = "Calendar Display";
 "日期" = "Date";
 "日期超出支持范围" = "Date Out of Range";
+"日期超出支持范围（%d–%d 年）。" = "Date out of range (%d–%d).";
 "日程" = "Schedule";
 "日程已加入日历。" = "Event added to the calendar.";
 "时间" = "Time";
+"时间格式无法识别。" = "Couldn't recognize the time format.";
 "时间胶囊已关闭" = "Live Activity Is Off";
 "时间胶囊已开启，添加倒数日后自动上岛" = "Live Activity is on — countdowns appear on the Dynamic Island automatically";
 "春分" = "Spring Equinox";
@@ -298,9 +307,12 @@
 "每月%d日" = "Monthly on day %d";
 "每月%d日 重复（锚点：%@）" = "Repeats monthly on day %d (anchor: %@)";
 "毛毛雨" = "Drizzle";
+"没听清要操作哪条日程，补上标题或时间（如「删掉明天3点的例会」）。" = "Couldn't tell which event you mean. Add a title or time, for example “Delete tomorrow's 3 PM meeting”.";
 "没有即将到来的日程。" = "No upcoming events.";
 "没有可导入的事件" = "Nothing to import";
 "没有符合条件的日程" = "No matching events";
+"没识别到日程标题，换个说法试试。" = "Couldn't find an event title. Try rephrasing.";
+"没识别到要改到的时间。" = "Couldn't find a new time in your request.";
 "浅色" = "Light";
 "深色" = "Dark";
 "添加" = "Add";
@@ -370,6 +382,8 @@
 "记录不存在" = "Record Not Found";
 "记得喝水、起身活动" = "Remember to hydrate and move around";
 "设置" = "Settings";
+"该时间" = "that time";
+"请先输入一句话，例如「明天下午3点提醒我开会」。" = "Type something first, for example “Remind me about the meeting tomorrow at 3 PM”.";
 "请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。" = "Enable Live Activities in Settings → Notifications → Qinghe Calendar, then retry.";
 "请在此范围内选择，或点击上方「回到今天」直接返回。" = "Pick a date within this range, or tap “Back to Today” above.";
 "请将日期调整到 %d 年 1 月 1 日 — %d 年 12 月 31 日之间。" = "Please choose a date between Jan 1, %d and Dec 31, %d.";
@@ -384,6 +398,7 @@
 "还有 %d 天" = "%d days left";
 "还没有倒数日" = "No countdowns yet";
 "这一天很空闲" = "Free This Day";
+"这一天没有匹配到%@相关的日程。" = "No events on this day match %@.";
 "这一天没有安排。" = "Nothing scheduled for this day.";
 "适宜" = "Suitable";
 "选中此日" = "Select This Day";
@@ -418,6 +433,8 @@
 "高级数据设置" = "Advanced Data Settings";
 "黄历" = "Almanac";
 "黄历宜忌" = "Almanac";
+"黄历数据：%@ ~ %@ 为预生成（按传统干支规则推导）%d 条；范围外按同一规则实时推导" = "Almanac data: %@ ~ %@ is pre-generated (derived from traditional ganzhi rules), %d entries; outside this range it is derived live by the same rules";
+"黄历数据：按传统干支规则实时推导（未加载预生成数据）" = "Almanac data: derived live from traditional ganzhi rules (no pre-generated data loaded)";
 "龙抬头" = "Dragon Head Raising";
 "（当前）" = "(Current)";
 "（检测到 %d 条冲突，已按「%@」处理）" = "(%d conflicts detected, handled with “%@”)";
