@@ -18,6 +18,8 @@
 		0000000000000000000000A3 /* Sources/LunisolarCalendarApp/Resources/lunar_calendar.json in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000A1 /* Sources/LunisolarCalendarApp/Resources/lunar_calendar.json */; };
 		0000000000000000000000A4 /* Sources/LunisolarCalendarApp/Resources/huangli_db.json in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000A0 /* Sources/LunisolarCalendarApp/Resources/huangli_db.json */; };
 		0000000000000000000000A5 /* Sources/LunisolarCalendarApp/Resources/lunar_calendar.json in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000A1 /* Sources/LunisolarCalendarApp/Resources/lunar_calendar.json */; };
+		0000000000000000000000A6 /* Sources/LunisolarCalendarApp/PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000A7 /* Sources/LunisolarCalendarApp/PrivacyInfo.xcprivacy */; };
+		0000000000000000000000A8 /* Sources/LunisolarCalendarApp/PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000A7 /* Sources/LunisolarCalendarApp/PrivacyInfo.xcprivacy */; };
 		0000000000000000000000C1 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B1 /* Localizable.strings */; };
 		0000000000000000000000C2 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B2 /* InfoPlist.strings */; };
 		0000000000000000000000C3 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B3 /* Localizable.strings */; };
@@ -103,6 +105,7 @@
 		000000000000000000000090 /* Assets/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets/Assets.xcassets; sourceTree = "<group>"; };
 		0000000000000000000000A0 /* Sources/LunisolarCalendarApp/Resources/huangli_db.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Sources/LunisolarCalendarApp/Resources/huangli_db.json; sourceTree = "<group>"; };
 		0000000000000000000000A1 /* Sources/LunisolarCalendarApp/Resources/lunar_calendar.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Sources/LunisolarCalendarApp/Resources/lunar_calendar.json; sourceTree = "<group>"; };
+		0000000000000000000000A7 /* Sources/LunisolarCalendarApp/PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = Sources/LunisolarCalendarApp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0000000000000000000000B1 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = Sources/LunisolarCalendarApp/Resources/en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		0000000000000000000000B2 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = Sources/LunisolarCalendarApp/Resources/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		0000000000000000000000B3 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = Sources/LunisolarCalendarApp/Resources/ja.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -165,6 +168,7 @@
 				000000000000000000000090 /* Assets/Assets.xcassets */,
 				0000000000000000000000A0 /* Sources/LunisolarCalendarApp/Resources/huangli_db.json */,
 				0000000000000000000000A1 /* Sources/LunisolarCalendarApp/Resources/lunar_calendar.json */,
+				0000000000000000000000A7 /* Sources/LunisolarCalendarApp/PrivacyInfo.xcprivacy */,
 				000000000000000000000063 /* Products */,
 				CDC5FADE30638CB500255C00 /* Recovered References */,
 			);
@@ -331,6 +335,7 @@
 				000000000000000000000091 /* Assets/Assets.xcassets in Resources */,
 				0000000000000000000000A2 /* Sources/LunisolarCalendarApp/Resources/huangli_db.json in Resources */,
 				0000000000000000000000A3 /* Sources/LunisolarCalendarApp/Resources/lunar_calendar.json in Resources */,
+				0000000000000000000000A6 /* Sources/LunisolarCalendarApp/PrivacyInfo.xcprivacy in Resources */,
 				CDC5FAD630638CB500255C00 /* Localizable.strings in Resources */,
 				CDC5FAD730638CB500255C00 /* InfoPlist.strings in Resources */,
 				CDC5FAD830638CB500255C00 /* Localizable.strings in Resources */,
@@ -372,6 +377,7 @@
 			files = (
 				0000000000000000000000A4 /* Sources/LunisolarCalendarApp/Resources/huangli_db.json in Resources */,
 				0000000000000000000000A5 /* Sources/LunisolarCalendarApp/Resources/lunar_calendar.json in Resources */,
+				0000000000000000000000A8 /* Sources/LunisolarCalendarApp/PrivacyInfo.xcprivacy in Resources */,
 				0000000000000000000000C1 /* Localizable.strings in Resources */,
 				0000000000000000000000C2 /* InfoPlist.strings in Resources */,
 				0000000000000000000000C3 /* Localizable.strings in Resources */,

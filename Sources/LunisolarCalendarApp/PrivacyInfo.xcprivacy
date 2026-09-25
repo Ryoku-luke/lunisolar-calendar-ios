@@ -2,8 +2,29 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- 不追踪、不收集数据：本 App 无第三方 SDK、无分析上报 -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <!-- required-reason API 声明（只列本工程实际使用的类别） -->
     <key>NSPrivacyAccessedAPITypes</key>
     <array>
+        <!-- UserDefaults：存设置、深链待处理键、同步水位线、Widget 快照。
+             CA92.1 = 仅访问本 App（含 App Group 容器）自己的默认值。 -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+        <!-- 文件时间戳：读写 App 容器内的数据文件（事件库 / 黄历库 / 损坏备份）。
+             C617.1 = 访问 App 自身容器内的文件。 -->
         <dict>
             <key>NSPrivacyAccessedAPIType</key>
             <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
@@ -13,9 +34,5 @@
             </array>
         </dict>
     </array>
-    <key>NSPrivacyTrackingDomains</key>
-    <array/>
-    <key>NSPrivacyCollectedDataTypes</key>
-    <array/>
 </dict>
 </plist>
