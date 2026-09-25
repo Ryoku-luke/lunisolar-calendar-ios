@@ -7,7 +7,6 @@ struct EventRow: View {
     /// 多选模式下隐藏行内完成圆圈：整行本身是选择按钮，嵌套按钮会导致点击失效
     var showsCompleteToggle: Bool = true
     @Environment(EventStore.self) private var store
-    @State private var pressed = false
     var body: some View {
         HStack(alignment: .top, spacing: AppTheme.Spacing.md) {
             RoundedRectangle(cornerRadius: AppTheme.Stroke.thin, style: .continuous)
@@ -71,12 +70,10 @@ struct EventRow: View {
         .softChipBackground(radius: AppTheme.Radius.lg,
                              fill: Color.secondarySystemGroupedBackground)
         .contentShape(Rectangle())
-        // P2：整行按压缩放反馈
-        .scaleEffect(pressed ? 0.985 : 1.0)
-        .animation(AppTheme.Motion.pressInOut, value: pressed)
-        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity) { } onPressingChanged: { p in
-            pressed = p
-        }
+        // 注意：此处**不能**用 onLongPressGesture 做按压反馈 —— 它会在触摸按下的瞬间
+        // 抢走手势，导致外层 Button / onTapGesture / contextMenu 全部失效
+        // （真机表现：全部日程点不开编辑、多选点不动）。
+        // 按压反馈统一由调用方 .pressableFeedback()（simultaneousGesture 实现）提供。
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(event.title) \(event.displayTimeRange)\(event.isCompleted ? " 已完成" : "")")
         .accessibilityHint(event.type == .reminder || event.type == .schedule ? "轻点完成按钮切换完成状态" : "")

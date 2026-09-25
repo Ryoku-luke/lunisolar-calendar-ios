@@ -184,18 +184,23 @@ struct AllEventsView: View {
                 .accessibilityLabel(event.title)
                 .accessibilityAddTraits(selection.contains(event.id) ? [.isSelected] : [])
             } else {
-                EventRow(event: event)
-                    .contentShape(Rectangle())
-                    // 行内完成圆圈是独立按钮（.plain），点其余区域进编辑
-                    .onTapGesture { editing = event }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            EventService.shared.removeEvent(event, flush: true)
-                        } label: {
-                            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
-                        }
+                // 整行是一个 Button（List 行内需显式 buttonStyle，否则点击被行吞掉）；
+                // 按压反馈用 .pressableFeedback()（simultaneousGesture，不会抢走点击）
+                Button {
+                    editing = event
+                } label: {
+                    EventRow(event: event)
+                }
+                .buttonStyle(.plain)
+                .pressableFeedback()
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        EventService.shared.removeEvent(event, flush: true)
+                    } label: {
+                        Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
                     }
-                    .eventQuickActions(event)
+                }
+                .eventQuickActions(event)
             }
         }
     }

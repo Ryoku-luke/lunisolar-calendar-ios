@@ -161,23 +161,38 @@ struct QingheSectionHeader: View {
 /// 故此处只补最常用的两个动作，不重复放"编辑"。
 private struct EventQuickActionsModifier: ViewModifier {
     let event: CalendarEvent
+    /// 长按菜单里的「编辑」需要一个 sheet（行外层可能是 NavigationLink，无法命令式 push）
+    @State private var editing: CalendarEvent?
 
     func body(content: Content) -> some View {
-        content.contextMenu {
-            Button {
-                EventService.shared.setCompleted(event, flush: true)
-            } label: {
-                Label(event.isCompleted
-                      ? NSLocalizedString("取消完成", comment: "")
-                      : NSLocalizedString("标记完成", comment: ""),
-                      systemImage: event.isCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle")
+        content
+            .contextMenu {
+                Button {
+                    editing = event
+                } label: {
+                    Label(NSLocalizedString("编辑", comment: ""), systemImage: "pencil")
+                }
+                Button {
+                    EventService.shared.setCompleted(event, flush: true)
+                } label: {
+                    Label(event.isCompleted
+                          ? NSLocalizedString("取消完成", comment: "")
+                          : NSLocalizedString("标记完成", comment: ""),
+                          systemImage: event.isCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle")
+                }
+                Button(role: .destructive) {
+                    EventService.shared.removeEvent(event, flush: true)
+                } label: {
+                    Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                }
             }
-            Button(role: .destructive) {
-                EventService.shared.removeEvent(event, flush: true)
-            } label: {
-                Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+            .sheet(item: $editing) { target in
+                NavigationStack {
+                    EventEditView(editing: target, defaultDate: target.startDate)
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
-        }
     }
 }
 
