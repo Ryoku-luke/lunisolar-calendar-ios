@@ -134,6 +134,10 @@ struct PhoneTabRootView: View {
 struct iPadRootView: View {
     @State private var nav = NavigationCoordinator.shared
     @Environment(EventStore.self) private var store
+    /// 深链聚焦的倒数日条目。nav.pendingOpenCountdownID 只负责「投递一次」，
+    /// 实际高亮目标由本 State 持有——否则 nav 被清空后 focusID 立刻变回 nil，高亮一闪即灭。
+    /// （与 iPhone 侧 CalendarMonthView.countdownFocusID 同构）
+    @State private var countdownFocusID: UUID?
 
     var body: some View {
         @Bindable var nav = nav
@@ -173,7 +177,7 @@ struct iPadRootView: View {
             case .agenda:
                 NavigationStack { AllEventsView().environment(store) }
             case .countdown:
-                NavigationStack { CountdownView() }
+                NavigationStack { CountdownView(focusID: countdownFocusID) }
             case .settings:
                 NavigationStack { SettingsView().environment(store) }
             }
@@ -185,6 +189,20 @@ struct iPadRootView: View {
                 .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 460)
         }
         .navigationSplitViewStyle(.balanced)
+        // P1：倒数日 / 纪念日卡片点击（qinghe://countdown/<UUID>）→ 高亮该条。
+        // 用 initial: true 消费：冷启动直接点卡片进 App 时也生效（与 CalendarMonthView 一致）。
+        // iPad 上 CalendarMonthView 不会消费本字段——openCountdownDetail 必然同时把侧栏切到
+        // .countdown，CalendarMonthView 当次即被移出视图树，只有这里能收到。
+        .onChange(of: nav.pendingOpenCountdownID, initial: true) { _, id in
+            guard let id else { return }
+            countdownFocusID = id
+            nav.pendingOpenCountdownID = nil
+        }
+        // 离开「倒数日」节即清高亮，对齐 iPhone 侧 sheet 关闭后的 onDismiss 重置，
+        // 避免下次从侧栏进入仍残留高亮
+        .onChange(of: nav.iPadSection) { _, section in
+            if section != .countdown { countdownFocusID = nil }
+        }
     }
 }
 

@@ -28,7 +28,8 @@ public final class NavigationCoordinator {
     public var pendingOpenEventID: UUID?
 
     /// P1：待打开的倒数日 ID（倒数日 / 纪念日 Live Activity 卡片 → qinghe://countdown/<UUID>）。
-    /// CalendarMonthView 监听并 sheet 出 CountdownView；消费后置 nil。
+    /// 消费方：iPhone 侧 CalendarMonthView（sheet 出 CountdownView），iPad 侧 iPadRootView
+    /// （中栏的「倒数日」节高亮对应条目）。消费后置 nil。
     public var pendingOpenCountdownID: UUID?
 
     private init() {}
