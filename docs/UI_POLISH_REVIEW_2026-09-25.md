@@ -50,7 +50,7 @@
 
 | 纪律 | 要求 | 实测 |
 |---|---|---|
-| §3.2 圆角 | 只用 8/12/16/20/24/999 | **违规仅 2 处**（`cornerRadius: 14` ×1、`cornerRadius: 22` ×1） |
+| §3.2 圆角 | 只用 8/12/16/20/24/999 | **违规仅 2 处**（`cornerRadius: 14` ×1、`cornerRadius: 22` ×1）。⚠️ 但**Token 本身与这条纪律矛盾**：`AppTheme.Radius.xl = 22`、`xxl = 28`，都在这条允许清单之外——也就是说「用 Token」并不等于「合规」 |
 | §3.3 Spacing | 只用 4/8/12/16/20/24/32 | **违规 8 处**（6 ×4、10 ×2、14 ×2）；18/22/28 已清零 |
 | §3.4 字体 | 正文用系统字体，仅数字/标题保留圆体 | `.rounded` 共 25 处，`AppTheme.Font` 内 2 处定义；抽查多为数字与标题，符合意图 |
 | 颜色 | 收敛到 Token | 硬编码 `Color(red:…)` **11 处**（多为 Live Activity 的 keyline 品牌色，属合理例外） |
@@ -58,16 +58,29 @@
 
 一句话：**报告当初担心的「散落颜色/圆角/padding/字体」并没有成为事实**，这块几乎不需要返工。
 
-## 5. 三态与组件化（§41 / §42 / §50 / §54）——**最大缺口**
+## 5. 三态与组件化（§41 / §42 / §50 / §54）——本轮已动工
 
-| 要求 | 实测 |
+> **2026-09-25 第二批更新**：新增统一状态组件 `Views/QingheStateViews.swift`
+> （`QingheSkeletonBlock` / `QingheEmptyView` / `QingheErrorView` / `QingheToast`），
+> 并接进 4 处真实界面。下表是**更新后**的状态。
+
+| 要求 | 现状 |
 |---|---|
-| §41 每个 Feature 三态：Loading 用骨架屏 / Empty 四要素 / Error 三问+重试 | 骨架屏 **0 处**（`redacted` / skeleton / shimmer 全仓无匹配）；空态 2 处；错误态零散就地 |
-| §50 新增 `UI/` 目录六组组件（DesignSystem / Calendar / DayDetail / Event / Settings / Shared） | **无 `UI/` 目录**。已有的是自然产物：`QingheUIComponents.swift`、`SettingsViewComponents.swift`、`CalendarComponents.swift`、`EventRow.swift` |
-| §37 统一 `QingheLoadingView/EmptyView/ErrorView/Toast/Confirmation` | **5 个类型一个都不存在**（全仓 grep 0 处） |
-| §42 Toast/Alert/Sheet 分工 | 有意识但未统一：`.alert(` 10 处、行内成功提示 `completedMessage` 5 处。AI 助手已用行内提示替代模态（好），但其他页仍混用 |
-| §54 成品级状态矩阵（9 Feature × 7 状态） | **无法逐格评估**，因为既没有矩阵本身、也没有骨架屏/统一错误态。**本轮新增的 6 条 UI 测试覆盖了其中的一小块**（见 §7） |
-| §74 禁止「大量 .sheet 堆叠导航」 | **触犯**：`CalendarMonthView` 单文件 **6 个 `.sheet(`**；全仓 14 个 `.sheet` vs 11 个 `NavigationLink/navigationDestination` |
+| §37 统一状态组件 | **已建立**：`QingheEmptyView`（四要素）/ `QingheErrorView`（三问 + 重试，另提供 `.compact` 紧凑排版）/ `QingheToast` / `QingheSkeletonBlock`。**刻意没有做「页面级骨架屏」**——本 App 数据是同步的，全仓三处 `ProgressView` 都是「按钮旁正在执行」的行内指示，套骨架屏是错的；没有消费者的组合件只会变死代码（理由写在文件注释里） |
+| §41 Empty 四要素 | **已落地**：倒数日空态（加「新建倒数日」按钮）、全部日程空态（加「清除筛选」按钮）。此前两处都是 `ContentUnavailableView`，缺第四项 |
+| §41 Loading 用骨架屏 | **部分落地**：天气卡的加载态从 `ProgressView` 改成骨架块，且骨架呼吸动画在「减弱动态效果」开启时关闭（顺带补上 §44 的一个缺口）。页面级 Loading 对本 App 基本 N/A |
+| §41 Error 三问 + 重试 | **已落地**：天气卡的「定位未开启」（去设置）与「加载失败」（重试）改用 `QingheErrorView(.compact)`；原先的 `compactStatusRow` 私有实现已删除 |
+| §42 Toast/Alert 分工 | **部分统一**：AI 助手的行内成功提示改用 `QingheToast`。其余页仍混用 `.alert(`（10 处） |
+| §50 `UI/` 目录六组组件 | 仍未建目录；组件放在 `Views/` 下（`QingheStateViews` / `QingheUIComponents` / `SettingsViewComponents` / `CalendarComponents` / `EventRow`） |
+| §54 成品级状态矩阵（9 Feature × 7 状态） | 仍**无法逐格评估**；但空态/错误态现在有了统一断言锚点（`state.empty` / `state.error` / `state.toast`），可以逐页补齐 |
+| §74 禁止「大量 .sheet 堆叠导航」 | **仍触犯**：`CalendarMonthView` 单文件 **6 个 `.sheet(`**；全仓 14 个 `.sheet` vs 11 个 `NavigationLink/navigationDestination` |
+
+## 5.1 本轮新发现的两个真问题（都需要修）
+
+| # | 问题 | 证据 | 严重度 |
+|---|---|---|---|
+| 1 | **「全部日程」搜不了**：`.searchable` 在 iOS 26 上不渲染任何搜索入口 | UI 测试实测：整棵无障碍树里**没有 SearchField**（日志里 24 次 `SearchField` 全是测试自身的查询），下拉列表也不出现；把 `.searchable` 与 `.navigationTitle` 调换顺序**同样无效**（已 A/B 验证，故顺序不是成因）。`AllEventsView.swift` 的 `.searchable` 处已写明该问题 | **高**（功能不可用，不只是打磨） |
+| 2 | **`AppTheme.Radius` Token 与 §3.2 的圆角纪律矛盾**：`xl = 22`、`xxl = 28` 都在报告禁止的清单里（报告要求 8/12/16/20/24/999） | `Support/AppTheme.swift` 的 Radius 定义 | 中（改 Token 值会小幅改动全站圆角，属视觉变更，需单独一步） |
 
 ## 6. 无障碍（§44）——有对有缺
 
@@ -91,6 +104,29 @@
 | ③AI 输入→解析→确认→创建→通知 | 部分 ✅ Flow 3/3b | 已覆盖解析与确认交互；**通知能否真的响**没覆盖 |
 | ④iPad→日历→点日期→Detail 更新→Inspector | 部分 ✅ Flow 4 | 覆盖侧栏切节与日期格可点；**右栏语义未定，刻意不断言** |
 | ⑤设置→iCloud→开启→同步→成功状态 | ✅ Flow 5 | 只断言「状态明确」，真同步需真机 + iCloud 账号 |
+| ⑥全部日程空态是统一组件且可行动 | ✅ Flow 6 | 用类型筛选造空态，断言 `state.empty` + 「清除筛选」按钮生效。**但依赖环境**：容器里若提醒/记事都有数据，该用例会明确跳过（当前就是跳过状态） |
+
+### 7.1 结构性缺口：UI 测试没有数据隔离（建议作为下一步）
+
+Flow 6 的跳过暴露了一个通用问题：**UI 测试跑在用户的真实容器上**，
+凡是「空数据才能成立」的断言都不稳定——本轮它跳过，就是因为容器里提醒与记事都有内容
+（这些数据来自你我在模拟器上的历次操作）。
+
+仓库里其实已经有注入点：`EventStore.init(storageBaseDir:)` 与 `CountdownStore.init(storageBaseDir:)`
+都支持临时目录。但 UI 测试拿不到那个入口——`AppRootView` 固定用 `EventStore.shared` /
+`CountdownStore.shared`。
+
+建议的修法（**只动宿主，不动 EventStore / 同步逻辑**）：
+
+1. `AppRootView` 增加可注入构造：`public init(store: EventStore = .shared, countdownStore: CountdownStore = .shared)`；
+2. `LunisolarHostApp/HostApp.swift` 里判断启动参数：带 `-uitest-empty-store` 时用
+   `FileManager.temporaryDirectory` 下的临时目录构造 store，否则维持现状；
+3. UI 测试在 `launchArguments` 里带上该参数 → 每次跑都是干净空库。
+
+收益：所有「空态 / 首次使用 / 无数据」类断言都变成确定性的，§54 的 9×7 矩阵才走得通。
+风险：`AppRootView` 的构造签名是**加默认值的增量改动**，现有调用点（只有 HostApp）不受影响；
+不碰 EventStore 的内部逻辑，也不碰 CloudKit。
+
 
 §61 的四组完成定义（视觉 6 / 交互 7 / 应用层 5 / 成品体验 10）**仍然全空**，
 且其中「Loading/Empty/Error」「Accessibility」「Reduce Motion」几条**代码里就没有实现**，
@@ -108,10 +144,12 @@
 
 | 序 | 事项 | 为什么排这里 | 谁做 |
 |---|---|---|---|
+| 0 | **修「全部日程搜不了」**（§5.1 问题 1） | **功能不可用**，优先级高于一切打磨项；`.searchable` 在 iOS 26 上不渲染入口，成因待定位 | 我 |
 | 1 | **裁决 iPad 右栏语义**（= 我上一轮的裁决项 A） | 卡住 P0-2、§33–§38、P1「iPad Inspector」四条 | 你 |
-| 2 | **统一三态组件 + 骨架屏**（§37/§41/§50） | 唯一的「整类空白」；也是继续补 UI 测试时的断言锚点 | 我 |
+| 2 | ~~**统一三态组件 + 骨架屏**（§37/§41/§50）~~ **已完成（2026-09-25）** | 组件已建立并接进 4 处界面，Flow 6 已自动化验证空态 + 行动按钮 | 已完成 |
 | 3 | **拆 `CalendarMonthView` 的 6 个 sheet**（§74 禁止项） | 触犯明确禁止项；改成 `navigationDestination` 不如完全重做，但可先收口 | 我 |
-| 4 | **Reduce Motion 降级**（§44） | 硬缺口、改动小（几处动画加 gate） | 我 |
+| 4 | **Reduce Motion 降级**（§44） | 硬缺口、改动小（几处动画加 gate）；骨架屏那一处本轮已 gate | 我 |
+| 4b | **对齐 `AppTheme.Radius` 与圆角纪律**（§5.1 问题 2） | Token 的 22/28 不在允许清单里；改值会小幅改动全站圆角，需单独一步并肉眼确认 | 我 |
 | 5 | 拆 `SettingsView`（790 行）/ `CalendarMonthView`（725 行）为 Feature 子页 | churn 大、收益偏维护性；应在 2 之后做 | 我 |
 | 6 | 补 VoiceOver 标签（现 13 处）与高对比度 | 上架前建议做；`docs/DEVICE_TEST_CHECKLIST.md` 已有检查项 | 我 |
 | 7 | 用 §54 的 9×7 矩阵逐格走一遍，把「没实现」和「没测」分开记账 | 需要先有 2 的组件，否则走不通 | 我（部分需真机） |

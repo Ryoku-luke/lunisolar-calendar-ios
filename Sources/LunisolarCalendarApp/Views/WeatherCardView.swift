@@ -29,26 +29,32 @@ struct WeatherCardView: View {
                 dayWeatherBlock(snapshot)
 
             case .some(.denied):
-                compactStatusRow(icon: "location.slash.fill",
-                                 text: NSLocalizedString("定位未开启，无法显示天气", comment: ""),
-                                 actionLabel: NSLocalizedString("去设置", comment: "")) {
-                    openSystemSettings()
-                }
+                // 统一错误态（紧凑版）：怎么了 = 定位未开启；怎么办 = 去设置
+                QingheErrorView(
+                    style: .compact,
+                    icon: "location.slash.fill",
+                    title: NSLocalizedString("定位未开启，无法显示天气", comment: ""),
+                    message: NSLocalizedString("定位未开启，无法显示天气", comment: ""),
+                    retryTitle: nil,
+                    settingsTitle: NSLocalizedString("去设置", comment: ""),
+                    onOpenSettings: { openSystemSettings() }
+                )
 
             case .some(.failed):
-                compactStatusRow(icon: "arrow.clockwise",
-                                 text: NSLocalizedString("天气加载失败", comment: ""),
-                                 actionLabel: NSLocalizedString("重试", comment: "")) {
-                    retry()
-                }
+                QingheErrorView(
+                    style: .compact,
+                    icon: "arrow.clockwise",
+                    title: NSLocalizedString("天气加载失败", comment: ""),
+                    message: NSLocalizedString("天气加载失败", comment: ""),
+                    retryTitle: NSLocalizedString("重试", comment: ""),
+                    onRetry: { retry() }
+                )
 
             case nil:
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("加载天气…")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+                // 骨架屏代替转圈：先给出文字形状（报告 §41 要求 Loading 用骨架屏）
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                    QingheSkeletonBlock(height: 12, width: 96)
+                    QingheSkeletonBlock(height: 12, width: 64)
                 }
                 .frame(minHeight: 24)
             }
@@ -121,31 +127,6 @@ struct WeatherCardView: View {
     private static func daily(for date: Date, in days: [DailyWeather]) -> DailyWeather? {
         let cal = Calendar(identifier: .gregorian)
         return days.first { cal.isDate($0.date, inSameDayAs: date) }
-    }
-
-    // MARK: - 状态行（未授权 / 失败共用，紧凑）
-
-    private func compactStatusRow(icon: String, text: String, actionLabel: String,
-                                  action: @escaping () -> Void) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button(action: action) {
-                Text(actionLabel)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tint)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color.accentColor.opacity(0.12)))
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(minHeight: 24)
     }
 
     // MARK: - 动作

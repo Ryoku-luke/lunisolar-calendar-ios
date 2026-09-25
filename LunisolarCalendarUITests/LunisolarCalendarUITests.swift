@@ -36,6 +36,10 @@ private enum ID {
     static let settingsSyncStatus = "settings.sync.status"
     static let iPadSidebarCalendar = "ipad.sidebar.calendar"
     static let iPadSidebarCountdown = "ipad.sidebar.countdown"
+    static let monthMenu = "calendar.month.menu"
+    static let stateEmpty = "state.empty"
+    static let stateError = "state.error"
+    static let stateToast = "state.toast"
 
     /// 必须与 App 侧 `AccessibilityID.monthDay` 的格式完全一致
     static func monthDay(year: Int, month: Int, day: Int) -> String {
@@ -63,6 +67,14 @@ final class LunisolarCalendarUITests: XCTestCase {
     /// 按标识查找元素，不关心它映射成哪一类（textField / textView / other / button…）
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
+    }
+
+    /// 按文案查找（只用于没有稳定标识的场景：系统菜单项、纯文案按钮）。
+    /// 注意：依赖 App 的本地化文案，所以只在强制简体中文的前提下才可靠。
+    private func label(_ app: XCUIApplication, _ text: String) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", text))
+            .firstMatch
     }
 
     /// 当前月份的月中日（15 号）。
@@ -229,6 +241,63 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5)
                       || element(app, ID.aiConfirm).exists,
                       "点「解析并预览」必须有反应（预览或明确错误）")
+    }
+
+    // MARK: - Flow 6：全部日程的空态是统一组件，且带行动按钮
+
+    /// 报告 §41 要求空态含四要素（图标 + 标题 + 说明 + 行动按钮），且各页共用同一组件。
+    ///
+    /// 空态用**类型筛选**造（点「提醒」或「记事」）：这两个类型通常没有数据。
+    /// 为什么不用搜索框造空态：iOS 26 上这条 `.searchable` 根本不渲染搜索入口
+    /// （实测整棵无障碍树里没有 SearchField，下拉也不出现）——那是另一个待修的真 bug，
+    /// 不该让本用例替它背锅。若两种类型恰好都有数据，本用例明确跳过而不是假装通过。
+    func testFlow6_allEventsEmptyStateIsUnifiedAndActionable() throws {
+        let app = launchApp()
+
+        // 进「全部日程」：先点工具栏入口菜单，再点菜单项。
+        // ⚠️ 菜单项必须用 `app.buttons[...]` 精确定位：用「任意类型按文案查找」会先匹配到
+        // 导航栏标题「全部日程」，点了等于没点（单跑偶发通过、全量跑被跳过，就是这么来的）。
+        let menu = element(app, ID.monthMenu)
+        XCTAssertTrue(menu.waitForExistence(timeout: 10), "日历页应有工具栏入口菜单")
+        menu.tap()
+
+        let agendaItem = app.buttons["全部日程"].firstMatch
+        XCTAssertTrue(agendaItem.waitForExistence(timeout: 5), "入口菜单里应有「全部日程」")
+        agendaItem.tap()
+
+        XCTAssertTrue(app.navigationBars["全部日程"].waitForExistence(timeout: 10),
+                      """
+                      应进入全部日程页。
+                      当前界面树：
+                      \(app.debugDescription)
+                      """)
+
+        let empty = element(app, ID.stateEmpty)
+
+        // 用「该类型没有数据」造空态
+        var madeEmpty = false
+        for typeName in ["提醒", "记事"] {
+            let chip = label(app, typeName)
+            guard chip.exists else { continue }
+            chip.tap()
+            if empty.waitForExistence(timeout: 3) { madeEmpty = true; break }
+        }
+        try XCTSkipUnless(madeEmpty,
+                          "当前数据里提醒与记事都有内容，无法用类型筛选造出空态")
+
+        XCTAssertTrue(empty.waitForExistence(timeout: 3),
+                      """
+                      筛选后无结果时应出现统一空态（标识 \(ID.stateEmpty)）。
+                      当前界面树：
+                      \(app.debugDescription)
+                      """)
+
+        let clear = label(app, "清除筛选")
+        XCTAssertTrue(clear.waitForExistence(timeout: 3),
+                      "空态应带「清除筛选」行动按钮（四要素的第四项）")
+        clear.tap()
+        XCTAssertFalse(empty.waitForExistence(timeout: 3),
+                       "点「清除筛选」后空态应消失（筛选条件真的被清掉）")
     }
 
     // MARK: - Flow 4：iPad 三栏与侧栏导航（iPhone 上跳过）

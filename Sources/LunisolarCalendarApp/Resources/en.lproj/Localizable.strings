@@ -119,6 +119,7 @@
 "删除选中的 %d 条日程？" = "Delete %d selected events?";
 "前往系统设置开启" = "Open System Settings";
 "加载天气…" = "Loading Weather…";
+"正在加载" = "Loading";
 "劳动节" = "Labour Day";
 "勿做" = "Avoid";
 "北京" = "Beijing";
@@ -422,6 +423,7 @@
 "重复与优先级" = "Repeat & Priority";
 "重新调度所有提醒" = "Reschedule All Reminders";
 "重试" = "Retry";
+"清除筛选" = "Clear Filters";
 "重阳节" = "Double Ninth Festival";
 "重阳限定（菊花 + 枫叶）" = "Chongyang (chrysanthemum + maple leaves)";
 "长按小组件可切换尺寸样式" = "Long-press the widget to switch sizes";

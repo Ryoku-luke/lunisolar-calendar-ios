@@ -28,6 +28,10 @@ public enum AccessibilityID {
     public static let settingsWeekStart = "settings.week.start"
     public static let settingsSyncToggle = "settings.sync.toggle"
     public static let settingsSyncStatus = "settings.sync.status"
+    // 三态（统一状态组件 QingheStateViews）
+    public static let stateEmpty = "state.empty"
+    public static let stateError = "state.error"
+    public static let stateToast = "state.toast"
     // iPad 侧栏（SwiftUI 的 List(selection:) 行在 XCUITest 里未必暴露成 Button，
     // 按标识定位才不会因元素类型变化而失配）
     public static let iPadSidebarCalendar = "ipad.sidebar.calendar"
@@ -45,13 +49,17 @@ public enum AccessibilityID {
         String(format: "calendar.month.day.y%04dm%02dd%02d", year, month, day)
     }
 
+    /// 日历页工具栏的入口菜单（含全部日程 / 倒数日 / 设置）
+    public static let monthMenu = "calendar.month.menu"
+
     /// 全部**静态**标识（供测试校验非空 / 唯一 / 命名规范）。
     /// 动态标识（`monthDay`）无法枚举，由 `monthDayFormatIsStable` 单独锁定格式。
     public static let all: [String] = [
-        monthNewEvent, todayJump, selectedSummary,
+        monthNewEvent, todayJump, monthMenu, selectedSummary,
         dayDetailNewEvent,
         editSave, editDelete, editTitle,
         aiInput, aiParse, aiConfirm, aiCancel, aiDone,
+        stateEmpty, stateError, stateToast,
         settingsWeekStart, settingsSyncToggle, settingsSyncStatus,
         iPadSidebarCalendar, iPadSidebarYear, iPadSidebarAgenda,
         iPadSidebarCountdown, iPadSidebarSettings

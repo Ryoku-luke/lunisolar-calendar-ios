@@ -19,11 +19,17 @@ struct CountdownView: View {
     var body: some View {
         List {
             if store.events.isEmpty {
-                ContentUnavailableView(
-                    "还没有倒数日",
-                    systemImage: "hourglass",
-                    description: Text("点击右上角添加生日、纪念日或重要日期")
-                )
+                // 统一空态（四要素：图标 + 标题 + 说明 + 行动按钮）。
+                // 此前用 ContentUnavailableView，缺第四项——用户看完说明还得自己去右上角找「+」。
+                QingheEmptyView(
+                    icon: "hourglass",
+                    title: NSLocalizedString("还没有倒数日", comment: ""),
+                    message: NSLocalizedString("点击右上角添加生日、纪念日或重要日期", comment: ""),
+                    actionTitle: NSLocalizedString("新建倒数日", comment: "")
+                ) {
+                    editingEvent = nil
+                    showingEditor = true
+                }
             } else {
                 ForEach(store.events) { event in
                     CountdownRow(event: event, today: today)

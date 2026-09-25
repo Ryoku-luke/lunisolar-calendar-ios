@@ -180,10 +180,9 @@ struct AIAssistantView: View {
             List {
                 // 行内成功提示：替代「已创建 → 好」这类模态 alert（少两次点击，也不打断连续输入）
                 if let completedMessage {
+                    // 统一行内提示（报告 §42：同一件事不要既 Toast 又 Alert）
                     Section {
-                        Label(completedMessage, systemImage: "checkmark.circle.fill")
-                            .font(AppTheme.Font.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.appTint)
+                        QingheToast(message: completedMessage)
                     }
                 }
 

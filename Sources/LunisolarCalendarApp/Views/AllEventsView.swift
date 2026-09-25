@@ -121,9 +121,13 @@ struct AllEventsView: View {
         // macOS 无 insetGrouped；产品目标为 iOS，macOS 仅作 SPM 单测宿主
         .listStyle(.automatic)
         #endif
-        .searchable(text: $query, prompt: Text(NSLocalizedString("搜索标题 / 地点 / 备注", comment: "")))
         .navigationTitle(NSLocalizedString("全部日程", comment: ""))
         .inlineTitleBar()
+        // ⚠️ 已知问题（2026-09-25 实测）：iOS 26 上这条 `.searchable` 不渲染任何搜索入口——
+        // 整棵无障碍树里没有 SearchField，下拉也不出现；把修饰符顺序调换同样无效（已验证，
+        // 故顺序不是成因）。表现为「全部日程搜不了」。原因未定位，
+        // 记录在 docs/UI_POLISH_REVIEW_2026-09-25.md 的待修清单里。
+        .searchable(text: $query, prompt: Text(NSLocalizedString("搜索标题 / 地点 / 备注", comment: "")))
         .toolbar {
             ToolbarItemGroup(placement: .platformTopBarTrailing) {
                 if isSelecting {
@@ -166,11 +170,16 @@ struct AllEventsView: View {
         )
         .overlay {
             if filteredEvents.isEmpty {
-                ContentUnavailableView(
-                    NSLocalizedString("没有符合条件的日程", comment: ""),
-                    systemImage: "calendar.badge.exclamationmark",
-                    description: Text(emptyHint)
-                )
+                // 统一空态（四要素）。第四项是「清除筛选」：搜索/筛选把列表清空时，
+                // 只给一句说明，用户得自己逐项还原条件。
+                QingheEmptyView(
+                    icon: "calendar.badge.exclamationmark",
+                    title: NSLocalizedString("没有符合条件的日程", comment: ""),
+                    message: emptyHint,
+                    actionTitle: hasActiveFilter ? NSLocalizedString("清除筛选", comment: "") : nil
+                ) {
+                    clearFilters()
+                }
             }
         }
         .sheet(item: $editing) { event in
@@ -406,6 +415,21 @@ struct AllEventsView: View {
         showCompleted
             ? NSLocalizedString("换个关键词，或调整类型筛选。", comment: "")
             : NSLocalizedString("换个关键词，或打开「显示已完成」。", comment: "")
+    }
+
+    /// 是否有任何生效中的搜索/筛选条件——决定空态要不要给「清除筛选」按钮
+    private var hasActiveFilter: Bool {
+        !query.trimmingCharacters(in: .whitespaces).isEmpty
+            || typeFilter != .all
+            || showCompleted
+            || showPast
+    }
+
+    private func clearFilters() {
+        query = ""
+        typeFilter = .all
+        showCompleted = false
+        showPast = false
     }
 }
 #endif

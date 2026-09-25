@@ -206,6 +206,8 @@ struct CalendarMonthView: View {
                         .touchTarget(min: AppTheme.Touch.minTarget)
                 }
                 .pressableFeedback()
+                // 稳定标识：菜单标题来自 SF Symbol，随界面语言变化，UI 测试不能按文案找
+                .accessibilityIdentifier(AccessibilityID.monthMenu)
             }
         }
         #endif
