@@ -52,7 +52,22 @@
 > 2. 确认 Container 显示为 `iCloud.com.lumingfeng.lunisolarcalendar`（Xcode 会同步刷新 pbxproj 的 SystemCapabilities 段），
 >    并自动把 iCloud 两 key 加回 entitlements 文件；
 > 3. 在 [Apple Developer](https://developer.apple.com/account/) 的 Identifiers 中为该 Bundle ID 勾选 iCloud 并注册同一 Container；
-> 4. 真机首次运行后，在 CloudKit Dashboard 将开发环境 Schema Deploy 到生产。
+> 4. 真机首次运行后，在 CloudKit Dashboard 将开发环境 Schema Deploy 到生产；
+> 5. **同步修改 `RealCloudKitProvider.hasCloudKitEntitlements()`**（见下）。
+>
+> **运行时如何判定"这具构建有没有 iCloud"**（`hasCloudKitEntitlements()`）：
+> 唯一可离线核验的来源是**开发 / AdHoc / 企业包内嵌的 `embedded.mobileprovision`**——
+> 解析其 entitlements，声明了 `icloud-container-identifiers` 才放行。
+> 分发（App Store / TestFlight）包**不嵌 profile**，而 iOS SDK 不导出 `SecTask*`
+> （那组 API 只在 macOS 公开），运行时没有公共手段能读到自身签名 entitlements，
+> 因此分发包一律按"未声明"处理 → 同步开关不可用。
+>
+> ➜ 完成上面第 1–4 步后，**开发包会自动放行**（profile 校验通过）；
+>   **分发包需要另建可核验来源**，推荐把同一份 `LunisolarCalendar.entitlements`
+>   作为资源随包分发后解析（保持单一真相），并在本函数里接上该分支。
+>   ⚠️ 不要退回"有 App Store 收据即放行"：本工程发布包恰好是"无 profile + 有收据"，
+>   放宽后会在用户第一次点「启用 iCloud 同步」时执行 `CKContainer.default()`
+>   并触发不可 catch 的 EXC_BREAKPOINT。
 
 ### Widget Extension (`LunisolarWidget/LunisolarWidget.entitlements`)
 

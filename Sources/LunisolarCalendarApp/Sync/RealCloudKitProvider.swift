@@ -40,21 +40,27 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
     ///
     /// 个人团队（免费账号）不支持 iCloud capability，entitlements 文件已按 docs/ENTITLEMENTS.md
     /// 移除 iCloud keys；此时若直接创建 CKContainer 会 EXC_BREAKPOINT 崩溃。
-    /// 判定策略（两端都保守：任何无法确认的情况一律禁用，绝不用"可能崩"换"可能能用"）：
-    /// - 有 embedded.mobileprovision（开发 / AdHoc / 企业签名）：解析其 entitlements，
-    ///   声明了 iCloud 容器才放行；解析失败 → 禁用；
-    /// - 无 embedded.mobileprovision：App Store / TestFlight 分发构建会带收据，
-    ///   由签名流程保证 entitlements → 放行；无收据（环境异常）→ 禁用。
+    ///
+    /// 判定策略（保守：任何无法确认的情况一律禁用，绝不用「可能崩」换「可能能用」）：
+    /// 唯一可离线核验的来源是**开发 / AdHoc / 企业包内嵌的 provisioning profile**。
+    /// 分发（App Store / TestFlight）包不嵌 profile，而 iOS SDK 不导出 `SecTask*`
+    /// （那组 API 只在 macOS 公开），运行时没有任何公共手段能读到自身签名 entitlements，
+    /// 因此分发包一律按「未声明」处理。
+    ///
+    /// ⚠️ 绝不因「有 App Store 收据」就放行：本工程按 docs/ENTITLEMENTS.md 有意移除了 iCloud keys，
+    /// 而发布包恰好是「无 profile + 有收据」，旧逻辑正是在此放行并执行 `CKContainer.default()`，
+    /// 触发不可 catch 的 EXC_BREAKPOINT（用户第一次点「启用 iCloud 同步」即崩）。
+    ///
+    /// ➜ 将来开通付费账号并接入 iCloud 时，必须同步修改本函数：开发包仍由 profile 校验兜住，
+    ///   分发包需要另建可核验来源（推荐把同一份 .entitlements 作为资源随包分发后解析，
+    ///   保持单一真相；见 docs/ENTITLEMENTS.md）。
     static func hasCloudKitEntitlements() -> Bool {
-        if let provisionURL = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") {
-            guard let data = try? Data(contentsOf: provisionURL) else { return false }
-            return provisionDeclaresCloudKit(data)
+        guard let provisionURL = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: provisionURL) else {
+            // 无 profile = 分发包或环境异常：无法核验 → 禁用
+            return false
         }
-        if let receipt = Bundle.main.appStoreReceiptURL,
-           FileManager.default.fileExists(atPath: receipt.path) {
-            return true
-        }
-        return false
+        return provisionDeclaresCloudKit(data)
     }
 
     /// 纯函数：从 provisioning profile 原始字节判定是否声明 iCloud 容器（可单测）。

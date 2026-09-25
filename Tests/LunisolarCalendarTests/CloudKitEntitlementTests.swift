@@ -69,4 +69,27 @@ final class CloudKitEntitlementTests: XCTestCase {
     func testEmptyDataIsUnavailable() {
         XCTAssertFalse(RealCloudKitProvider.provisionDeclaresCloudKit(Data()))
     }
+
+    // MARK: - 回归：不得因「分发包形态」放行（发布包崩溃的那条路径）
+
+    /// 测试宿主（无 embedded.mobileprovision）必须判为不可用。
+    /// 旧实现只要 `appStoreReceiptURL` 存在就放行——而本工程发布包恰好是
+    /// 「无 profile + 有收据」，正好落进该分支，于是 `CKContainer.default()`
+    /// 在用户第一次点「启用 iCloud 同步」时触发 EXC_BREAKPOINT。
+    func testEnvironmentWithoutVerifiableSourceIsUnavailable() {
+        XCTAssertFalse(RealCloudKitProvider.hasCloudKitEntitlements(),
+                       "无法核验 iCloud 容器声明时必须禁用，不得以收据或环境差异放行")
+    }
+
+    /// 只声明 `icloud-container-environment`（dev/production 选择）不足以授权容器创建
+    func testProvisionDeclaringEnvironmentKeyOnlyIsUnavailable() {
+        let plist = """
+        <?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>\
+        <key>com.apple.developer.icloud-container-environment</key>\
+        <string>Production</string>\
+        </dict></plist>
+        """
+        XCTAssertFalse(RealCloudKitProvider.provisionDeclaresCloudKit(wrap(plist)),
+                       "只有 environment 键不授权任何容器，必须判为不可用")
+    }
 }
