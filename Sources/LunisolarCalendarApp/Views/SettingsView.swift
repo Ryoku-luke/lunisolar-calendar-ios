@@ -14,6 +14,8 @@ import os
 struct SettingsView: View {
     @Environment(EventStore.self) private var store
     @Environment(\.openURL) private var openURL
+    /// 用于回到前台时重新读一次通知授权状态（用户可能刚去系统设置里开过）
+    @Environment(\.scenePhase) private var scenePhase
 
     // —— 通知 / 导入状态
     @State private var notifStatus: NotificationAuthStatus = .unavailable
@@ -87,6 +89,13 @@ struct SettingsView: View {
         .tint(accent)
         .task {
             notifStatus = await EventService.shared.notificationAuthorizationStatus()
+        }
+        // 用户点「前往系统设置」开完通知回来时，本页不会重建、.task 也不会重跑 →
+        // 状态栏一直显示「未开启」、「重新调度所有提醒」继续灰着，用户以为没生效。
+        // 回到前台时重新读一次授权状态。
+        .onChange(of: scenePhase, initial: false) { _, phase in
+            guard phase == .active else { return }
+            Task { notifStatus = await EventService.shared.notificationAuthorizationStatus() }
         }
         .modifier(ImportFileModifier(
             isPresented: $showImportPicker,

@@ -7,11 +7,20 @@ import SwiftUI
 struct WeatherIconView: View {
     /// 要显示天气的日期（通常为选中日期；默认今天）
     var selectedDate: Date = Date()
+    /// 父视图提供的共享快照（「大图标 + 文字块」并排时由父视图驱动）。
+    /// 非 nil 时优先用它 —— 否则同一天气存在两份独立状态：
+    /// 文字块重试成功、这边还停在占位云。
+    var sharedSnapshot: WeatherSnapshot? = nil
     @State private var result: WeatherResult?
+
+    /// 父视图给了快照就用它，否则用本视图自己拉到的结果
+    private var effectiveResult: WeatherResult? {
+        sharedSnapshot.map { WeatherResult.success($0) } ?? result
+    }
 
     var body: some View {
         Group {
-            switch result {
+            switch effectiveResult {
             case .some(.success(let snapshot)):
                 if let day = Self.daily(for: selectedDate, in: snapshot.days ?? []) {
                     Image(systemName: WMOWeather.describe(day.weatherCode).symbol)
@@ -30,7 +39,12 @@ struct WeatherIconView: View {
                 placeholder
             }
         }
-        .task { await load() }
+        .task {
+            // 父视图已提供共享快照时不再自行请求：同一天气不必拉两份，
+            // 也让「文字块重试成功」能立刻反映到这边
+            guard sharedSnapshot == nil else { return }
+            await load()
+        }
     }
 
     /// 加载中/失败/越界：中性占位

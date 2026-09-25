@@ -292,6 +292,14 @@ struct CalendarMonthView: View {
         .task(id: gridCacheKey) {
             let model = buildGridModel(for: currentMonth)
             gridCache[model.cacheKey] = model
+            // 缓存收敛到「当前月 ±1」：键里带 revision，每编辑一次事件就会产生一批新键，
+            // 旧键永不淘汰 → 内存随「浏览月份数 × 编辑次数」单调增长。
+            // 未命中时 gridModel(for:) 会退回纯计算，因此淘汰永远安全。
+            let keep = [currentMonth.addingMonths(-1), currentMonth, currentMonth.addingMonths(1)]
+                .map { cacheKey(month: $0) }
+            if gridCache.count > keep.count {
+                gridCache = gridCache.filter { keep.contains($0.key) }
+            }
         }
     }
 
@@ -595,6 +603,19 @@ struct CalendarMonthView: View {
         monthGridCacheKey(month: currentMonth, revision: store.revision, weekStart: weekStart)
     }
 
+    /// 选中某一天：若它属于相邻月份，连同月份一起切过去并给出滑动方向。
+    ///
+    /// 否则「选中日」与「显示月」不一致（首页标题的月份与选中日期对不上），
+    /// 而且下次翻月时 `clampedToMonth` 会把选中日静默改写成另一个月的同一天。
+    private func selectDay(_ date: Date) {
+        let month = date.firstDayOfMonth
+        if month != currentMonth {
+            monthSlideEdge = month > currentMonth ? .trailing : .leading
+            withAnimation(AppTheme.Motion.screen) { currentMonth = month }
+        }
+        withAnimation(AppTheme.Motion.pressInOut) { selectedDate = date }
+    }
+
     /// 单个月份卡片（表头 + 42 格网格）。
     /// 必须按传入月份取网格：跟手滑动时同一份日历要同时渲染当前月与相邻月。
     private func calendarShell(for month: Date, accent: Color) -> some View {
@@ -624,12 +645,12 @@ struct CalendarMonthView: View {
                         .frame(minHeight: AppTheme.Touch.minCellHeight)
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            withAnimation(AppTheme.Motion.pressInOut) { selectedDate = d }
+                            selectDay(d)
                         }
                         // 原生上下文菜单：长按日期格 → 快捷操作（原创，克制不加额外功能）
                         .contextMenu {
                             Button {
-                                withAnimation(AppTheme.Motion.pressInOut) { selectedDate = d }
+                                selectDay(d)
                             } label: {
                                 Label("选中此日", systemImage: "checkmark.circle")
                             }

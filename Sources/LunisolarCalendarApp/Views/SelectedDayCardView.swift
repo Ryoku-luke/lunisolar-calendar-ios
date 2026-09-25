@@ -7,6 +7,8 @@ struct SelectedDayCardView: View {
     @Binding var isPanelExpanded: Bool
     let accent: Color
     @Environment(EventStore.self) private var store
+    /// 天气结果（由天气文字块上报）：与并排的大图标共享，避免两者各拉一份、状态不一致
+    @State private var weatherSnapshot: WeatherSnapshot?
 
     var body: some View {
         let huangli = HuangliGenerator.generate(for: selectedDate)
@@ -72,8 +74,10 @@ struct SelectedDayCardView: View {
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 6) {
-                    WeatherIconView(selectedDate: selectedDate)
-                    WeatherCardView(selectedDate: selectedDate, alignment: .trailing)
+                    // 两者共享同一份天气结果：否则文字块重试成功、并排的图标仍停在占位云
+                    WeatherIconView(selectedDate: selectedDate, sharedSnapshot: weatherSnapshot)
+                    WeatherCardView(selectedDate: selectedDate, alignment: .trailing,
+                                    onSnapshot: { weatherSnapshot = $0 })
                     Spacer(minLength: 0)
                 }
             }

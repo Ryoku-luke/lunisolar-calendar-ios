@@ -13,6 +13,10 @@ struct WeatherCardView: View {
     var selectedDate: Date = Date()
     /// 文字对齐方向：主界面日期卡片右侧列用 .trailing，详情页独立行用 .leading
     var alignment: HorizontalAlignment = .leading
+    /// 每次拿到成功快照时上报给父视图。
+    /// 用于「大图标 + 文字块」并排的组合：两者必须看到同一份天气，
+    /// 否则文字块重试成功后，并排的图标仍停在占位云。
+    var onSnapshot: (WeatherSnapshot) -> Void = { _ in }
     @State private var result: WeatherResult?
 
     var body: some View {
@@ -130,6 +134,7 @@ struct WeatherCardView: View {
         switch newResult {
         case .success:
             result = newResult
+            publish(newResult)
         case .denied, .failed:
             // 失败时如果之前有成功快照，保留它；否则才显示失败态
             if result == nil { result = newResult }
@@ -138,8 +143,15 @@ struct WeatherCardView: View {
 
     private func retry() {
         Task {
-            result = await WeatherProvider.currentWeather()
+            let newResult = await WeatherProvider.currentWeather()
+            result = newResult
+            publish(newResult)
         }
+    }
+
+    /// 把成功快照上报给父视图（供并排的天气大图标同步渲染，避免两份状态）
+    private func publish(_ newResult: WeatherResult) {
+        if case .success(let snapshot) = newResult { onSnapshot(snapshot) }
     }
 
     #if canImport(UIKit)
