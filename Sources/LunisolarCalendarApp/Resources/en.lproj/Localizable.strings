@@ -188,7 +188,9 @@
 "少云" = "Partly Cloudy";
 "就是今天" = "It's Today";
 "工作日" = "Weekdays";
+"已修改整条重复日程的时间，提醒已重建。" = "Updated the whole repeating series; reminders rebuilt.";
 "已修改时间，提醒已重建。" = "Time updated; reminders rescheduled.";
+"已删除整条重复日程。" = "Deleted the whole repeating series.";
 "已删除该日程。" = "Event deleted.";
 "已同步" = "Synced";
 "已完成" = "Completed";
@@ -404,6 +406,7 @@
 "这一天很空闲" = "Free This Day";
 "这一天没有匹配到%@相关的日程。" = "No events on this day match %@.";
 "这一天没有安排。" = "Nothing scheduled for this day.";
+"这是重复日程（%@），将影响整条重复规则" = "This is a repeating event (%@); the whole series will be affected";
 "适宜" = "Suitable";
 "选中此日" = "Select This Day";
 "选完策略后会打开 Files 选择文件。" = "Choosing a policy opens the Files picker.";

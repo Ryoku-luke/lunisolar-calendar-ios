@@ -94,6 +94,26 @@ public final class AIAssistantService {
         }
     }
 
+    /// 用户在「删除 / 修改」里指的那**一次出现**的开始时刻。
+    ///
+    /// 重复日程在数据层只有一条记录，它的 `startDate` 是序列**锚点**（可能是几个月前）：
+    /// - 非重复日程 → 就是它自己；
+    /// - 重复日程 → 用「用户所说的那一天（criteria.day）」配上该日程原本的时分。
+    ///
+    /// 确认区用它展示"将要改动的那一次"，而不是把锚点日期摆给用户
+    /// （锚点日期与用户说的「明天」毫无关系，会让人不敢确认）。
+    nonisolated public static func occurrenceStart(
+        of event: CalendarEvent,
+        on day: Date,
+        calendar: Calendar = QingheCalendarContext.userCalendar
+    ) -> Date {
+        guard event.repeatRule != .never else { return event.startDate }
+        let hm = calendar.dateComponents([.hour, .minute], from: event.startDate)
+        var dc = calendar.dateComponents([.year, .month, .day], from: day)
+        dc.hour = hm.hour; dc.minute = hm.minute
+        return calendar.date(from: dc) ?? day
+    }
+
     /// 只读：按条件解析**唯一**目标事件（UI 预览 / 确认步骤用；不做任何写入）。
     /// 0 条 → .notFound；多条 → .ambiguous（让用户补充时间或标题，绝不"猜一条"执行）。
     public func resolveTarget(_ criteria: AIEventCriteria) -> Result<CalendarEvent, AICommandError> {

@@ -243,8 +243,17 @@ struct AIAssistantView: View {
                         LabeledContent(NSLocalizedString("日程", comment: ""), value: target.title)
                         LabeledContent(
                             NSLocalizedString("当前时间", comment: ""),
-                            value: target.startDate.formatted(date: .abbreviated, time: .shortened)
+                            value: occurrenceText(for: target)
                         )
+                        // 重复日程：模型里没有"单次例外"，这里的操作会作用于**整条重复规则**。
+                        // 必须说清楚，否则用户以为只删/只改"明天那次"，实际整条每周序列都没了。
+                        if target.repeatRule != .never {
+                            Label(String(format: NSLocalizedString("这是重复日程（%@），将影响整条重复规则", comment: "AI助手"),
+                                         target.repeatRuleLabel),
+                                  systemImage: "exclamationmark.triangle.fill")
+                                .font(AppTheme.Font.caption)
+                                .foregroundStyle(Color.systemOrange)
+                        }
                         HStack {
                             Button(role: .cancel) {
                                 destructiveTarget = nil
@@ -398,15 +407,46 @@ struct AIAssistantView: View {
         }
     }
 
+    /// 待确认命令里「用户所说的那一天」（只有删除 / 修改意图带它）
+    private var criteriaDay: Date? {
+        switch pendingCommand {
+        case .deleteEvent(let d): return d.criteria.day
+        case .updateEvent(let d): return d.criteria.day
+        default: return nil
+        }
+    }
+
+    /// 确认区「当前时间」显示的值。
+    ///
+    /// 重复日程的 `startDate` 只是序列**锚点**（可能是几个月前），与用户说的「明天」无关 ——
+    /// 直接显示锚点日期会让人不敢确认（也可能误以为是另一条日程）。
+    /// 这里改用「用户所说的那一天 + 原时分」。
+    private func occurrenceText(for target: CalendarEvent) -> String {
+        // 解析逻辑在服务层（AIAssistantService.occurrenceStart），这里只负责格式化
+        let day = criteriaDay ?? target.startDate
+        return AIAssistantService.occurrenceStart(of: target, on: day)
+            .formatted(date: .abbreviated, time: .shortened)
+    }
+
+    /// 当前待确认的目标是否为重复日程（必须在 resetAfterCompletion 之前取值）
+    private var wasRepeatingTarget: Bool {
+        destructiveTarget?.repeatRule != .never
+    }
+
     /// 确认执行删除 / 修改（唯一写入路径是 AIAssistantService → EventService）
     private func confirmDestructive() {
         guard let command = pendingCommand else { return }
         switch AIAssistantService.shared.execute(command) {
         case .success(.deletedEvent):
-            showSuccess(NSLocalizedString("已删除该日程。", comment: "AI助手"))
+            // 重复日程删的是整条序列，回执必须说清楚（否则用户以为只删了「明天那次」）
+            showSuccess(wasRepeatingTarget
+                        ? NSLocalizedString("已删除整条重复日程。", comment: "AI助手")
+                        : NSLocalizedString("已删除该日程。", comment: "AI助手"))
             resetAfterCompletion()
         case .success(.updatedEvent):
-            showSuccess(NSLocalizedString("已修改时间，提醒已重建。", comment: "AI助手"))
+            showSuccess(wasRepeatingTarget
+                        ? NSLocalizedString("已修改整条重复日程的时间，提醒已重建。", comment: "AI助手")
+                        : NSLocalizedString("已修改时间，提醒已重建。", comment: "AI助手"))
             resetAfterCompletion()
         case .success:
             break
