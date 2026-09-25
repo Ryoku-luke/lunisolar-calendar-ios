@@ -378,7 +378,7 @@ public enum DataPortability {
                     if parsedIsCompleted { event.isCompleted = true }
                     // 把外部的 UID 记到 notes 末尾，便于排查（不覆盖原 notes）
                     if let uid = rawUID, !uid.isEmpty {
-                        let suffix = "\n\n[ICS-UID]\(uid)"
+                        let suffix = "\n\n\(Self.icsUIDMarker)\(uid)"
                         event.notes = (event.notes ?? "") + suffix
                     }
                     events.append(event)
@@ -388,6 +388,57 @@ public enum DataPortability {
         }
 
         return events
+    }
+
+    // MARK: - 旧版导入遗留的备注污染清理（一次性）
+
+    /// 导入时写入的 UID 标记：`notes` 里出现它即证明这条事件来自 ICS 导入
+    static let icsUIDMarker = "[ICS-UID]"
+
+    /// 清理结果：`cleanedNotes` 为清理后的备注（nil = 清空备注）
+    public struct LegacyImportNoteCleanup: Equatable, Sendable {
+        public let cleanedNotes: String?
+        public init(cleanedNotes: String?) { self.cleanedNotes = cleanedNotes }
+    }
+
+    /// 修复旧版 ICS 导入造成的备注污染。
+    ///
+    /// 背景：旧 importICS 不识别子块，`BEGIN:VALARM` 里的 `DESCRIPTION:提醒`（英文导出为
+    /// `Reminder`）会被当成事件备注写入，且位于事件自身 DESCRIPTION **之后** →
+    /// 原备注被整段覆盖。子块泄漏本身已修（见 importICS），但**已经被污染的数据**
+    /// 不会自愈，这里给出清理后的值。
+    ///
+    /// 判定必须保守——同时满足两条才动手，绝不动用户自己写的内容：
+    /// 1. 备注**首行**恰为「提醒」或「Reminder」（VALARM 的标准文案，忽略大小写与空白）；
+    /// 2. 备注里带本 App 导入时写入的 `[ICS-UID]` 标记（证明来源是 ICS 导入）。
+    ///
+    /// - Returns: nil 表示无需清理；否则给出清理结果（只剩 UID 标记时置空）
+    public static func cleanupLegacyImportNotes(_ notes: String?) -> LegacyImportNoteCleanup? {
+        guard let notes, !notes.isEmpty else { return nil }
+        guard notes.contains(icsUIDMarker) else { return nil }
+
+        var lines = notes.components(separatedBy: "\n")
+        guard let first = lines.first?.trimmingCharacters(in: .whitespaces),
+              ["提醒", "Reminder"].contains(where: { $0.caseInsensitiveCompare(first) == .orderedSame })
+        else { return nil }
+
+        // 被污染的形态必然是「占位文案 + 空行 + [ICS-UID]…」——导入时按 "\n\n[ICS-UID]" 拼接。
+        // 若下一行不是空行，说明这行「提醒」是用户自己写的（后面还跟着用户内容）→ 不动。
+        // 宁可漏清理一条，也不误删用户写的字。
+        guard lines.count >= 2,
+              lines[1].trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+
+        lines.removeFirst()
+        // 导入时按 "\n\n[ICS-UID]…" 拼接，去掉首行后可能留下空行
+        while let head = lines.first, head.trimmingCharacters(in: .whitespaces).isEmpty {
+            lines.removeFirst()
+        }
+        let rest = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        // 只剩 UID 标记（原备注已无法找回）→ 视为没有备注，而不是留一个空壳
+        if rest.isEmpty || rest.hasPrefix(icsUIDMarker) {
+            return LegacyImportNoteCleanup(cleanedNotes: nil)
+        }
+        return LegacyImportNoteCleanup(cleanedNotes: rest)
     }
 
     // MARK: - 文件保存

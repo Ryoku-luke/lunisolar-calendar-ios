@@ -52,7 +52,13 @@ public final class AppLifecycleCoordinator {
         //    所以「打开 App」这条路径必须补上。
         store.refreshWidgetSnapshotIfDayChanged()
 
-        // 4. 装配 CloudKit 同步（如果用户上次开启过）
+        // 4. 一次性清理旧版 ICS 导入遗留的备注污染（幂等：无改动时不写盘）
+        let cleanedNotes = EventService.shared.cleanUpLegacyImportNotes()
+        if cleanedNotes > 0 {
+            AppLogger.app.info("清理了 \(cleanedNotes) 条旧版导入遗留的备注")
+        }
+
+        // 5. 装配 CloudKit 同步（如果用户上次开启过）
         await setupCloudSyncIfNeeded()
     }
 

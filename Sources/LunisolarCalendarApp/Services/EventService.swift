@@ -96,6 +96,30 @@ public final class EventService {
         store.flushPendingSave()
     }
 
+    // MARK: - 数据维护（一次性迁移）
+
+    /// 一次性清理旧版 ICS 导入遗留的备注污染（`DESCRIPTION:提醒` 曾被写成事件备注）。
+    ///
+    /// 判定与清理规则见 `DataPortability.cleanupLegacyImportNotes(_:)`：只在能证明来源是
+    /// ICS 导入（备注带 `[ICS-UID]` 标记）且**首行**确实是 VALARM 文案时才动手。
+    /// 幂等——清理后不再匹配，因此每次启动跑一遍是安全的（无改动时不写盘）。
+    /// - Returns: 实际清理条数
+    @discardableResult
+    public func cleanUpLegacyImportNotes() -> Int {
+        var cleaned = 0
+        for event in store.events {
+            guard let result = DataPortability.cleanupLegacyImportNotes(event.notes) else { continue }
+            var copy = event
+            copy.notes = result.cleanedNotes
+            copy.updatedAt = Date()
+            // 只改备注、时间未变：直接走 store.update，不动通知调度
+            store.update(copy)
+            cleaned += 1
+        }
+        if cleaned > 0 { store.flushPendingSave() }
+        return cleaned
+    }
+
     // MARK: - 批量导入 / 危险操作（P0：收口 SettingsView 直连 store）
 
     /// 批量合并导入事件（ICS / JSON / 系统日历 / 联系人导入的统一数据入口）。
