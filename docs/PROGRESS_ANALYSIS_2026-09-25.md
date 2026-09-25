@@ -54,17 +54,38 @@
 
 ## 3. 验证能力的真实现状（最关键的一节）
 
+> **本节在 2026-09-25 当天被更新过一次**：UI 测试 target 已建立，套件从 0 条行为级测试
+> 变成 5 条，并且第一次跑就抓出一个真 bug（见 §3.1）。下面表格是**更新后**的状态。
+
 | 手段 | 现状 |
 |---|---|
-| SPM 单元测试 | 已完成 309 条，全绿。但**全部是逻辑层**：模型、协调器、解析器、同步 Mock。没有一条覆盖「界面呈现」 |
-| Xcode 工程 target | **只有 `LunisolarCalendar` 与 `LunisolarWidget` 两个**（`xcodebuild -list` 实测）。没有单元测试 target，没有 UI 测试 target |
-| UI 测试 | `UITests/LunisolarCalendarUITests.swift`（3 条）**不在任何 target 里，从未编译、从未运行**。README 里写的「新建 UI Testing Bundle target 并加入该文件」这一步从未执行 |
-| CI | 无（`.github/workflows` 不存在）。推送不会触发任何构建 |
-| 现有「验证」= | `swift build` + `swift test` + 两次编译（iOS 模拟器 / xcodebuild）。**都是编译级，零行为级** |
+| SPM 单元测试 | 310 条，全绿。仍是**逻辑层**为主：模型、协调器、解析器、同步 Mock |
+| Xcode 工程 target | 三个：`LunisolarCalendar`、`LunisolarWidget`、`LunisolarCalendarUITests`。**没有单元测试 target**（单测走 SPM，`xcodebuild test` 只跑 UI 测试） |
+| UI 测试 | **已接入并跑通**：`LunisolarCalendarUITests/`，5 条用例对应 UI 报告 §55 的五条真实用户路径。iPhone 上 4 通过 + 1 跳过（Flow 4 是 iPad 专用，需在 iPad destination 上跑） |
+| CI | 仍无（`.github/workflows` 不存在）。推送不会触发任何构建——**UI 测试目前只能人工或本地命令触发** |
+| 之前的「验证」 | 曾是 `swift build` + `swift test` + 两次编译，全部是编译级 |
+| 现在的「验证」 | 上述 + `xcodebuild test … -only-testing:LunisolarCalendarUITests`（行为级，可重复） |
 
-后果：两份文档里的验收标准——总方案 §72（23 项 UX 勾选表，全空）、§22（开关一致性）、
-UI 报告 §54（9 Feature × 7 状态的成品矩阵）、§55（5 条真实用户路径）、§61（四组完成定义）——
-**目前只能靠人工在真机上走**。这也解释了为什么本项目反复出现「代码全绿但真机行为和预期不符」。
+后果（部分缓解）：两份文档里的验收标准——总方案 §72（23 项 UX 勾选表）、§22（开关一致性）、
+UI 报告 §54（9 Feature × 7 状态的成品矩阵）、§55（5 条路径）、§61（四组完成定义）——
+现在**第 1/2/3/5 条路径已有自动化覆盖**；其余（真机通知、CloudKit 跨设备、Widget、
+灵动岛、iPad 竖屏浮层交互）仍需人工。
+
+### 3.1 UI 测试第一次运行就抓到的真 bug（AI 助手）
+
+`AIAssistantView` 在整页挂了 `.simultaneousGesture(TapGesture())` 做「点空白处收键盘」。
+它与「点输入框取得焦点」是**竞态**：手势先跑完时，`updateUIView` 会立刻
+`resignFirstResponder()`，把刚点起来的键盘收掉 —— 表现就是用户反复反馈的
+「AI 助手点了没反应」，而且时好时坏。UI 测试里表现为
+`Failed to synthesize event: Neither element nor any descendant has keyboard focus`。
+
+修复时还发现第二种写法同样错：改成 `.onTapGesture`（本意是不抢子视图手势）会**吞掉
+List 行内按钮的点击** → 「解析并预览」点了既不出现预览也不弹错误。
+最终按系统标准做法处理：去掉整页手势，键盘收起交给
+`.scrollDismissesKeyboard(.interactively)` + 键盘工具栏「完成」+ 回车提交。
+
+**这条 bug 单测永远测不出来**——它只存在于手势与 UIKit 焦点系统的交互里，
+正是「没有行为级测试」的直接代价。
 
 ## 4. 需要你裁决的三处
 
@@ -74,6 +95,10 @@ UI 报告 §54（9 Feature × 7 状态的成品矩阵）、§55（5 条真实用
 - UI 报告 §33/§36：右栏应是**上下文 Inspector**，随选中日期/事件/设置/倒数切换。
 - 当前代码选的是**第三条路**：右栏在所有节下常驻 `DayDetailView`，
   理由写在 `App/LunisolarCalendarApp.swift:181-183` 的注释里（当初是为消除右栏大面积留白）。
+- 补充一条 UI 测试实测到的事实：iPad **竖屏**下侧栏是**浮层且默认收起**，
+  展开后盖住中栏（日期格 `isHittable == false`）；横屏才是三栏并排。
+  所以「竖屏优先 Sidebar+Content」（总方案 §18）这个说法与现状不符——
+  现状是**竖屏只显示中栏**，侧栏要手动展开。
 
 三者不同，代码只实现了其中一种。文档里的 UI-P0-2、P1-3、§33–§38 全部悬在这上面，
 **不定这个，「iPad 适配」这条线没法继续做。**
@@ -118,16 +143,22 @@ UI 报告 §54（9 Feature × 7 状态的成品矩阵）、§55（5 条真实用
 
 | 序 | 事项 | 为什么排这里 | 谁做 |
 |---|---|---|---|
-| 1 | **建 UI 测试 target + 补 5 条真实用户路径**（UI 报告 §55） | 唯一能把验证能力从「零行为级」提到「可重复」的动作。前面所有未完成项的验收都卡在这。target 要在 Xcode 里建（我无法可靠手改 pbxproj） | 你建 target，我写测试 |
+| ~~1~~ | ~~**建 UI 测试 target + 补 5 条真实用户路径**（UI 报告 §55）~~ | **已完成（2026-09-25）**：target 已建，5 条用例已写并跑通；第一次运行就抓出并修掉了 AI 助手的焦点 bug（§3.1） | 已完成 |
 | 2 | **修「定位失败显示北京」** | 真 bug、用户可见、改动极小 | 我 |
 | 3 | **裁决 iPad 右栏语义**（§4-A） | 不裁决，「iPad 适配」整条线停摆 | 你 |
 | 4 | **`CalendarDaySummary` 统一派生数据** | 文档标 P0、唯一被跳过的 P0；也是拆分巨型 View 的前置 | 我 |
-| 5 | **统一状态组件**（Loading/Empty/Error/Toast/确认） | 文档两处都要求；补 UI 测试时正好需要它们做断言锚点 | 我 |
-| 6 | **Reduce Motion** | 无障碍硬缺口，全仓 0 处理，改动小 | 我 |
-| 7 | 拆分 SettingsView / CalendarMonthView | churn 大、收益偏维护性，且应在 4/5 之后做 | 我 |
-| 8 | README 测试数去写死（§4-B） | 小事，但每次新增测试都要手工维护 | 你点头即可 |
-| 9 | iPad Sidebar 分组、11 英寸 / 13 英寸列宽、`presentedRoute` 统一 | 依赖第 3 项的裁决 | 我 |
-| 10 | App Store 上架材料（截图 4 语言、描述、TestFlight、性能测试） | 与代码无关，但上架前必须做 | 你 |
+| 5 | **统一状态组件**（Loading/Empty/Error/Toast/确认） | 文档两处都要求；也是继续补 UI 测试时的断言锚点 | 我 |
+| 6 | **把 UI 测试接进 CI**（或至少一个可一键跑脚本） | 现在有测试但**没人自动跑**；不接 CI，「回归保护」只是纸面承诺 | 我（需要你定：本机脚本 or GitHub Actions） |
+| 7 | **Reduce Motion** | 无障碍硬缺口，全仓 0 处理，改动小 | 我 |
+| 8 | 拆分 SettingsView / CalendarMonthView | churn 大、收益偏维护性，且应在 4/5 之后做 | 我 |
+| 9 | README 测试数去写死（§4-B） | 小事，但每次新增测试都要手工维护 | 你点头即可 |
+| 10 | iPad Sidebar 分组、11 英寸 / 13 英寸列宽、`presentedRoute` 统一 | 依赖第 3 项的裁决 | 我 |
+| 11 | iPad 竖屏浮层交互（UI 测试实测：侧栏展开会盖住中栏，日期格不可点） | 需要先定「竖屏要不要三栏」——与第 3 项是同一个决策 | 你定，我做 |
+| 12 | App Store 上架材料（截图 4 语言、描述、TestFlight、性能测试） | 与代码无关，但上架前必须做 | 你 |
+
+> 新增的第 6 项值得单独说一句：UI 测试的价值只在**有人跑**的前提下成立。
+> 现在它躺在仓库里，只有手动命令或 Cmd+U 才会执行；本仓库又明确没有 CI。
+> 要么接 CI，要么至少写一个 `Tools/run_tests.sh` 把四通道 + UI 测试串起来。
 
 ## 7. 与两份文档执行顺序的差异说明
 

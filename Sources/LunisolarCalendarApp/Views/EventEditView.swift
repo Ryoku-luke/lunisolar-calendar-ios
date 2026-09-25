@@ -79,6 +79,7 @@ struct EventEditView: View {
                     .font(.title2.weight(.semibold))
                     .lineLimit(1...3)
                     .padding(.vertical, 2)
+                    .accessibilityIdentifier(AccessibilityID.editTitle)
                 Picker("类型", selection: $type) {
                     ForEach(EventType.allCases) { t in
                         Text(t.uiLabel).tag(t)

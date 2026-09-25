@@ -35,4 +35,21 @@ final class AccessibilityIDTests: XCTestCase {
         XCTAssertTrue(ids.contains(AccessibilityID.editSave))
         XCTAssertTrue(ids.contains(AccessibilityID.editDelete))
     }
+
+    /// 动态标识（月历日期格）无法进 `all`，单独锁定格式：
+    /// 一旦有人改成连字符或纯数字分段，UI 测试的选择器会静默失配，这里先拦住。
+    func testMonthDayFormatIsStable() {
+        let id = AccessibilityID.monthDay(year: 2026, month: 9, day: 6)
+        XCTAssertEqual(id, "calendar.month.day.y2026m09d06")
+
+        let pattern = #"^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$"#
+        XCTAssertNotNil(id.range(of: pattern, options: .regularExpression),
+                        "动态标识也必须满足命名规范: \(id)")
+
+        // 补零必须稳定：1 月 1 日不能与 10 月 1 日撞成同一个标识
+        XCTAssertEqual(AccessibilityID.monthDay(year: 2026, month: 1, day: 1),
+                       "calendar.month.day.y2026m01d01")
+        XCTAssertNotEqual(AccessibilityID.monthDay(year: 2026, month: 1, day: 1),
+                          AccessibilityID.monthDay(year: 2026, month: 10, day: 1))
+    }
 }

@@ -28,6 +28,21 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
+      <Testables>
+         <!-- UI 测试**不能**并行：平行测试会克隆模拟器，实测会偶发
+              "Simulator device failed to launch ...xctrunner / denying by SBMainWorkspace"，
+              表现为随机一条用例失败（排查时极易误判成业务 bug）。 -->
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "CD1A46A63066516200D30756"
+               BuildableName = "LunisolarCalendarUITests.xctest"
+               ReferencedContainer = "container:LunisolarCalendar.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

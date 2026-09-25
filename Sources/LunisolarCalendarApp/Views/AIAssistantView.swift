@@ -20,6 +20,9 @@ struct AutoFocusTextView: UIViewRepresentable {
         tv.layer.cornerRadius = 12
         tv.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         tv.delegate = context.coordinator
+        // UI 测试锚点：SwiftUI 的 .accessibilityIdentifier 不会传递到 UIViewRepresentable
+        // 包着的 UIKit 视图，必须在 UITextView 上直接设。
+        tv.accessibilityIdentifier = AccessibilityID.aiInput
         return tv
     }
 
@@ -175,6 +178,7 @@ struct AIAssistantView: View {
                             .font(.body.weight(.semibold))
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
+                    .accessibilityIdentifier(AccessibilityID.aiParse)
                 }
 
                 if let d = draft {
@@ -196,6 +200,7 @@ struct AIAssistantView: View {
                             // List 行内多按钮必须显式样式：默认样式下整行会抢走点击 →
                             // 两个按钮都点不动（真机反馈「点确认取消也不起作用」）
                             .buttonStyle(.borderless)
+                            .accessibilityIdentifier(AccessibilityID.aiCancel)
                             Spacer()
                             Button {
                                 create(d)
@@ -203,6 +208,7 @@ struct AIAssistantView: View {
                                 Label(NSLocalizedString("确认创建", comment: "AI助手"), systemImage: "checkmark.circle.fill")
                             }
                             .buttonStyle(.borderless)
+                            .accessibilityIdentifier(AccessibilityID.aiConfirm)
                             .tint(Color.appTint)
                         }
                     } header: {
@@ -296,13 +302,19 @@ struct AIAssistantView: View {
             }
             #if canImport(UIKit)
             .scrollDismissesKeyboard(.interactively)
-            .simultaneousGesture(
-                TapGesture().onEnded { _ in
-                    inputFocused = false
-                }
-            )
+            // ⚠️ 这里曾经挂过一个「整页点空白处收键盘」的手势，两种写法各自修出一个 bug，已移除：
+            //   · simultaneousGesture(TapGesture())：与子视图手势并行触发，点输入框**本身**也会把
+            //     inputFocused 置 false → updateUIView 立刻 resignFirstResponder()，把刚点起来的
+            //     键盘收掉。它与「UITextView 取得第一响应者」的先后是竞态，所以症状时好时坏
+            //     （真机反馈的「点了输入框没反应」；UI 测试里表现为 typeText 报
+            //      Neither element nor any descendant has keyboard focus）。
+            //   · onTapGesture：不吞子视图手势的写法，但它会**吞掉 List 行内按钮的点击** →
+            //     「解析并预览」点了没有任何反应（UI 测试实测：既不出现预览也不弹错误）。
+            // 结论：键盘收起改走系统标准途径——滚动收起（上一行）+ 键盘工具栏「完成」+ 回车提交。
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
+                    // 明确的收起键盘入口（复用既有本地化键「完成」，四语言均已翻译）
+                    Button(NSLocalizedString("完成", comment: "AI助手")) { inputFocused = false }
                     Spacer()
                     // 键盘上的「解析」：省去"先收键盘再点列表里的按钮"这一往返
                     Button(NSLocalizedString("解析", comment: "AI助手")) { parse() }

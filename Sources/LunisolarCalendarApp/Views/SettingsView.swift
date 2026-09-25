@@ -345,6 +345,7 @@ struct SettingsView: View {
                     Label(NSLocalizedString("启用 iCloud 同步", comment: ""), systemImage: "icloud")
                 }
                 .tint(Color.systemBlue)
+                .accessibilityIdentifier(AccessibilityID.settingsSyncToggle)
 
                 HStack {
                     Text(NSLocalizedString("同步状态", comment: ""))
@@ -353,6 +354,7 @@ struct SettingsView: View {
                         .font(AppTheme.Font.subheadline.weight(.semibold))
                         .foregroundStyle(syncStatusColor(co.status))
                 }
+                .accessibilityIdentifier(AccessibilityID.settingsSyncStatus)
 
                 if let result = co.lastResult {
                     HStack {
@@ -403,6 +405,7 @@ struct SettingsView: View {
                     Label(NSLocalizedString("启用 iCloud 同步", comment: ""), systemImage: "icloud.slash")
                 }
                 .tint(Color.systemBlue)
+                .accessibilityIdentifier(AccessibilityID.settingsSyncToggle)
 
                 HStack {
                     Text(NSLocalizedString("同步状态", comment: ""))
@@ -411,6 +414,7 @@ struct SettingsView: View {
                         .font(AppTheme.Font.subheadline)
                         .foregroundStyle(Color.secondaryLabel)
                 }
+                .accessibilityIdentifier(AccessibilityID.settingsSyncStatus)
             }
             #else
             HStack {

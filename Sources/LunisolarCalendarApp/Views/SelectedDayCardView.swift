@@ -181,6 +181,8 @@ struct SelectedDayCardView: View {
         .padding(AppTheme.Spacing.lg)
         .glassCard(radius: 24, material: .regularMaterial,
                    tint: accent, shadow: AppTheme.Shadow.raised)
+        // 选中日摘要卡的稳定锚点（UI 测试用；卡片全屏只渲染一次）
+        .accessibilityIdentifier(AccessibilityID.selectedSummary)
     }
 
     private static func foregroundForDayNumber(_ date: Date) -> Color {

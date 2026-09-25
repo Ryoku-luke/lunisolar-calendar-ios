@@ -202,6 +202,8 @@ struct DayCellView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        // 稳定锚点：UI 测试按「公历年月日」定位格子，并可直接断言选中态（.isSelected 特征）
+        .accessibilityIdentifier(AccessibilityID.monthDay(year: date.year, month: date.month, day: date.day))
     }
 
     /// VoiceOver 读到的日期单元格文案。

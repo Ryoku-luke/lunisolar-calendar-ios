@@ -107,8 +107,8 @@ Sources/LunisolarCalendarApp/
 ├── Views/                       # 月视图 / 年视图 / 日详情 / 编辑 / 倒数日 / 设置 / 天气卡
 └── Resources/                   # lunar_calendar.json、huangli_db.json、4 套 lproj 本地化
 Tools/                           # 黄历库生成工具 + 图标生成脚本
-Tests/LunisolarCalendarTests/    # 309 个单元测试（36 个套件）
-UITests/                         # UI 冒烟测试（3 条）
+Tests/LunisolarCalendarTests/    # 310 个单元测试（36 个套件，走 SwiftPM）
+LunisolarCalendarUITests/        # 5 条 UI 测试（XCUITest，走 Xcode 工程）
 docs/                            # 上架 / 签名 / 构建 / 真机复测清单 / 进度分析与待做方案
 ```
 
@@ -116,12 +116,12 @@ docs/                            # 上架 / 签名 / 构建 / 真机复测清单
 
 ```bash
 swift build        # 编译所有 Target
-swift test         # 运行 309 个单元测试
+swift test         # 运行 310 个单元测试
 ```
 
-> Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；本仓库**未配置 CI**（无 `.github/workflows`，推送不会触发构建）。本地自检：`swift build` / `swift test`（macOS 宿主，2026-09-24 起可用）+ `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS 视图层与宿主编译），详见 `docs/XCODE_BUILD_GUIDE.md` §4。真机行为验证见 [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md)。
+> Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；本仓库**未配置 CI**（无 `.github/workflows`，推送不会触发构建）。本地自检：`swift build` / `swift test`（macOS 宿主，2026-09-24 起可用）+ `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS 视图层与宿主编译），详见 `docs/XCODE_BUILD_GUIDE.md` §4。行为级验证：UI 测试见下方「UI 测试」一节，真机复测见 [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md)。
 
-## 测试覆盖（309 条 / 36 个套件）
+## 测试覆盖（310 条 / 36 个套件）
 
 | 套件 | 数量 | 覆盖内容 |
 |---|---|---|
@@ -158,7 +158,7 @@ swift test         # 运行 309 个单元测试
 | EventServiceCompletionTests | 4 | 完成/取消完成幂等、批量完成 |
 | AIOccurrenceResolutionTests | 4 | 重复日程「命中那一次」的解析 |
 | LunarDataResourceTests | 3 | lunar_calendar.json 合法性与内置表一致 |
-| AccessibilityIDTests | 3 | 无障碍标识命名与唯一性 |
+| AccessibilityIDTests | 4 | 无障碍标识命名与唯一性、动态日期格标识格式锁定 |
 | HuangliTests | 2 | 宜忌稳定性、冲煞验证 |
 | EventServiceIsolationTests | 2 | EventService 可注入，不倒向共享单例 |
 
@@ -180,47 +180,58 @@ swift test         # 运行 309 个单元测试
 - 4 套 `lproj`（zh-Hans / zh-Hant / ja / en）已注册进主 App 与 Widget 两个 target 的 Resources phase
 - 新增语言：复制任一 `lproj` 并翻译键值即可，无需改代码
 
-### UI 测试（**target 尚未创建，以下为待办步骤**）
+### UI 测试（已接入，5 条真实用户路径）
 
-现状（2026-09-25 实测）：`UITests/LunisolarCalendarUITests.swift` 是**孤儿文件**——
-`xcodebuild -list` 只有 `LunisolarCalendar` 与 `LunisolarWidget` 两个 target，
-该文件不在任何 target 里，从未被编译或运行过。下面三步在 Xcode 里一次性完成：
+target `LunisolarCalendarUITests` 已在 Xcode 工程里，测试文件是
+`LunisolarCalendarUITests/LunisolarCalendarUITests.swift`。
+（此前的 `UITests/LunisolarCalendarUITests.swift` 是**孤儿文件**、从未被编译过，
+已删除——它断言了不存在的文案「保存修改」与不存在的标识「月历网格」，
+第三条更是只断言 `staticTexts.count > 5` 的空断言。）
 
-1. **File → New → Target…** → 选 **iOS → UI Testing Bundle** → Product Name 填
-   `LunisolarCalendarUITests`。
-2. 向导里 **Target Application** 选 `LunisolarCalendar`；Organization Identifier 随意，
-   Language 选 Swift（向导会顺手生成一个 `LunisolarCalendarUITests/XXXXUITests.swift` 模板文件）。
-3. 删掉向导生成的模板文件，改成把仓库里已有的 `UITests/LunisolarCalendarUITests.swift`
-   拖进工程（或右键 Add Files…），并在弹出的 target 勾选面板里**只勾 UI 测试 target**
-   （不要勾到 App target）。
+覆盖内容按《UI 整体界面打磨总报告》§55 的 5 条真实用户路径：
 
-工程里没有单元测试 target 是**正常**的：309 条单测走 SwiftPM，用 `swift test` 跑。
+| 用例 | 覆盖 |
+|---|---|
+| Flow 1 | 打开 → 点日期 → 选中态唯一且当日摘要卡出现 |
+| Flow 2 | 新建日程 → 保存 → 回日历能看到该事件 |
+| Flow 3 | AI 助手：输入 → 解析 → 必须给出预览或明确错误（不能毫无反应） |
+| Flow 4 | iPad：侧栏切节 → 中栏跟随 → 日期格可点（iPhone 上跳过） |
+| Flow 5 | 设置页 iCloud 区块给出明确状态 |
 
-跑法两种：
+跑法（两种都行）：
 
 ```bash
-# 命令行（可用于自动化；我这边也能跑）
+# iPhone：4 通过 + 1 跳过（Flow 4 是 iPad 专用）
 xcodebuild test -project LunisolarCalendar.xcodeproj -scheme LunisolarCalendar \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
   -only-testing:LunisolarCalendarUITests
+
+# iPad（Flow 4 只在这里真正执行）
+xcodebuild test -project LunisolarCalendar.xcodeproj -scheme LunisolarCalendar \
+  -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5),OS=26.5' \
+  -only-testing:LunisolarCalendarUITests
+
+# Xcode 里：选中 LunisolarCalendar scheme → Cmd+U
 ```
 
-- 或 Xcode 里选中 `LunisolarCalendar` scheme → **Cmd+U**。
-- 接线成功的判据：`xcodebuild -list` 的 Targets 里出现 `LunisolarCalendarUITests`。
+几条维护须知（都是踩过的坑）：
 
-⚠️ **建好 target 后现有 3 条测试会失败，这是预期**——它们引用的界面文案已经不存在了：
+- **UI 测试不能开并行**：scheme 里已把 `parallelizable` 设为 `NO`。并行会克隆模拟器，
+  实测会偶发 `Simulator device failed to launch …xctrunner`（被 SBMainWorkspace 拒绝），
+  表现为随机一条用例失败，极易误判成业务 bug。
+- 用例里**强制简体中文**（`-AppleLanguages (zh-Hans)`）：App 的字符串键是简体中文原文，
+  模拟器若为英文会走 `en.lproj`，所有基于文案的断言都会失配。
+- **用 `AccessibilityID` 定位，不要用文案**。测试文件里有一份字面量副本（UI 测试 target
+  没链接 App 的框架模块，无法 `import`）；失配不会静默——找不到元素就是测试红。
+- 月历日期格用的是**动态标识** `calendar.month.day.y2026m09d06`
+  （格式由 `AccessibilityIDTests.testMonthDayFormatIsStable` 锁定）。
+  取「月中日」而不是月初/月末：跟手滑动时相邻两个月会**同时渲染**，
+  月初/月末的日期会在两个网格里各出现一次，同一标识匹配到多个元素。
+- iPad **竖屏**下侧栏是浮层且默认收起，展开后会盖住中栏（日期格 `isHittable == false`），
+  所以 Flow 4 固定在横屏跑；竖屏那套交互仍走人工复测
+  （`docs/DEVICE_TEST_CHECKLIST.md` 第 11 节）。
 
-| 测试 | 问题 |
-|---|---|
-| `testAppLaunchesAndShowsCalendarTitle` | 断言导航栏标题 `「日历」`，与 `CalendarMonthView.swift:146` 的 `navigationTitle("日历")` 一致，**这条应该能过** |
-| `testNewEventEntryOpensEditor` | 断言按钮 `「保存修改」`——**全仓不存在这个文案**。编辑页的按钮是 `EventEditView.swift:219` 的 `isEditing ? 「保存」 : 「添加」`，新建时是「添加」。必然失败 |
-| `testDaySelectionUpdatesTodayCard` | 断言元素 `「月历网格」`——**全仓不存在这个标识**（只在注释里出现过），`grid` 变量取了却没用，实际只断言了 `staticTexts.count > 5`，是**空断言** |
-
-另外这 3 条全都用中文文案做选择器（如 `buttons["新建日程"]`），而代码里已经有稳定的无障碍标识
-（`AccessibilityID.monthNewEvent` = `calendar.month.new`、`todayJump`、`editSave`、`editDelete`）
-却一个都没用上——重写时应改用这些标识，免得文案一改测试就红。
-
-这 3 条需要按 UI 报告 §55 的 5 条真实用户路径重写后再运行。
+工程里没有单元测试 target 是**正常**的：310 条单测走 SwiftPM，用 `swift test` 跑。
 
 ## 发布清单（Release Checklist）
 

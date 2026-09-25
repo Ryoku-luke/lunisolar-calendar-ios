@@ -147,14 +147,24 @@ struct iPadRootView: View {
                     switch s {
                     case .calendar:
                         Label("日历", systemImage: "calendar").tag(NavigationCoordinator.iPadSection.calendar)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier(AccessibilityID.iPadSidebarCalendar)
                     case .year:
                         Label("年视图", systemImage: "calendar.circle").tag(NavigationCoordinator.iPadSection.year)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier(AccessibilityID.iPadSidebarYear)
                     case .agenda:
                         Label("全部日程", systemImage: "list.bullet.rectangle").tag(NavigationCoordinator.iPadSection.agenda)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier(AccessibilityID.iPadSidebarAgenda)
                     case .countdown:
                         Label("倒数日", systemImage: "hourglass").tag(NavigationCoordinator.iPadSection.countdown)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier(AccessibilityID.iPadSidebarCountdown)
                     case .settings:
                         Label("设置", systemImage: "gearshape").tag(NavigationCoordinator.iPadSection.settings)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier(AccessibilityID.iPadSidebarSettings)
                     }
                 }
             }
