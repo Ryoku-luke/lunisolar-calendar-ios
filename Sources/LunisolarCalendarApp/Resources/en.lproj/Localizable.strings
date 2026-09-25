@@ -35,6 +35,7 @@
 "「时间胶囊」已关闭。请在 App 内「我的 → 提醒与时间胶囊」中开启后重试。" = "Live Activities is off. Turn it on in the app under Me → Reminders & Live Activities, then try again.";
 "一年后" = "In 1 Year";
 "七夕节" = "Qixi Festival";
+"七夕限定（鹊桥 + 星河）" = "Qixi (magpie bridge + starry river)";
 "万圣节" = "Halloween";
 "上个月" = "Last Month";
 "上岛" = "Show on Dynamic Island";
@@ -46,8 +47,10 @@
 "中" = "Medium";
 "中元节" = "Ghost Festival";
 "中秋节" = "Mid-Autumn Festival";
+"中秋限定（满月 + 玉兔）" = "Mid-Autumn (full moon + jade rabbit)";
 "主图标 / 春节限定自动切换" = "Main icon / auto-switches during Spring Festival";
 "主题与日历显示方式" = "Theme & Calendar Display";
+"五行" = "Five Elements";
 "产品需求评审会" = "Product Requirements Review";
 "仅在所选日期出现一次" = "Appears once on the selected date";
 "今天" = "Today";
@@ -72,6 +75,7 @@
 "倒计时 · %@" = "Countdown · %@";
 "儿童节" = "Children's Day";
 "元宵节" = "Lantern Festival";
+"元宵限定（汤圆 + 花灯）" = "Lantern Festival (tangyuan + lanterns)";
 "元旦" = "New Year's Day";
 "全天" = "All Day";
 "全选" = "Select All";
@@ -82,6 +86,7 @@
 "共 %d 条日程，当前显示 %d 条" = "%d events in total, %d shown";
 "关于" = "About";
 "关闭" = "Close";
+"关闭后月历对应标注将隐藏，不影响当日卡片与黄历详情" = "When off, these labels are hidden in the month view. Day cards and almanac details are unaffected.";
 "农 历" = "Lunar";
 "农历" = "Lunar Calendar";
 "农历%@%@ · 每年" = "Lunar %@%@ · Yearly";
@@ -92,6 +97,8 @@
 "农历每年 重复（公历锚点：%@）" = "Repeats yearly on the lunar calendar (Gregorian anchor: %@)";
 "农历生日 · 每年" = "Lunar Birthday · Yearly";
 "冬至" = "Winter Solstice";
+"冬至限定（饺子 + 梅花）" = "Winter Solstice (dumplings + plum blossoms)";
+"冲煞" = "Clash";
 "冲突" = "Conflict";
 "冲突处理" = "Conflict Handling";
 "冻雨" = "Freezing Rain";
@@ -114,6 +121,7 @@
 "去设置" = "Open Settings";
 "取消" = "Cancel";
 "取消全选" = "Deselect All";
+"取消完成" = "Mark as Not Done";
 "同 ID 事件合并时的处理方式：%@" = "How to merge events with the same ID: %@";
 "同 id 一律用导入版本覆盖" = "Always overwrite same-id entries with the imported version";
 "同 id 的外部数据一律跳过" = "Always skip external data with the same id";
@@ -121,6 +129,7 @@
 "同步失败：%@" = "Sync Failed: %@";
 "同步完成" = "Sync Complete";
 "同步状态" = "Sync Status";
+"否" = "No";
 "启用 iCloud 同步" = "Enable iCloud Sync";
 "周一" = "Mon";
 "周日" = "Sun";
@@ -156,6 +165,7 @@
 "寒露" = "Cold Dew";
 "导入 / 恢复数据" = "Import / Restore";
 "导入、恢复与系统数据" = "Import, Restore & System Data";
+"导入事件" = "Imported Event";
 "导入冲突策略" = "Import Conflict Strategy";
 "导入前：冲突处理策略" = "Before Import: Conflict Handling";
 "导入失败：%@" = "Import Failed: %@";
@@ -199,7 +209,9 @@
 "意见反馈" = "Send Feedback";
 "成功" = "Success";
 "我的" = "Me";
+"打开 App 查看今日安排" = "Open the app to see today’s schedule";
 "打开 App 查看今日日程" = "Open App to View Today's Schedule";
+"打开日历 ›" = "Open Calendar ›";
 "打开日期跳转面板" = "Open Date Picker";
 "按 updatedAt 谁更新就用谁" = "Use whichever has the newer updatedAt";
 "换个关键词，或打开「显示已完成」。" = "Try another keyword, or turn on “Show Completed”.";
@@ -227,6 +239,7 @@
 "无网络" = "No Network";
 "日" = "Day";
 "日历" = "Calendar";
+"日历显示" = "Calendar Display";
 "日期" = "Date";
 "日期超出支持范围" = "Date Out of Range";
 "日程" = "Schedule";
@@ -236,13 +249,19 @@
 "时间胶囊已开启，添加倒数日后自动上岛" = "Live Activity is on — countdowns appear on the Dynamic Island automatically";
 "春分" = "Spring Equinox";
 "春节" = "Spring Festival";
+"春节限定（金福 + 红灯笼）" = "Spring Festival (golden fu + red lanterns)";
+"是" = "Yes";
+"显示农历" = "Show Lunar Date";
 "显示已完成" = "Show Completed";
 "显示已过去（%d 条）" = "Show Past (%d)";
+"显示节假日" = "Show Holidays";
+"显示节气" = "Show Solar Terms";
 "晴" = "Clear";
 "暂不支持该年份" = "This year is not supported yet";
 "暂无数据" = "No Data";
 "暂无该日天气" = "No Weather for This Day";
 "暂时无法启动实时活动，请稍后重试。" = "Live Activity can't start right now. Please try again later.";
+"更多黄历" = "More Almanac";
 "更新 %d" = "Updated %d";
 "更新时间" = "Updated";
 "最近同步" = "Last Sync";
@@ -262,7 +281,9 @@
 "查询结果 · %@" = "Query Result · %@";
 "标记为完成" = "Mark as Done";
 "标记为未完成" = "Mark as Not Done";
+"标记完成" = "Mark as Done";
 "标题" = "Title";
+"标题,类型,开始时间,结束时间,全天,地点,备注,重复规则,优先级,已完成,创建时间" = "Title,Type,Start,End,All-Day,Location,Notes,Repeat,Priority,Completed,Created";
 "植树节" = "Arbor Day";
 "此操作不可恢复。" = "This action cannot be undone.";
 "此操作不可恢复。重复日程会删除整条重复规则。" = "This cannot be undone. For repeating events, the whole repeat rule is deleted.";
@@ -280,12 +301,15 @@
 "没有即将到来的日程。" = "No upcoming events.";
 "没有可导入的事件" = "Nothing to import";
 "没有符合条件的日程" = "No matching events";
+"浅色" = "Light";
+"深色" = "Dark";
 "添加" = "Add";
 "添加备注" = "Add Note";
 "清和日历" = "Qinghe Calendar";
 "清和日历 © 2026 清和日历工作室。\\n保留所有权利。" = "Qinghe Calendar © 2026 Qinghe Calendar Studio.\\nAll rights reserved.";
 "清和日历支持的日期范围为 %d 年 1 月至 %d 年 12 月。" = "Qinghe Calendar supports dates from Jan %d through Dec %d.";
 "清明" = "Pure Brightness";
+"清明限定（新柳 + 青团）" = "Qingming (new willow + qingtuan)";
 "清空全部 %d 条" = "Clear All %d Items";
 "清空全部事件" = "Clear All Events";
 "清空后无法恢复，请谨慎操作" = "Cannot be undone. Please proceed with caution.";
@@ -318,12 +342,16 @@
 "立春" = "Beginning of Spring";
 "立秋" = "Beginning of Autumn";
 "端午节" = "Dragon Boat Festival";
+"端午限定（粽子 + 龙舟）" = "Dragon Boat (zongzi + dragon boats)";
 "类型" = "Type";
 "系统日历" = "System Calendar";
 "紧急" = "Urgent";
 "纪念日" = "Anniversary";
+"纳音" = "Nayin";
+"经典（撕历 + 四季）" = "Classic (tear-off calendar + four seasons)";
 "结束" = "End";
 "给妈妈打电话" = "Call Mom";
+"编辑" = "Edit";
 "编辑%@" = "Edit %@";
 "编辑倒数日" = "Edit Countdown";
 "联系人" = "Contacts";
@@ -337,6 +365,7 @@
 "解析" = "Parse";
 "解析并预览" = "Parse & Preview";
 "让 %@ 上灵动岛" = "Show %@ on the Dynamic Island";
+"让日历更懂你的生活" = "A calendar that understands your life";
 "记事" = "Note";
 "记录不存在" = "Record Not Found";
 "记得喝水、起身活动" = "Remember to hydrate and move around";
@@ -348,6 +377,7 @@
 "请求过频" = "Too Many Requests";
 "诸事不宜" = "Not auspicious for anything";
 "谷雨" = "Grain Rain";
+"跟随系统" = "System";
 "跳转" = "Jump";
 "跳转到日期" = "Jump to Date";
 "轻点完成按钮切换完成状态" = "Tap the checkmark to toggle completion";
@@ -371,6 +401,7 @@
 "重新调度所有提醒" = "Reschedule All Reminders";
 "重试" = "Retry";
 "重阳节" = "Double Ninth Festival";
+"重阳限定（菊花 + 枫叶）" = "Chongyang (chrysanthemum + maple leaves)";
 "长按小组件可切换尺寸样式" = "Long-press the widget to switch sizes";
 "阅读《平凡的世界》30分钟" = "Read \"The Ordinary World\" for 30 minutes";
 "除夕" = "Chinese New Year's Eve";

@@ -83,7 +83,7 @@ struct DayDetailView: View {
                     Text("\(date.day)")
                         .font(AppTheme.Font.numeralXL)
                         .foregroundStyle(date.isToday ? Color.systemRed : Color.label)
-                    Text(verbatim: "\(date.year) 年 \(date.month) 月")
+                    Text(date.formatted(.dateTime.year().month(.wide)))
                         .font(AppTheme.Font.caption).foregroundStyle(Color.secondaryLabel)
                         .contentTransition(.numericText())
                 }
@@ -127,9 +127,9 @@ struct DayDetailView: View {
             // 文档 #16：第一屏只显示宜忌；冲煞/五行/纳音/神位折叠到"更多"
             DisclosureGroup {
                 let rows: [(String, String, Color)] = [
-                    ("冲煞", huangli.chongSha.isEmpty ? "—" : huangli.chongSha, Color.systemRed),
-                    ("五行", huangli.wuXing.isEmpty ? "—" : huangli.wuXing, Color.systemBrown),
-                    ("纳音", huangli.naYin.isEmpty ? "—" : huangli.naYin, Color.systemPurple),
+                    (NSLocalizedString("冲煞", comment: ""), huangli.chongSha.isEmpty ? "—" : huangli.chongSha, Color.systemRed),
+                    (NSLocalizedString("五行", comment: ""), huangli.wuXing.isEmpty ? "—" : huangli.wuXing, Color.systemBrown),
+                    (NSLocalizedString("纳音", comment: ""), huangli.naYin.isEmpty ? "—" : huangli.naYin, Color.systemPurple),
                     (NSLocalizedString("喜神", comment: ""), huangli.xiShenDirection.isEmpty ? "—" : huangli.xiShenDirection, Color.systemPink),
                     (NSLocalizedString("财神", comment: ""), huangli.caiShenDirection.isEmpty ? "—" : huangli.caiShenDirection, Color.systemGold)
                 ]

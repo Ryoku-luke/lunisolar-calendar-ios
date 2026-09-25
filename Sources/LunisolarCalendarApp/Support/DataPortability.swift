@@ -194,7 +194,8 @@ public enum DataPortability {
 
     /// 导出所有事件为 .csv 格式字符串
     public static func exportCSV(from events: [CalendarEvent]) -> String {
-        let header = "标题,类型,开始时间,结束时间,全天,地点,备注,重复规则,优先级,已完成,创建时间"
+        let header = NSLocalizedString(
+            "标题,类型,开始时间,结束时间,全天,地点,备注,重复规则,优先级,已完成,创建时间", comment: "")
         var rows: [String] = [header]
 
         let dfmt = formatter("yyyy-MM-dd HH:mm", timeZone: .current)
@@ -205,12 +206,12 @@ public enum DataPortability {
                 event.type.uiLabel,
                 dfmt.string(from: event.startDate),
                 dfmt.string(from: event.endDate),
-                event.isAllDay ? "是" : "否",
+                event.isAllDay ? NSLocalizedString("是", comment: "") : NSLocalizedString("否", comment: ""),
                 escapeCSV(event.location ?? ""),
                 escapeCSV(event.notes ?? ""),
                 event.repeatRule.uiLabel,
                 event.priority.uiLabel,
-                event.isCompleted ? "是" : "否",
+                event.isCompleted ? NSLocalizedString("是", comment: "") : NSLocalizedString("否", comment: ""),
                 dfmt.string(from: event.createdAt)
             ]
             rows.append(row.joined(separator: ","))
@@ -356,16 +357,23 @@ public enum DataPortability {
                     // ICS 进来的事件没有稳定主键（UID 是对方日历的UUID，且不一定存在）。
                     // 为了让「重复导入不会产生副本」，我们用 (title, start, end, isAllDay) 哈希拼伪 UID
                     // 同时保存导入源 UID 以便 merge 时去重。
+                    // 显示用标题可以本地化，但**伪 UID 的种子必须与界面语言无关**：
+                    // 无标题事件在中文下种子是「导入事件」、切到英文后变成「Imported Event」，
+                    // 同一份 .ics 重新导入会算出不同 UUID → 去重失效、产生副本。
+                    let displayTitle = title.isEmpty
+                        ? NSLocalizedString("导入事件", comment: "")
+                        : title
+                    let identitySeedTitle = title.isEmpty ? "untitled-import" : title
                     let pseudoID = pseudoUUIDForImport(
                         uid: rawUID,
-                        title: title.isEmpty ? "导入事件" : title,
+                        title: identitySeedTitle,
                         startDate: startDate,
                         endDate: endDate,
                         isAllDay: isAllDay
                     )
                     var event = CalendarEvent(
                         id: pseudoID,
-                        title: title.isEmpty ? "导入事件" : title,
+                        title: displayTitle,
                         startDate: startDate,
                         endDate: endDate,
                         isAllDay: isAllDay,

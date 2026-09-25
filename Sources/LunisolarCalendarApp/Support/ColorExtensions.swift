@@ -145,9 +145,9 @@ public enum AppAppearance: String, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light:  return "浅色"
-        case .dark:   return "深色"
+        case .system: return NSLocalizedString("跟随系统", comment: "")
+        case .light:  return NSLocalizedString("浅色", comment: "")
+        case .dark:   return NSLocalizedString("深色", comment: "")
         }
     }
 

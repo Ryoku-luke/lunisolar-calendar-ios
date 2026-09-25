@@ -49,15 +49,15 @@ public final class AlternateIconManager: ObservableObject {
 
         public var uiLabel: String {
             switch self {
-            case .primary:        return "经典（撕历 + 四季）"
-            case .springFestival: return "春节限定（金福 + 红灯笼）"
-            case .lantern:       return "元宵限定（汤圆 + 花灯）"
-            case .qingMing:      return "清明限定（新柳 + 青团）"
-            case .duanWu:        return "端午限定（粽子 + 龙舟）"
-            case .qixi:          return "七夕限定（鹊桥 + 星河）"
-            case .midAutumn:     return "中秋限定（满月 + 玉兔）"
-            case .chongYang:     return "重阳限定（菊花 + 枫叶）"
-            case .winterSolstice: return "冬至限定（饺子 + 梅花）"
+            case .primary:        return NSLocalizedString("经典（撕历 + 四季）", comment: "")
+            case .springFestival: return NSLocalizedString("春节限定（金福 + 红灯笼）", comment: "")
+            case .lantern:       return NSLocalizedString("元宵限定（汤圆 + 花灯）", comment: "")
+            case .qingMing:      return NSLocalizedString("清明限定（新柳 + 青团）", comment: "")
+            case .duanWu:        return NSLocalizedString("端午限定（粽子 + 龙舟）", comment: "")
+            case .qixi:          return NSLocalizedString("七夕限定（鹊桥 + 星河）", comment: "")
+            case .midAutumn:     return NSLocalizedString("中秋限定（满月 + 玉兔）", comment: "")
+            case .chongYang:     return NSLocalizedString("重阳限定（菊花 + 枫叶）", comment: "")
+            case .winterSolstice: return NSLocalizedString("冬至限定（饺子 + 梅花）", comment: "")
             }
         }
     }
