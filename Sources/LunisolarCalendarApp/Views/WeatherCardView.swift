@@ -26,12 +26,16 @@ struct WeatherCardView: View {
                 dayWeatherBlock(snapshot)
 
             case .some(.denied):
-                compactStatusRow(icon: "location.slash.fill", text: "定位未开启，无法显示天气", actionLabel: "去设置") {
+                compactStatusRow(icon: "location.slash.fill",
+                                 text: NSLocalizedString("定位未开启，无法显示天气", comment: ""),
+                                 actionLabel: NSLocalizedString("去设置", comment: "")) {
                     openSystemSettings()
                 }
 
             case .some(.failed):
-                compactStatusRow(icon: "arrow.clockwise", text: "天气加载失败", actionLabel: "重试") {
+                compactStatusRow(icon: "arrow.clockwise",
+                                 text: NSLocalizedString("天气加载失败", comment: ""),
+                                 actionLabel: NSLocalizedString("重试", comment: "")) {
                     retry()
                 }
 
@@ -82,7 +86,7 @@ struct WeatherCardView: View {
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    Text("暂无该日天气")
+                    Text(NSLocalizedString("暂无该日天气", comment: ""))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)

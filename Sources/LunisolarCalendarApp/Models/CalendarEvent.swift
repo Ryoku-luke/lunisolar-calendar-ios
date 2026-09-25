@@ -410,15 +410,15 @@ extension EventType {
 }
 
 extension Priority {
-    public var title: String { rawValue }
+    public var title: String { NSLocalizedString(rawValue, comment: "") }
 
     /// 胶囊徽标里的短文案（更紧凑，适合 EventRow 的优先级 badge）
     public var shortTitle: String {
         switch self {
-        case .low:    return "低"
-        case .normal: return "中"
-        case .high:   return "高"
-        case .urgent: return "紧急"
+        case .low:    return NSLocalizedString("低", comment: "")
+        case .normal: return NSLocalizedString("中", comment: "")
+        case .high:   return NSLocalizedString("高", comment: "")
+        case .urgent: return NSLocalizedString("紧急", comment: "")
         }
     }
 

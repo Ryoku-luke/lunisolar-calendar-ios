@@ -61,7 +61,11 @@ struct EventRow: View {
                                    alignment: .trailing)
                             .contentShape(Rectangle())
                     }.buttonStyle(.plain)
-                    .accessibilityLabel(event.isCompleted ? "标记为未完成" : "标记为完成")
+                    // 三元表达式会走 accessibilityLabel 的 StringProtocol 重载 → 不查表，
+                    // 必须显式 NSLocalizedString（与 CountdownView / EventEditView 同类问题）
+                    .accessibilityLabel(event.isCompleted
+                                        ? NSLocalizedString("标记为未完成", comment: "")
+                                        : NSLocalizedString("标记为完成", comment: ""))
                 }
             }
         }
@@ -75,8 +79,11 @@ struct EventRow: View {
         // （真机表现：全部日程点不开编辑、多选点不动）。
         // 按压反馈统一由调用方 .pressableFeedback()（simultaneousGesture 实现）提供。
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(event.title) \(event.displayTimeRange)\(event.isCompleted ? " 已完成" : "")")
-        .accessibilityHint(event.type == .reminder || event.type == .schedule ? "轻点完成按钮切换完成状态" : "")
+        // ⚠️ 这两处也是三元 / String 形参：内层字面量必须显式 NSLocalizedString 才会查表
+        .accessibilityLabel("\(event.title) \(event.displayTimeRange)\(event.isCompleted ? " " + NSLocalizedString("已完成", comment: "") : "")")
+        .accessibilityHint(event.type == .reminder || event.type == .schedule
+                           ? NSLocalizedString("轻点完成按钮切换完成状态", comment: "")
+                           : "")
     }
 }
 #endif

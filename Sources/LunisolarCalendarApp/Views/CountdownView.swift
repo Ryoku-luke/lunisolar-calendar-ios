@@ -112,7 +112,7 @@ private struct CountdownRow: View {
                     HStack(spacing: 3) {
                         Image(systemName: isOnIsland ? "liveactivity.fill" : "liveactivity")
                             .font(.caption2.weight(.bold))
-                        Text(isOnIsland ? "在岛上" : "上岛")
+                        Text(isOnIsland ? NSLocalizedString("在岛上", comment: "") : NSLocalizedString("上岛", comment: ""))
                             .font(.caption2.weight(.semibold))
                     }
                     .foregroundStyle(isOnIsland ? Color.appTint : Color.secondaryLabel)
@@ -125,7 +125,9 @@ private struct CountdownRow: View {
                 }
                 .buttonStyle(.plain)
                 .pressableFeedback()
-                .accessibilityLabel(isOnIsland ? "\(event.title) 已上灵动岛，点击下岛" : "让 \(event.title) 上灵动岛")
+                .accessibilityLabel(isOnIsland
+                    ? String(format: NSLocalizedString("%@ 已上灵动岛，点击下岛", comment: ""), event.title)
+                    : String(format: NSLocalizedString("让 %@ 上灵动岛", comment: ""), event.title))
             }
         }
         .padding(.vertical, AppTheme.Spacing.xs)
@@ -145,14 +147,16 @@ private struct CountdownRow: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text(laDeniedMessage.isEmpty
-                 ? "请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。"
+                 ? NSLocalizedString("请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。", comment: "")
                  : laDeniedMessage)
         }
         // 启动失败（系统预算等）：如实告知具体原因
         .alert("上岛失败", isPresented: $showLAFailedAlert) {
             Button("好", role: .cancel) {}
         } message: {
-            Text(lastLAError.isEmpty ? "暂时无法启动实时活动，请稍后重试。" : lastLAError)
+            Text(lastLAError.isEmpty
+                 ? NSLocalizedString("暂时无法启动实时活动，请稍后重试。", comment: "")
+                 : lastLAError)
         }
     }
 
@@ -170,11 +174,12 @@ private struct CountdownRow: View {
             isOnIsland = false
         case .systemDenied:
             // 系统「实时活动」总开关关闭（用户可在 设置→通知→清和日历 重新开启）
-            laDeniedMessage = "请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。"
+            laDeniedMessage = NSLocalizedString("请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。", comment: "")
             showLADeniedAlert = true
         case .appSettingDisabled:
             // App 内「时间胶囊」总开关关闭（设置 → 提醒与时间胶囊）
-            laDeniedMessage = "「时间胶囊」已关闭。请在 App 内「我的 → 提醒与时间胶囊」中开启后重试。"
+            laDeniedMessage = NSLocalizedString(
+                "「时间胶囊」已关闭。请在 App 内「我的 → 提醒与时间胶囊」中开启后重试。", comment: "")
             showLADeniedAlert = true
         case .failed(let message):
             // 启动失败（系统预算 / 权限窗口 / 设备限制等）：如实展示具体错误以便定位
@@ -261,12 +266,15 @@ private struct CountdownEditor: View {
                         .lineLimit(2...4)
                 }
             }
-            .navigationTitle(editing == nil ? "新建倒数日" : "编辑倒数日")
+            .navigationTitle(editing == nil
+                ? NSLocalizedString("新建倒数日", comment: "")
+                : NSLocalizedString("编辑倒数日", comment: ""))
             .inlineTitleBar()
             .alert("日期超出支持范围", isPresented: $showOutOfRangeAlert) {
                 Button("好", role: .cancel) { }
             } message: {
-                Text("请将日期调整到 \(ChineseCalendar.minYear) 年 1 月 1 日 — \(ChineseCalendar.maxYear) 年 12 月 31 日之间。")
+                Text(String(format: NSLocalizedString("请将日期调整到 %d 年 1 月 1 日 — %d 年 12 月 31 日之间。", comment: ""),
+                            ChineseCalendar.minYear, ChineseCalendar.maxYear))
             }
             .toolbar {
                 ToolbarItem(placement: .platformTopBarTrailing) {

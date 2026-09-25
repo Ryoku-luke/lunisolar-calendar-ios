@@ -140,7 +140,7 @@ struct EventEditView: View {
                                 }
                             }
                         } label: {
-                            menuValueLabel(effectiveReminderOffset.map(reminderLabel) ?? "无")
+                            menuValueLabel(effectiveReminderOffset.map(reminderLabel) ?? NSLocalizedString("无", comment: ""))
                         }
                     }
                 }
@@ -216,7 +216,7 @@ struct EventEditView: View {
                     .font(.subheadline.weight(.medium))
             }
             ToolbarItem(placement: .platformTopBarTrailing) {
-                Button(isEditing ? "保存" : "添加") { save() }
+                Button(isEditing ? NSLocalizedString("保存", comment: "") : NSLocalizedString("添加", comment: "")) { save() }
                     .fontWeight(.semibold)
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier(AccessibilityID.editSave)

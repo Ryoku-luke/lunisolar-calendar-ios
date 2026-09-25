@@ -9,10 +9,10 @@ enum DocKind: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .help: return "帮助与说明"
-        case .feedback: return "意见反馈"
-        case .privacy: return "隐私政策"
-        case .agreement: return "用户协议"
+        case .help: return NSLocalizedString("帮助与说明", comment: "")
+        case .feedback: return NSLocalizedString("意见反馈", comment: "")
+        case .privacy: return NSLocalizedString("隐私政策", comment: "")
+        case .agreement: return NSLocalizedString("用户协议", comment: "")
         }
     }
 

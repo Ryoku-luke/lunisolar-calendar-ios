@@ -29,16 +29,16 @@ struct WeatherSnapshot: Codable, Equatable, Sendable {
 enum WMOWeather {
     static func describe(_ code: Int) -> (text: String, symbol: String) {
         switch code {
-        case 0, 1:     return ("晴", "sun.max.fill")
-        case 2:        return ("少云", "cloud.sun.fill")
-        case 3:        return ("多云", "cloud.fill")
-        case 45, 48:   return ("雾", "cloud.fog.fill")
-        case 51, 53, 55, 56, 57: return ("毛毛雨", "cloud.drizzle.fill")
-        case 61, 63, 65, 80, 81, 82: return ("雨", "cloud.rain.fill")
-        case 66, 67:   return ("冻雨", "cloud.sleet.fill")
-        case 71, 73, 75, 77, 85, 86: return ("雪", "cloud.snow.fill")
-        case 95, 96, 99: return ("雷暴", "cloud.bolt.rain.fill")
-        default:       return ("未知", "cloud.fill")
+        case 0, 1:     return (NSLocalizedString("晴", comment: ""), "sun.max.fill")
+        case 2:        return (NSLocalizedString("少云", comment: ""), "cloud.sun.fill")
+        case 3:        return (NSLocalizedString("多云", comment: ""), "cloud.fill")
+        case 45, 48:   return (NSLocalizedString("雾", comment: ""), "cloud.fog.fill")
+        case 51, 53, 55, 56, 57: return (NSLocalizedString("毛毛雨", comment: ""), "cloud.drizzle.fill")
+        case 61, 63, 65, 80, 81, 82: return (NSLocalizedString("雨", comment: ""), "cloud.rain.fill")
+        case 66, 67:   return (NSLocalizedString("冻雨", comment: ""), "cloud.sleet.fill")
+        case 71, 73, 75, 77, 85, 86: return (NSLocalizedString("雪", comment: ""), "cloud.snow.fill")
+        case 95, 96, 99: return (NSLocalizedString("雷暴", comment: ""), "cloud.bolt.rain.fill")
+        default:       return (NSLocalizedString("未知", comment: ""), "cloud.fill")
         }
     }
 }
@@ -234,9 +234,10 @@ enum WeatherProvider {
         }
         let name: String
         if isRealLocation {
-            name = await reverseGeocode(CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)) ?? "当前位置"
+            name = await reverseGeocode(CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
+                ?? NSLocalizedString("当前位置", comment: "")
         } else {
-            name = "北京"
+            name = NSLocalizedString("北京", comment: "")
         }
         do {
             var comps = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
