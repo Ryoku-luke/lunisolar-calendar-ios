@@ -111,24 +111,28 @@ struct EventEditView: View {
                         .datePickerStyle(.compact)
                 }
                 if type != .note {
+                    // 「提醒」类型本身到点就要响，语义上不存在「无」→ 不提供该选项，
+                    // 未选提前量时按「准时」处理（与 save() 存的 0 一致）。
                     LabeledContent("提醒") {
                         Menu {
-                            Button {
-                                reminderEnabled = false
-                            } label: {
-                                if !reminderEnabled {
-                                    Label("无", systemImage: "checkmark")
-                                } else {
-                                    Text("无")
+                            if type != .reminder {
+                                Button {
+                                    reminderEnabled = false
+                                } label: {
+                                    if effectiveReminderOffset == nil {
+                                        Label("无", systemImage: "checkmark")
+                                    } else {
+                                        Text("无")
+                                    }
                                 }
+                                Divider()
                             }
-                            Divider()
                             ForEach(reminderOptions, id: \.self) { m in
                                 Button {
                                     reminderEnabled = true
                                     reminderMinutesBefore = m
                                 } label: {
-                                    if reminderEnabled && reminderMinutesBefore == m {
+                                    if effectiveReminderOffset == m {
                                         Label(reminderLabel(m), systemImage: "checkmark")
                                     } else {
                                         Text(reminderLabel(m))
@@ -136,7 +140,7 @@ struct EventEditView: View {
                                 }
                             }
                         } label: {
-                            menuValueLabel(reminderEnabled ? reminderLabel(reminderMinutesBefore) : "无")
+                            menuValueLabel(effectiveReminderOffset.map(reminderLabel) ?? "无")
                         }
                     }
                 }
@@ -264,6 +268,14 @@ struct EventEditView: View {
         return base
     }
 
+    /// 提醒行当前**生效**的提前量（分钟）：nil = 不提醒。
+    /// 「提醒」类型不提供「无」选项，未选提前量即 0（准时）——界面显示与落库值同源，
+    /// 与 NotificationManager.shouldScheduleNotification 的判定一一对应。
+    private var effectiveReminderOffset: Int? {
+        if reminderEnabled { return reminderMinutesBefore }
+        return type == .reminder ? 0 : nil
+    }
+
     private func reminderLabel(_ minutes: Int) -> String {
         switch minutes {
         case 0: return "准时"
@@ -283,7 +295,10 @@ struct EventEditView: View {
         var end = endDate
         if type == .note { end = startDate }
         if end < startDate { end = startDate }
-        let reminderOffset: Int? = reminderEnabled ? reminderMinutesBefore : nil
+        // 提醒偏移的口径（与 NotificationManager.shouldScheduleNotification 对齐）：
+        // 记事不参与提醒，必须清空——否则把「日程+10分钟前」切成记事时旧偏移会残留；
+        // 其余类型取界面上生效的提前量（提醒类型未选时是 0 = 准时）。
+        let reminderOffset: Int? = (type == .note) ? nil : effectiveReminderOffset
         let now = Date()
         if let ev = original {
             var copy = ev

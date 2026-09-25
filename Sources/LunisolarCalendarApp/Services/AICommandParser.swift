@@ -51,12 +51,18 @@ public struct AICreateEventDraft: Equatable, Sendable {
     /// 由 EventService 按 id 走 update 而非 add —— 于是「连点确认」不会产生重复日程。
     public let id: UUID
     public var title: String
+    /// 事件类型：说了「提醒我 / 记得 / 别忘了」→ `.reminder`（类型本身即"到点要响"），
+    /// 否则 `.schedule`（不主动打扰）。此前一律用 `.schedule` 且不带提醒偏移，
+    /// 于是 AI 建的日程**永远不会响**——解析器却已把"提醒我"从标题里剔除。
+    public var type: EventType
     public var startDate: Date
     public var repeatRule: RepeatRule
 
-    public init(id: UUID = UUID(), title: String, startDate: Date, repeatRule: RepeatRule) {
+    public init(id: UUID = UUID(), title: String, startDate: Date, repeatRule: RepeatRule,
+                type: EventType = .schedule) {
         self.id = id
         self.title = title
+        self.type = type
         self.startDate = startDate
         self.repeatRule = repeatRule
     }
@@ -277,10 +283,14 @@ public enum AICommandParser {
             )))
         }
 
-        // 3. 标题：剔除已识别的日期/时间词、重复词与口语前缀
+        // 3. 标题：剔除已识别的日期/时间词、提醒/口语前缀与重复词
+        //    ⚠️ reminderCues 同时决定"建成什么类型"：说了"提醒"就必须真的到点会响，
+        //    否则这些词只被从标题里剔掉、没有任何提醒行为（此前正是如此）。
+        let reminderCues = ["提醒我", "提醒", "记得"]
         var title = s
-        for w in [consumedDate, consumedTime, "提醒我", "提醒", "帮我", "我要", "记得",
-                  "安排一下", "每天", "每日", "每周", "每月", "工作日"] where !w.isEmpty {
+        let stripWords = [consumedDate, consumedTime, "帮我", "我要", "安排一下",
+                          "每天", "每日", "每周", "每月", "工作日"] + reminderCues
+        for w in stripWords where !w.isEmpty {
             title = title.replacingOccurrences(of: w, with: "")
         }
         title = title.trimmingCharacters(in: CharacterSet(charactersIn: " ，,。.!！"))
@@ -309,7 +319,11 @@ public enum AICommandParser {
         else if s.contains("每周") || s.contains("每星期") || s.contains("周几") { rule = .weekly }
         else if s.contains("每月") { rule = .monthly }
 
-        return .success(.createEvent(AICreateEventDraft(title: title, startDate: start, repeatRule: rule)))
+        // 5. 类型：命中 reminderCues → .reminder（类型本身即"到点要响"，无提前量则准时响）
+        let type: EventType = reminderCues.contains { s.contains($0) } ? .reminder : .schedule
+
+        return .success(.createEvent(AICreateEventDraft(title: title, startDate: start,
+                                                       repeatRule: rule, type: type)))
     }
 
     // MARK: - 修改 / 删除意图的解析辅助

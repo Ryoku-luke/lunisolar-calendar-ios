@@ -180,6 +180,9 @@ struct AIAssistantView: View {
                 if let d = draft {
                     Section {
                         LabeledContent(NSLocalizedString("标题", comment: ""), value: d.title)
+                        // 类型决定会不会响（提醒类型到点必响，日程默认不打扰）——
+                        // 不显示出来，用户无法预判「说了提醒我」到底有没有兑现
+                        LabeledContent(NSLocalizedString("类型", comment: ""), value: d.type.uiLabel)
                         LabeledContent(NSLocalizedString("时间", comment: ""), value: d.startDate.formatted(date: .abbreviated, time: .shortened))
                         HStack {
                             Button(role: .cancel) {

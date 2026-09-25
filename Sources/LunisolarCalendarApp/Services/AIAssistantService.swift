@@ -52,6 +52,9 @@ public final class AIAssistantService {
                 // 复用草稿 id：同一份解析结果被重复确认（连点）时按 id 更新而不是再建一条
                 id: draft.id,
                 title: draft.title,
+                // 类型决定要不要响（见 NotificationManager.shouldScheduleNotification）：
+                // 用户说了「提醒我」就必须真的响，否则语义只落在标题处理上
+                type: draft.type,
                 startDate: draft.startDate,
                 repeatRule: draft.repeatRule
             )

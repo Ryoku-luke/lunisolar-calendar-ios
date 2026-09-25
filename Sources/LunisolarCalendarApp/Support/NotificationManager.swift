@@ -88,9 +88,25 @@ public final class NotificationManager {
     ///
     /// ⚠️ 所有 Calendar 类 trigger 统一用 .gregorian：避免用户系统是伊斯兰历/佛历/和历
     ///    时 UNCalendarNotificationTrigger 的 month/day 分量语义错乱（参考 BUG #30/#32）。
+    ///
+    /// 该事件是否应有本地通知——`scheduleNotification` 与 `rescheduleAllReminders`
+    /// 共用同一判定，避免两处口径不一致。
+    ///
+    /// 背景：此前两处各自按 `type == .reminder` 过滤，而编辑页对「日程」也提供提醒选择，
+    /// 于是「界面显示已设提醒、到点永远不响」。现在统一为：
+    /// - `.note` 记事：永不通知；
+    /// - `reminderOffsetMinutes != nil`：通知，按提前量触发（0 = 准时），**与类型无关**；
+    /// - `.reminder` 提醒：类型本身即"要响"，无提前量则准时响；
+    /// - `.schedule` 日程：只有显式设了提前量才响（对齐系统日历：日程的提醒是可选的）。
+    public static func shouldScheduleNotification(for event: CalendarEvent) -> Bool {
+        guard event.type != .note else { return false }
+        if event.reminderOffsetMinutes != nil { return true }
+        return event.type == .reminder
+    }
+
     public func scheduleNotification(for event: CalendarEvent) async {
         #if canImport(UserNotifications)
-        guard event.type == .reminder else { return }
+        guard Self.shouldScheduleNotification(for: event) else { return }
 
         let rule = event.repeatRule
         // 单次提醒必须在未来（过去的一次性提醒不可能再响）
@@ -194,7 +210,7 @@ public final class NotificationManager {
         cancelAll()
         // 注意：.never && isNotified 的事件不应该再被调度
         for event in store.events
-            where event.type == .reminder && !event.isCompleted {
+            where Self.shouldScheduleNotification(for: event) && !event.isCompleted {
             if event.repeatRule == .never && event.isNotified { continue }
             await scheduleNotification(for: event)
         }
@@ -305,17 +321,15 @@ public final class NotificationManager {
         }
     }
 
-    /// 为某个事件生成所有可能的通知 identifier（用于 cancelAll / cancelNotification）
+    /// 该事件**可能用过**的全部通知 identifier（取消时一次性清干净）。
+    ///
+    /// 关键：不能只按"当前 repeatRule"生成。用户把「工作日」改成「每天」（或反向、
+    /// 或从农历每年改成其它）时，旧规则那组 request 的 ID 与新规则不同，
+    /// 按当前规则去 cancel 会漏掉旧的 → 幽灵提醒继续按旧规则弹。
+    /// 因此恒定返回全集：base / base-lunar / base-wd-2…6（最多 7 个 ID，开销可忽略）。
     private func notificationIdentifiers(for event: CalendarEvent) -> [String] {
         let base = event.id.uuidString
-        switch event.repeatRule {
-        case .workday:
-            return (2...6).map { "\(base)-wd-\($0)" }
-        case .lunarAnnually:
-            return [base, "\(base)-lunar"]
-        default:
-            return [base]
-        }
+        return [base, "\(base)-lunar"] + (2...6).map { "\(base)-wd-\($0)" }
     }
 
     /// 计算未来第一个与 lunarSource 的农历月/日相同的公历日期，保留 timeSource 的时分秒。
