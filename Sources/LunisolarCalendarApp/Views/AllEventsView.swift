@@ -5,9 +5,12 @@ import LunarCore
 // MARK: - 全部日程（统一管理页）
 //
 // 入口：日历工具栏菜单（iPhone）/ iPad 侧栏「全部日程」。
-// 能力：关键词搜索（标题 / 地点 / 备注）、类型筛选、显示已完成开关、
-//       按日期分组、点按编辑、滑动删除、长按菜单（完成 / 删除）。
-// 读走 EventStore 的只读查询（search / events），写一律经 EventService。
+// 能力：
+//   - 关键词搜索（标题 / 地点 / 备注）、类型筛选、显示已完成开关
+//   - 排序：今天起优先（重复日程视为持续有效），已过去的一次性日程折叠在末尾
+//   - 单条：点按编辑、左滑删除、长按菜单（完成 / 删除）
+//   - 多选：批量标记完成 / 批量删除（批量删除有二次确认）
+// 读走 EventStore 的只读查询，写一律经 EventService。
 
 struct AllEventsView: View {
     @Environment(EventStore.self) private var store
@@ -15,7 +18,13 @@ struct AllEventsView: View {
     @State private var query = ""
     @State private var typeFilter: TypeFilter = .all
     @State private var showCompleted = false
+    @State private var showPast = false
     @State private var editing: CalendarEvent?
+
+    // 多选
+    @State private var isSelecting = false
+    @State private var selection = Set<UUID>()
+    @State private var confirmBulkDelete = false
 
     enum TypeFilter: String, CaseIterable, Identifiable {
         case all, schedule, reminder, note
@@ -41,27 +50,6 @@ struct AllEventsView: View {
         }
     }
 
-    private var filteredEvents: [CalendarEvent] {
-        store.search(query: query)
-            .filter { typeFilter.matches($0.type) }
-            .filter { showCompleted || !$0.isCompleted }
-    }
-
-    /// 按天分组（EventStore 内部按 startDate 升序，分组顺序天然有序）
-    private var groupedEvents: [(day: Date, events: [CalendarEvent])] {
-        let cal = QingheCalendarContext.userCalendar
-        var result: [(day: Date, events: [CalendarEvent])] = []
-        for event in filteredEvents {
-            let day = cal.startOfDay(for: event.startDate)
-            if let last = result.last, last.day == day {
-                result[result.count - 1].events.append(event)
-            } else {
-                result.append((day, [event]))
-            }
-        }
-        return result
-    }
-
     var body: some View {
         List {
             Section {
@@ -80,13 +68,42 @@ struct AllEventsView: View {
                 Text(summaryText)
             }
 
-            ForEach(groupedEvents, id: \.day) { group in
+            if filteredEvents.isEmpty {
+                // 空态由 overlay 呈现，这里不占位
+                EmptyView()
+            } else if upcomingGroups.isEmpty {
                 Section {
-                    ForEach(group.events) { event in
-                        row(event)
-                    }
+                    Label(NSLocalizedString("没有即将到来的日程。", comment: ""), systemImage: "checkmark.circle")
+                        .foregroundStyle(Color.secondaryLabel)
+                        .font(AppTheme.Font.subheadline)
+                }
+            }
+
+            ForEach(upcomingGroups, id: \.day) { group in
+                Section {
+                    rows(group.events)
                 } header: {
                     Text(dayHeader(group.day))
+                }
+            }
+
+            // 已过去（一次性且早于今天）：默认折叠，避免历史日程把当前安排压到屏幕外
+            if pastCount > 0 {
+                Section {
+                    Toggle(isOn: $showPast) {
+                        Label(String(format: NSLocalizedString("显示已过去（%d 条）", comment: ""), pastCount),
+                              systemImage: "clock.arrow.circlepath")
+                    }
+                    .tint(Color.appTint)
+                }
+                if showPast {
+                    ForEach(pastGroups, id: \.day) { group in
+                        Section {
+                            rows(group.events)
+                        } header: {
+                            Text(dayHeader(group.day))
+                        }
+                    }
                 }
             }
         }
@@ -99,6 +116,22 @@ struct AllEventsView: View {
         .searchable(text: $query, prompt: Text(NSLocalizedString("搜索标题 / 地点 / 备注", comment: "")))
         .navigationTitle(NSLocalizedString("全部日程", comment: ""))
         .inlineTitleBar()
+        .toolbar {
+            ToolbarItem(placement: .platformTopBarTrailing) {
+                Button(isSelecting
+                       ? NSLocalizedString("完成", comment: "")
+                       : NSLocalizedString("选择", comment: "")) {
+                    withAnimation(AppTheme.Motion.screen) {
+                        isSelecting.toggle()
+                        if !isSelecting { selection.removeAll() }
+                    }
+                }
+                .disabled(filteredEvents.isEmpty)
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if isSelecting { selectionBar }
+        }
         .overlay {
             if filteredEvents.isEmpty {
                 ContentUnavailableView(
@@ -115,23 +148,172 @@ struct AllEventsView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .confirmationDialog(
+            String(format: NSLocalizedString("删除选中的 %d 条日程？", comment: ""), selection.count),
+            isPresented: $confirmBulkDelete,
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) { bulkDelete() }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("此操作不可撤销。", comment: ""))
+        }
+        // 筛选变化时清空选择：避免"看不见的行也被批量操作"
+        .onChange(of: query) { _, _ in exitSelection() }
+        .onChange(of: typeFilter) { _, _ in exitSelection() }
+        .onChange(of: showCompleted) { _, _ in exitSelection() }
     }
 
+    // MARK: - 行
+
     @ViewBuilder
-    private func row(_ event: CalendarEvent) -> some View {
-        EventRow(event: event)
-            .contentShape(Rectangle())
-            // 行内完成圆圈是独立按钮（.plain），点其余区域进编辑
-            .onTapGesture { editing = event }
-            .swipeActions(edge: .trailing) {
-                Button(role: .destructive) {
-                    EventService.shared.removeEvent(event, flush: true)
+    private func rows(_ events: [CalendarEvent]) -> some View {
+        ForEach(events) { event in
+            if isSelecting {
+                Button {
+                    toggleSelection(event)
                 } label: {
-                    Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                    HStack(spacing: AppTheme.Spacing.sm) {
+                        Image(systemName: selection.contains(event.id) ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 20))
+                            .foregroundStyle(selection.contains(event.id) ? Color.appTint : Color.tertiaryLabel)
+                        EventRow(event: event, showsCompleteToggle: false)
+                    }
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(event.title)
+                .accessibilityAddTraits(selection.contains(event.id) ? [.isSelected] : [])
+            } else {
+                EventRow(event: event)
+                    .contentShape(Rectangle())
+                    // 行内完成圆圈是独立按钮（.plain），点其余区域进编辑
+                    .onTapGesture { editing = event }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            EventService.shared.removeEvent(event, flush: true)
+                        } label: {
+                            Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                        }
+                    }
+                    .eventQuickActions(event)
             }
-            .eventQuickActions(event)
+        }
     }
+
+    /// 多选操作条
+    private var selectionBar: some View {
+        HStack(spacing: AppTheme.Spacing.lg) {
+            Button {
+                bulkSetCompleted()
+            } label: {
+                Label(String(format: NSLocalizedString("完成 %d 项", comment: ""), selection.count),
+                      systemImage: "checkmark.circle")
+                    .font(AppTheme.Font.subheadline.weight(.semibold))
+            }
+            .disabled(selection.isEmpty)
+
+            Spacer(minLength: 0)
+
+            Button(role: .destructive) {
+                confirmBulkDelete = true
+            } label: {
+                Label(String(format: NSLocalizedString("删除 %d 项", comment: ""), selection.count),
+                      systemImage: "trash")
+                    .font(AppTheme.Font.subheadline.weight(.semibold))
+            }
+            .disabled(selection.isEmpty)
+        }
+        .padding(.horizontal, AppTheme.Spacing.xl)
+        .padding(.vertical, AppTheme.Spacing.md)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) {
+            Divider()
+        }
+    }
+
+    // MARK: - 数据
+
+    private var todayStart: Date {
+        QingheCalendarContext.userCalendar.startOfDay(for: Date())
+    }
+
+    private var filteredEvents: [CalendarEvent] {
+        store.search(query: query)
+            .filter { typeFilter.matches($0.type) }
+            .filter { showCompleted || !$0.isCompleted }
+    }
+
+    /// 已过去 = 一次性日程且开始时间早于今天。
+    /// 重复日程会继续发生，故归入"今天起"，不随历史起点沉底。
+    private func isPast(_ event: CalendarEvent) -> Bool {
+        event.repeatRule == .never && event.startDate < todayStart
+    }
+
+    private var pastEvents: [CalendarEvent] { filteredEvents.filter(isPast) }
+    private var pastCount: Int { pastEvents.count }
+    private var upcomingGroups: [(day: Date, events: [CalendarEvent])] {
+        groups(from: filteredEvents.filter { !isPast($0) })
+    }
+    private var pastGroups: [(day: Date, events: [CalendarEvent])] {
+        groups(from: pastEvents)
+    }
+
+    /// 按天分组（EventStore 内部按 startDate 升序，分组顺序天然有序）
+    private func groups(from events: [CalendarEvent]) -> [(day: Date, events: [CalendarEvent])] {
+        let cal = QingheCalendarContext.userCalendar
+        var result: [(day: Date, events: [CalendarEvent])] = []
+        for event in events {
+            let day = cal.startOfDay(for: event.startDate)
+            if let last = result.last, last.day == day {
+                result[result.count - 1].events.append(event)
+            } else {
+                result.append((day, [event]))
+            }
+        }
+        return result
+    }
+
+    // MARK: - 多选操作
+
+    private func toggleSelection(_ event: CalendarEvent) {
+        if selection.contains(event.id) {
+            selection.remove(event.id)
+        } else {
+            selection.insert(event.id)
+        }
+    }
+
+    private func exitSelection() {
+        if !selection.isEmpty { selection.removeAll() }
+    }
+
+    /// 批量标记完成：逐条经 EventService（通知/同步各自处理），最后统一落盘一次
+    private func bulkSetCompleted() {
+        let targets = store.events.filter { selection.contains($0.id) }
+        for event in targets {
+            EventService.shared.setCompleted(event, flush: false)
+        }
+        EventService.shared.flushPendingSave()
+        withAnimation(AppTheme.Motion.screen) {
+            selection.removeAll()
+            isSelecting = false
+        }
+    }
+
+    /// 批量删除（已二次确认）：同样逐条经 EventService，最后统一落盘
+    private func bulkDelete() {
+        let targets = store.events.filter { selection.contains($0.id) }
+        for event in targets {
+            EventService.shared.removeEvent(event, flush: false)
+        }
+        EventService.shared.flushPendingSave()
+        withAnimation(AppTheme.Motion.screen) {
+            selection.removeAll()
+            isSelecting = false
+        }
+    }
+
+    // MARK: - 文案
 
     private func dayHeader(_ day: Date) -> String {
         let text = day.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted,

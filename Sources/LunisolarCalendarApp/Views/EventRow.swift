@@ -4,6 +4,8 @@ import SwiftUI
 struct EventRow: View {
     let event: CalendarEvent
     var compact: Bool = false
+    /// 多选模式下隐藏行内完成圆圈：整行本身是选择按钮，嵌套按钮会导致点击失效
+    var showsCompleteToggle: Bool = true
     @Environment(EventStore.self) private var store
     @State private var pressed = false
     var body: some View {
@@ -43,7 +45,7 @@ struct EventRow: View {
                 ChipLabel(title: event.priority.shortTitle,
                           tint: event.priority.tintColor,
                           font: AppTheme.Font.caption2)
-                if event.type == .reminder || event.type == .schedule {
+                if showsCompleteToggle, event.type == .reminder || event.type == .schedule {
                     Button {
                         // 仅在"从未完成 → 完成"方向计入评分引导（取消勾选不计），
                         // 避免用户反复勾选刷计数。
