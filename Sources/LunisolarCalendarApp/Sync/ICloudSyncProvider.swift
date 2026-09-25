@@ -94,11 +94,16 @@ public struct SyncRecord: Equatable, Hashable, Identifiable, Sendable {
     }
 
     /// helper: 从 CalendarEvent 构造 SyncRecord（JSON 编码 payload）
+    /// - Parameter timestampFloorMs: 写入时间戳的**下限**（本设备已拉到的水位线）。
+    ///   水位线可能被某台钟快的设备抬高，本机时钟若落后，新记录的时间戳就会 ≤
+    ///   其他设备的拉取谓词 `updatedAtMs > sinceMs`，对方**永远拉不到**。
+    ///   以 `水位线 + 1` 作下限可保证"本设备发出的记录一定在水位线之后"（Lamport 思路）。
     nonisolated public static func eventRecord(
         for event: CalendarEvent,
         version: Int64,
         originDevice: String,
         isDeleted: Bool = false,
+        timestampFloorMs: Int64 = 0,
         encoder: JSONEncoder = SyncCoders.encoder()
     ) throws -> SyncRecord {
         // P1 修复：isNotified 是「设备本地状态」（本机 UNUserNotificationCenter 是否已触发），
@@ -114,7 +119,8 @@ public struct SyncRecord: Equatable, Hashable, Identifiable, Sendable {
         guard let json = String(data: data, encoding: .utf8) else {
             throw SyncError.invalidPayload("CalendarEvent -> UTF8 失败")
         }
-        let ms = Int64(event.updatedAt.timeIntervalSince1970 * 1000)
+        let localMs = Int64(event.updatedAt.timeIntervalSince1970 * 1000)
+        let ms = timestampFloorMs > 0 ? max(localMs, timestampFloorMs + 1) : localMs
         return SyncRecord(
             id: event.id.uuidString,
             kind: .event,

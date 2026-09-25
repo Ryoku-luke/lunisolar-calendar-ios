@@ -492,32 +492,35 @@ public final class EventStore {
             // P2 修复：只移除推送**真正成功**的事件；失败的保留 dirty/deleted 标记以便下次重推。
             // 之前无论成功失败一律 removeAll，导致部分失败时失败记录的 dirty 标记永久丢失 →
             // 多设备数据发散（用户 iPhone 看到改了，iPad 永远收不到）。
-            let failed = result.failedRecordIDs
-            dirtyEventIDs.formIntersection(failed)
-            deletedEventIDs.formIntersection(failed)
-            // 如果 coordinator 为了兼容外部全 clear 路径也调过 clearDirtyFlags，不重复计算。
+            //
+            // ⚠️ 必须用**快照**减去失败集，而不是对"活的"集合做 formIntersection(failed)：
+            // 后者会把 await 期间用户新改/新删的标记（不在 failed 里）一并清掉，且不自愈。
+            removePushedFlags(pushedIDs: dirtySnap.union(deletedSnap),
+                              failedIDs: result.failedRecordIDs)
         } catch {
             // 整体性失败（网络/不可用）：保留全部 dirty 标记，下次重试
             AppLogger.sync.warning("推送云端失败: \(error)，将在下次同步时重试")
         }
     }
 
-    /// 同步协调器可调用：获取当前脏事件（用于 syncBidirectional 等主动同步场景）
-    /// NOTE：重复声明会与上方 P6 优化版冲突；保留空壳以免外部链接符号变化。此处移除旧实现，
-    /// 统一以文件顶部"O(1) 字典路径"版本为准。
-
-    /// 清空脏标记（推送成功后由协调器调用，仅当全部成功时使用）
+    /// 清空脏标记（仅测试/兜底使用；正常推送路径请用 `removePushedFlags`）
     public func clearDirtyFlags() {
         dirtyEventIDs.removeAll()
         deletedEventIDs.removeAll()
     }
 
-    /// 部分失败后：仅保留 failedIDs 中的脏标记，其余（成功的）移除。
-    /// 返回值 = 剩余的 (dirty 数, deleted 数)，用于调试/UI 提示"还有 N 条待重试"。
+    /// 推送结束后：从脏标记里移除**本次真正推送成功**的 ID，保留其余
+    /// （包括 await 期间新增的脏标记 —— 它们不在 `pushedIDs` 快照里）。
+    /// - Parameters:
+    ///   - pushedIDs: 本轮推送覆盖的 ID 快照（调用方在 await **之前**取得）
+    ///   - failedIDs: 其中逐记录失败的部分
+    /// - Returns: 剩余的 (dirty 数, deleted 数)，用于调试/UI 提示「还有 N 条待重试」
     @discardableResult
-    public func retainDirtyFlags(onlyFailed failedIDs: Set<String>) -> (dirtyLeft: Int, deletedLeft: Int) {
-        dirtyEventIDs.formIntersection(failedIDs)
-        deletedEventIDs.formIntersection(failedIDs)
+    public func removePushedFlags(pushedIDs: Set<String>,
+                                  failedIDs: Set<String>) -> (dirtyLeft: Int, deletedLeft: Int) {
+        let succeeded = pushedIDs.subtracting(failedIDs)
+        dirtyEventIDs.subtract(succeeded)
+        deletedEventIDs.subtract(succeeded)
         return (dirtyEventIDs.count, deletedEventIDs.count)
     }
 

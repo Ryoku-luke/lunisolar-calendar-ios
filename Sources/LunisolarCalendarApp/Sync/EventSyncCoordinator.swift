@@ -108,9 +108,16 @@ public final class EventSyncCoordinator: @unchecked Sendable {
 
         let available = await provider.isAvailable
         guard isEnabled else {
+            // 同步开关关闭：**不能伪造成功**。旧实现返回一个没设置 failedRecordIDs 的结果，
+            // 还把 status 设成 .succeeded —— 调用方（EventStore.flushDirtyAndDeleted）
+            // 据此把刚写入的 dirty/deleted 标记全部清掉，这些改动此后再也不会被推送；
+            // 重新开启同步后还可能被云端 LWW 覆盖（静默丢数据）。
+            // 这里把入参原样标成"未推送"让调用方保留标记；status 保持不动，
+            // 设置页读到的是「未启用」而不是假的「已同步」。
             let r = SyncResult(direction: .push, pushed: 0, pulled: 0, conflictsResolved: 0,
-                               errors: [], startedAt: start, finishedAt: Date())
-            status = .succeeded(r)
+                               errors: [],
+                               failedRecordIDs: Set(events.map(\.id.uuidString)).union(deletedIDs),
+                               startedAt: start, finishedAt: Date())
             lastResult = r
             return r
         }
@@ -120,6 +127,11 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             throw err
         }
 
+        // 写入时间戳下限（B 档）：水位线来自"已拉到的最大 updatedAtMs"，可能被某台钟快的
+        // 设备抬高；本机时钟若落后，新记录就会 ≤ 其他设备的拉取谓词 `updatedAtMs > sinceMs`
+        // → 对方永远拉不到。以「水位线 + 1」作下限，保证本设备发出的记录一定在水位线之后。
+        let timestampFloorMs = lastSyncMs
+
         // 编码事件记录（递增版本号，但**暂不写入 versionMap**，推送成功后才真正提交，避免"云没收到本地已 advance 版本"导致永久丢失推送）
         var records: [SyncRecord] = []
         var proposedVersions: [String: Int64] = [:]   // id → 计划中的新版本号
@@ -128,7 +140,8 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             let rec = try SyncRecord.eventRecord(
                 for: ev,
                 version: nextVer,
-                originDevice: provider.currentDeviceID
+                originDevice: provider.currentDeviceID,
+                timestampFloorMs: timestampFloorMs
             )
             records.append(rec)
             proposedVersions[ev.id.uuidString] = nextVer
@@ -139,10 +152,12 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             guard !records.contains(where: { $0.id == delID }) else { continue }
             let nextVer = (versionMap[delID] ?? 0) + 1
             let existing = eventStore.eventBy(idString: delID)
-            let ms: Int64 = {
+            let localMs: Int64 = {
                 if let d = existing?.updatedAt { return Int64(d.timeIntervalSince1970 * 1000) }
                 return Int64(Date().timeIntervalSince1970 * 1000)
             }()
+            // 墓碑同样受水位线下限约束：否则对方按 sinceMs 过滤后看不到墓碑，删除永远同步不过去
+            let ms = timestampFloorMs > 0 ? max(localMs, timestampFloorMs + 1) : localMs
             let tomb = SyncRecord(
                 id: delID, kind: .event,
                 version: nextVer, originDevice: provider.currentDeviceID,
@@ -319,13 +334,17 @@ public final class EventSyncCoordinator: @unchecked Sendable {
         // 1. 先 push 本地脏事件
         let (dirtyEvents, deletedIDs) = eventStore.consumeDirtyEvents()
         if !dirtyEvents.isEmpty || !deletedIDs.isEmpty {
+            // 本轮推送覆盖的 ID 快照：await 期间新增/新删的标记不在其中，必须保留
+            let pushedIDs = Set(dirtyEvents.map(\.id.uuidString)).union(deletedIDs)
             do {
                 let r1 = try await push(events: dirtyEvents, deletedIDs: deletedIDs)
                 pushed += r1.pushed; allErrors.append(contentsOf: r1.errors)
                 // P2 修复：部分失败时只保留失败 ID 的 dirty 标记，成功的从集合中移除
                 //   —— 之前 allErrors.isEmpty 才 clearDirtyFlags，导致 2 条成功 1 条失败
                 //     时 2 条成功的也还在 dirty 里被重复推送（版本号膨胀）。
-                eventStore.retainDirtyFlags(onlyFailed: r1.failedRecordIDs)
+                //   注意用「快照减失败集」，而不是对活集合 formIntersection(failed)：
+                //   后者会把 await 期间新增的标记一并清掉。
+                eventStore.removePushedFlags(pushedIDs: pushedIDs, failedIDs: r1.failedRecordIDs)
             } catch {
                 allErrors.append(mapError(error))
             }

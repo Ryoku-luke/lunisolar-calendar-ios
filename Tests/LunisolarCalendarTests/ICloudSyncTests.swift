@@ -305,6 +305,11 @@ final class ICloudSyncTests: XCTestCase {
     // 背景：旧路径 syncBidirectional → push() 在 !isEnabled 时早返回 success(empty failedRecordIDs)，
     // 然后调 retainDirtyFlags(onlyFailed: []) → formIntersection([]) → 全部 dirty/deleted 标记被清空。
     // 但本地从未真正推送 → 用户暂时关掉同步、又打开同步后，这段时间的本地编辑被永久丢失。
+    //
+    // 2026-09 加固：push() 在 !isEnabled 时改为把入参**原样标成未推送**（failedRecordIDs = 全部入参），
+    // 且"移除脏标记"改为 removePushedFlags(pushedIDs:failedIDs:)（快照减失败集）。
+    // 同一保护现在也覆盖 EventStore 的 fire-and-forget 推送路径与"推送在途期间新增脏标记"的场景
+    // —— 见 SyncDirtyFlagTests。
     @MainActor
     func testSyncDisabledPreservesDirtyFlags() async throws {
         // setUp 里 delete(skipSync:true) 会把样例事件打进 deletedEventIDs；先清空获取干净基线
