@@ -107,7 +107,7 @@ Sources/LunisolarCalendarApp/
 ├── Views/                       # 月视图 / 年视图 / 日详情 / 编辑 / 倒数日 / 设置 / 天气卡
 └── Resources/                   # lunar_calendar.json、huangli_db.json、4 套 lproj 本地化
 Tools/                           # 黄历库生成工具 + 图标生成脚本
-Tests/LunisolarCalendarTests/    # 294 个单元测试（34 个套件）
+Tests/LunisolarCalendarTests/    # 309 个单元测试（36 个套件）
 UITests/                         # UI 冒烟测试（3 条）
 docs/                            # 上架 / 签名 / 构建 / 真机复测清单 / 待做方案（全天事件、黄历数据源）
 ```
@@ -116,12 +116,12 @@ docs/                            # 上架 / 签名 / 构建 / 真机复测清单
 
 ```bash
 swift build        # 编译所有 Target
-swift test         # 运行 294 个单元测试
+swift test         # 运行 309 个单元测试
 ```
 
 > Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；本仓库**未配置 CI**（无 `.github/workflows`，推送不会触发构建）。本地自检：`swift build` / `swift test`（macOS 宿主，2026-09-24 起可用）+ `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS 视图层与宿主编译），详见 `docs/XCODE_BUILD_GUIDE.md` §4。真机行为验证见 [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md)。
 
-## 测试覆盖（294 条 / 34 个套件）
+## 测试覆盖（309 条 / 36 个套件）
 
 | 套件 | 数量 | 覆盖内容 |
 |---|---|---|
@@ -132,6 +132,7 @@ swift test         # 运行 294 个单元测试
 | CalendarEventTests | 16 | 事件模型、农历重复规则、ICS/CSV 往返、全天时长 |
 | QingheActivityCoordinatorTests | 12 | 时间胶囊候选挑选：优先级、窗口、全天过期、节气两小时 |
 | ICloudSyncTests | 11 | 推送/拉取/冲突/增量/离线上线/墓碑传播 |
+| AllDayTimeZoneTests | 11 | 全天事件跨时区：年月日物化、本机日漂移才改写、旧数据与计时事件不动 |
 | SystemImportTests | 9 | DTO 映射、确定性 UUID、聚合、重复导入无副本、农历生日开关 |
 | QingheLiveActivityLifecycleTests | 9 | 实时活动 sync 的 start/update/end/none 判定 |
 | NotificationManagerTests | 9 | 「稍后提醒」ID 往返、保留策略、畸形 ID 安全 |
@@ -152,6 +153,7 @@ swift test         # 运行 294 个单元测试
 | MiniMonthGridTests | 5 | 年视图小月历表头与星期对齐 |
 | LunarDateTests | 5 | 农历真值点、闰月、边界 nil 安全、反向转换 |
 | EventServiceTimeCapsuleTests | 5 | 事件→时间胶囊候选的优先级映射 |
+| LiveActivityOccupancyTests | 4 | 实时活动「是否仍在岛上」判据（已结束的活动不算占用） |
 | FestivalGoldenTests | 4 | 节日农历↔公历往返、闰月不位移 |
 | EventServiceCompletionTests | 4 | 完成/取消完成幂等、批量完成 |
 | AIOccurrenceResolutionTests | 4 | 重复日程「命中那一次」的解析 |

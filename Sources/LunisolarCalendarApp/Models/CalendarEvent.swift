@@ -102,9 +102,13 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
     public var updatedAt: Date
 
     /// CodingKeys：显式排除缓存字段
+    /// - `startDay` / `endDay`：**只出现在编码产物里**的全天事件年月日分量（见 CalendarDayKey）。
+    ///   模型内没有对应存储属性——分量由 `encode(to:)` 从 `startDate`/`endDate` 派生，
+    ///   由 `init(from:)` 按本设备时区物化回去。这样就不存在「分量与 startDate 不同步」的失效模式。
     private enum CodingKeys: String, CodingKey {
         case id, title, type, startDate, endDate, isAllDay, location, notes
         case repeatRule, priority, isCompleted, reminderOffsetMinutes, isNotified, createdAt, updatedAt
+        case startDay, endDay
     }
 
     // MARK: - W2/W3 修复：非隔离 Codable 实现
@@ -132,6 +136,13 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         try c.encode(isNotified, forKey: .isNotified)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(updatedAt, forKey: .updatedAt)
+        // 全天事件额外带上年月日分量（时区无关的真相），供其他时区的设备还原**同一天**。
+        // 非全天事件不写：它们的绝对瞬时本身就是语义，再写一份分量只会多一份可能不一致的数据。
+        if isAllDay {
+            let cal = Calendar(identifier: .gregorian)
+            try c.encode(CalendarDayKey(startDate, in: cal), forKey: .startDay)
+            try c.encode(CalendarDayKey(endDate, in: cal), forKey: .endDay)
+        }
     }
 
     nonisolated public init(from decoder: Decoder) throws {
@@ -151,6 +162,46 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         isNotified     = try c.decode(Bool.self, forKey: .isNotified)
         createdAt      = try c.decode(Date.self, forKey: .createdAt)
         updatedAt      = try c.decode(Date.self, forKey: .updatedAt)
+
+        // 全天事件：仅当「瞬时所在的本机日」与分量所指的日**不一致**时才改写。
+        // 一致时保持瞬时原样——这一点是刻意收窄爆炸半径：全天事件的 startDate 可能是带时刻的
+        // 瞬时（编辑器允许把日程切成全天却保留原时刻），而 startDate 决定提醒触发时刻，
+        // 顺手改写成 00:00 会悄悄挪动用户的提醒时间。跨时区错位才是要修的问题，其余不动。
+        // 旧 payload 没有分量 → 整块跳过，行为与改动前完全一致：创建时的时区没有被记录下来，
+        // 无法反推，只能按读取设备的时区理解（详见 docs/ALLDAY_TIMEZONE_PLAN.md）。
+        if isAllDay,
+           let startDay = try c.decodeIfPresent(CalendarDayKey.self, forKey: .startDay) {
+            let endDay = try c.decodeIfPresent(CalendarDayKey.self, forKey: .endDay)
+            let calendar = Calendar(identifier: .gregorian)
+            let startDrifted = CalendarDayKey(startDate, in: calendar) != startDay
+            let endDrifted = endDay.map { CalendarDayKey(endDate, in: calendar) != $0 } ?? false
+            if startDrifted || endDrifted {
+                let materialized = Self.materializeAllDay(start: startDay, end: endDay, in: calendar)
+                startDate = materialized.start
+                endDate = materialized.end
+            }
+        }
+    }
+
+    /// 把「年月日」按给定时区物化成 startDate/endDate（`init(from:)` 与单测共用）。
+    /// 不变量：endDate 必须 > startDate，且同日时采用 App 既有的 `+86_399` 全天口径。
+    nonisolated static func materializeAllDay(
+        start: CalendarDayKey,
+        end: CalendarDayKey?,
+        in calendar: Calendar
+    ) -> (start: Date, end: Date) {
+        let fallbackStart = start.startOfDay(in: calendar) ?? Date()
+        let sameDayEnd = start.endOfDay(in: calendar)
+            ?? fallbackStart.addingTimeInterval(86_399)
+        guard let end, end != start else {
+            return (fallbackStart, sameDayEnd)
+        }
+        let candidate = end.endOfDay(in: calendar)
+        // 分量本身损坏（结束日早于开始日）时退回单日，保持 endDate > startDate
+        guard let candidate, candidate > fallbackStart else {
+            return (fallbackStart, sameDayEnd)
+        }
+        return (fallbackStart, candidate)
     }
 
     /// 起始日期的农历（按需计算；EventStore 层可注入预计算缓存避免重复转换）
