@@ -79,17 +79,23 @@ public enum AppTheme {
             return .system(size: base, weight: weight, design: design)
             #endif
         }
-        public static let hero = scaled(38, weight: .bold, textStyle: .largeTitle)
-        public static let title2 = scaled(22, weight: .semibold, textStyle: .title2)
-        public static let title3 = scaled(18, weight: .semibold, textStyle: .title3)
-        public static let bodyBold = scaled(16, weight: .semibold, textStyle: .headline)
-        public static let body = scaled(15, weight: .regular, textStyle: .body)
-        public static let subheadline = scaled(13, weight: .medium, textStyle: .subheadline)
-        public static let caption = scaled(12, weight: .medium, textStyle: .caption1)
-        public static let caption2 = scaled(11, weight: .medium, textStyle: .caption2)
-        public static let numeralL = scaled(20, weight: .semibold, textStyle: .headline)
-        public static let numeralM = scaled(16, weight: .semibold, textStyle: .body)
-        public static let numeralXL = scaled(56, weight: .bold, textStyle: .largeTitle)
+        // ⚠️ 必须用计算属性，**不能**用 `static let` 缓存结果：
+        // `UIFontMetrics.scaledFont(for:)` 取决于**当前**字号档位，而系统「文字大小」是
+        // 运行期即时生效的（不像语言要重启 App）。旧实现把首次缩放结果永久固化 ——
+        // 用户在系统设置里放大字号后回到 App，这些字号纹丝不动，而系统语义字体（.body 等）
+        // 已经变大 → 同一屏出现两套字号节奏，辅助字号用户看到的排版是坏的。
+        // 代价：每次访问重算一次 UIFont + 缩放查表（微秒量级），换「字号即时生效」值得。
+        public static var hero: SwiftUI.Font { scaled(38, weight: .bold, textStyle: .largeTitle) }
+        public static var title2: SwiftUI.Font { scaled(22, weight: .semibold, textStyle: .title2) }
+        public static var title3: SwiftUI.Font { scaled(18, weight: .semibold, textStyle: .title3) }
+        public static var bodyBold: SwiftUI.Font { scaled(16, weight: .semibold, textStyle: .headline) }
+        public static var body: SwiftUI.Font { scaled(15, weight: .regular, textStyle: .body) }
+        public static var subheadline: SwiftUI.Font { scaled(13, weight: .medium, textStyle: .subheadline) }
+        public static var caption: SwiftUI.Font { scaled(12, weight: .medium, textStyle: .caption1) }
+        public static var caption2: SwiftUI.Font { scaled(11, weight: .medium, textStyle: .caption2) }
+        public static var numeralL: SwiftUI.Font { scaled(20, weight: .semibold, textStyle: .headline) }
+        public static var numeralM: SwiftUI.Font { scaled(16, weight: .semibold, textStyle: .body) }
+        public static var numeralXL: SwiftUI.Font { scaled(56, weight: .bold, textStyle: .largeTitle) }
     }
     public enum Motion {
         /// 卡片按压弹簧（轻触 → 下沉 → 弹回）

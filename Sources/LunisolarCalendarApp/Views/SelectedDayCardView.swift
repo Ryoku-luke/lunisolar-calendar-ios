@@ -89,8 +89,10 @@ struct SelectedDayCardView: View {
                 Divider().frame(maxHeight: .infinity)
                 jiBlock(huangli.ji, maxShown: 6)
             }
-            .frame(height: 78, alignment: .top)
-            .clipped()
+            // minHeight + 不裁剪，替代原来的 `frame(height: 78) + clipped()`：
+            // 超大辅助字号下 caption2 会被放大 2~3 倍，FlowLayout 换行后必然超过 78pt，
+            // 硬裁会把后面的标签整段切掉且无法滚动查看。宁可卡片变高，也不丢内容。
+            .frame(minHeight: 78, alignment: .top)
             .padding(.top, AppTheme.Spacing.sm)
             .padding(.horizontal, AppTheme.Spacing.sm)
             .padding(.bottom, AppTheme.Spacing.sm)
