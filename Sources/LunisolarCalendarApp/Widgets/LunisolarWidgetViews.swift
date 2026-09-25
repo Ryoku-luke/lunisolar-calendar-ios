@@ -656,11 +656,11 @@ public struct TodoProgressWidgetView: View {
             WidgetProgressRing(progress: entry.progress, accent: accent, lineWidth: 8)
                 .overlay {
                     VStack(spacing: 1) {
-                        Text("\(Int(entry.progress * 100))%")
+                        Text(entry.percentText)
                             .font(.system(size: 18, weight: .heavy, design: .rounded))
                             .foregroundStyle(accent)
                             .monospacedDigit()
-                        Text("\(entry.completedCount)/\(entry.todaysEventsCount)")
+                        Text(entry.countText)
                             .font(.system(size: WidgetUI.meta, weight: .semibold))
                             .foregroundStyle(Color.secondary)
                             .monospacedDigit()
@@ -694,11 +694,11 @@ public struct TodoProgressWidgetView: View {
                 WidgetProgressRing(progress: entry.progress, accent: accent, lineWidth: 9)
                     .overlay {
                         VStack(spacing: 0) {
-                            Text("\(Int(entry.progress * 100))%")
+                            Text(entry.percentText)
                                 .font(.system(size: 19, weight: .black, design: .rounded))
                                 .foregroundStyle(accent)
                                 .monospacedDigit()
-                            Text("\(entry.completedCount)/\(entry.todaysEventsCount)")
+                            Text(entry.countText)
                                 .font(.system(size: WidgetUI.meta, weight: .semibold))
                                 .foregroundStyle(Color.secondary)
                                 .monospacedDigit()
@@ -753,7 +753,7 @@ public struct TodoProgressWidgetView: View {
             HStack(spacing: 16) {
                 WidgetProgressRing(progress: entry.progress, accent: accent, lineWidth: 10)
                     .overlay {
-                        Text("\(Int(entry.progress * 100))%")
+                        Text(entry.percentText)
                             .font(.system(size: 22, weight: .black, design: .rounded))
                             .foregroundStyle(accent)
                             .monospacedDigit()
@@ -763,7 +763,10 @@ public struct TodoProgressWidgetView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(NSLocalizedString("今日待办", comment: ""))
                         .font(.system(size: 15, weight: .heavy, design: .rounded))
-                    Text(String(format: NSLocalizedString("已完成 %d / %d 项", comment: ""), entry.completedCount, entry.todaysEventsCount))
+                    Text(entry.hasTodoData
+                         ? String(format: NSLocalizedString("已完成 %d / %d 项", comment: ""),
+                                  entry.completedCount, entry.todaysEventsCount)
+                         : NSLocalizedString("打开 App 查看今日安排", comment: ""))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.secondary)
                         .monospacedDigit()
@@ -836,6 +839,10 @@ public struct TodoProgressWidgetView: View {
     }
 
     private var progressHintText: String {
+        // 不知道就如实说不知道：该日不在快照窗口内时，「今日还没安排」是一句假话
+        guard entry.hasTodoData else {
+            return NSLocalizedString("打开 App 查看今日安排", comment: "")
+        }
         if entry.todaysEventsCount == 0 {
             return NSLocalizedString("今日还没安排 · 打开 App 添加 ✨", comment: "")
         } else if entry.progress >= 1.0 {

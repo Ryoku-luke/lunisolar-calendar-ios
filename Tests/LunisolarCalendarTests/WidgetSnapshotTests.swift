@@ -162,4 +162,36 @@ final class WidgetSnapshotTests: XCTestCase {
         let after = WidgetSnapshotStore.read(appGroupID: nil, fileName: fileName)
         XCTAssertNotNil(after?.day(for: today), "跨天后必须把窗口滑动到今天")
     }
+
+    // MARK: Entry 的「未知」显示（App 超过窗口天数未运行时不谎报 0/0）
+
+    private func entry(count: Int, completed: Int, hasData: Bool) -> LunisolarWidgetEntry {
+        LunisolarWidgetEntry(
+            date: Date(),
+            huangli: nil,
+            lunar: nil,
+            festivals: [],
+            primaryFestivalHex: "#C41A1A",
+            todaysEventsCount: count,
+            completedCount: completed,
+            hasFestival: false,
+            topTitles: [],
+            hasTodoData: hasData
+        )
+    }
+
+    func testUnknownCountsRenderAsDashes() {
+        let unknown = entry(count: 0, completed: 0, hasData: false)
+        XCTAssertEqual(unknown.percentText, "—%", "不知道就不能显示 0%")
+        XCTAssertEqual(unknown.countText, "—/—", "不知道就不能显示 0/0")
+
+        // 确实没有安排时，0% 与 0/0 是真话，应照常显示
+        let knownZero = entry(count: 0, completed: 0, hasData: true)
+        XCTAssertEqual(knownZero.percentText, "0%")
+        XCTAssertEqual(knownZero.countText, "0/0")
+
+        let knownPartial = entry(count: 4, completed: 3, hasData: true)
+        XCTAssertEqual(knownPartial.percentText, "75%")
+        XCTAssertEqual(knownPartial.countText, "3/4")
+    }
 }

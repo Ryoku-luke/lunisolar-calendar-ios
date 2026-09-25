@@ -17,6 +17,12 @@ public struct LunisolarWidgetEntry: TimelineEntry {
     public let completedCount: Int        // 今日完成数
     public let hasFestival: Bool          // 是否有节日（UI 换色）
     public let topTitles: [WidgetTodoTitle] // 今日前 N 条待办（Medium/Large 列表用）
+    /// 这一天是否**确实取到了**主 App 写的待办统计。
+    ///
+    /// 为 false 的情形：该日不在共享快照窗口内（App 已超过窗口天数未运行过）。
+    /// 此时计数为 0 只是「不知道」的占位，UI 必须如实显示未知，
+    /// 不能谎报 `0/0` 与「今日还没安排」——那会让用户以为今天真的没有安排。
+    public let hasTodoData: Bool
 
     public init(
         date: Date,
@@ -27,7 +33,8 @@ public struct LunisolarWidgetEntry: TimelineEntry {
         todaysEventsCount: Int,
         completedCount: Int,
         hasFestival: Bool,
-        topTitles: [WidgetTodoTitle] = []
+        topTitles: [WidgetTodoTitle] = [],
+        hasTodoData: Bool = true
     ) {
         self.date = date
         self.huangli = huangli
@@ -38,12 +45,23 @@ public struct LunisolarWidgetEntry: TimelineEntry {
         self.completedCount = completedCount
         self.hasFestival = hasFestival
         self.topTitles = topTitles
+        self.hasTodoData = hasTodoData
     }
 
     /// 进度百分比 0...1 (用于待办小组件)
     public var progress: Double {
         guard todaysEventsCount > 0 else { return 0 }
         return min(1.0, Double(completedCount) / Double(todaysEventsCount))
+    }
+
+    /// 进度环中央的百分比文本；不知道时显示 `—%` 而不是 `0%`
+    public var percentText: String {
+        hasTodoData ? "\(Int(progress * 100))%" : "—%"
+    }
+
+    /// 进度环中央的「完成/总数」文本；不知道时显示 `—/—` 而不是 `0/0`
+    public var countText: String {
+        hasTodoData ? "\(completedCount)/\(todaysEventsCount)" : "—/—"
     }
 }
 
@@ -147,7 +165,10 @@ public struct LunisolarWidgetTimelineProvider: TimelineProvider {
             todaysEventsCount: daySnapshot?.eventsCount ?? 0,
             completedCount: daySnapshot?.completedCount ?? 0,
             hasFestival: !fes.isEmpty,
-            topTitles: daySnapshot?.topTitles ?? []
+            topTitles: daySnapshot?.topTitles ?? [],
+            // 该日不在快照窗口内（App 已超过窗口天数未运行）→ UI 如实显示未知，
+            // 而不是把 nil 当 0 谎报「今日还没安排」
+            hasTodoData: daySnapshot != nil
         )
     }
 }
