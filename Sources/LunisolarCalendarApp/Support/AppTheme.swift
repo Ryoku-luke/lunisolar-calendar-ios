@@ -169,62 +169,6 @@ extension ToolbarItemPlacement {
 }
 
 extension View {
-    public func pageBackground() -> some View {
-        self.frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.systemGroupedBackground.ignoresSafeArea())
-    }
-    public func modernCard(
-        radius: CGFloat = AppTheme.Radius.xl,
-        material: Material = .thinMaterial,
-        border: Color = .cardBorder,
-        shadow: (color: Color, radius: CGFloat, x: CGFloat, y: CGFloat) = AppTheme.Shadow.card
-    ) -> some View {
-        self.background(
-            RoundedRectangle(cornerRadius: radius, style: .continuous).fill(material)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .stroke(border, lineWidth: AppTheme.Stroke.hair)
-        )
-        .shadow(color: shadow.color, radius: shadow.radius, x: shadow.x, y: shadow.y)
-    }
-    /// iOS 26 液态玻璃卡片：双层材料 + 高光边 + 动态阴影
-    public func liquidCard(
-        radius: CGFloat = AppTheme.Radius.xxl,
-        material: Material = .regularMaterial,
-        tint: Color = .clear,
-        shadow: (color: Color, radius: CGFloat, x: CGFloat, y: CGFloat) = AppTheme.Shadow.raised,
-        highlight: CGFloat = 0.12
-    ) -> some View {
-        self
-            .background {
-                ZStack {
-                    RoundedRectangle(cornerRadius: radius, style: .continuous).fill(material)
-                    if tint != .clear {
-                        RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .fill(tint.opacity(0.12))
-                    }
-                }
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(Color.white.opacity(highlight), lineWidth: AppTheme.Stroke.hair)
-                    .blendMode(.overlay)
-            )
-            .overlay(alignment: .top) {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(LinearGradient(colors: [Color.white.opacity(0.08), Color.clear],
-                                         startPoint: .top, endPoint: .center))
-                    .frame(height: radius * 0.7)
-                    .allowsHitTesting(false)
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(Color.themeSeparator.opacity(0.20), lineWidth: AppTheme.Stroke.hair)
-            )
-            .shadow(color: shadow.color, radius: shadow.radius, x: shadow.x, y: shadow.y)
-            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-    }
     public func capsuleTag(
         fill: Color = Color.themeQuaternaryFill,
         border: Color = .clear,
@@ -234,9 +178,6 @@ extension View {
         self.padding(.horizontal, hPad).padding(.vertical, vPad)
             .background(Capsule().fill(fill))
             .overlay(Capsule().stroke(border, lineWidth: AppTheme.Stroke.hair))
-    }
-    public func constrainReadable(maxWidth: CGFloat = 760) -> some View {
-        self.frame(maxWidth: maxWidth)
     }
     public func hideListBackground() -> some View {
         #if canImport(UIKit)
@@ -293,7 +234,6 @@ extension View {
     // 4. 字体阶梯复用 AppTheme.Font，不引入新硬编码
 
     /// 统一玻璃卡片：克制版液态玻璃（单层 Material + 单层分隔线 + 单层阴影）
-    /// 替代旧 liquidCard 的多层 overlay（白高光 + 顶部渐变 + separator stroke + clipShape 叠加）
     /// 注：内部不含 padding，调用方自行控制内边距，便于精确排版
     public func glassCard(
         radius: CGFloat = AppTheme.Radius.xxl,

@@ -27,7 +27,6 @@ let package = Package(
             // Models/ 下新增文件默认视为不属于 LunarCore，若属核心算法需手动加入 sources。
             exclude: [
                 "App",
-                "Models/CalendarDaySummary.swift",
                 "Models/CalendarEvent.swift",
                 "Models/CountdownEvent.swift",
                 "Resources",

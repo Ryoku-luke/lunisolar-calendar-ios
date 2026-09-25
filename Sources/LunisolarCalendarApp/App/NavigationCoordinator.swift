@@ -33,11 +33,6 @@ public final class NavigationCoordinator {
 
     private init() {}
 
-    /// 跳转到指定日期（跨 Tab / 跨平台统一入口）
-    public func showDate(_ date: Date) {
-        selectedDate = date
-    }
-
     /// 切到日历入口（三个桌面小组件的 widgetURL `qinghe://calendar` 专用）
     public func openCalendar() {
         #if os(iOS)

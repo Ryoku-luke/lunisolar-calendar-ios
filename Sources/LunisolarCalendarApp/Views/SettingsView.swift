@@ -468,8 +468,6 @@ struct SettingsView: View {
 
     // MARK: - 8. 关于（iOS 系统标准"图标 + 名称 + 版本"三行居中样式）
 
-    @ViewBuilder
-
     /// 文档 Sheet（帮助/反馈/隐私/协议）
     @State private var docToShow: DocKind?
 
@@ -477,10 +475,6 @@ struct SettingsView: View {
     /// 版本递增规则：末位 +1，如 1.0.0 → 1.0.1 → 1.0.2）
     private var appVersionString: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
-    }
-
-    private var buildNumber: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
     }
 
     // MARK: - 通用行

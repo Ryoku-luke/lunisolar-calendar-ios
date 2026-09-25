@@ -52,27 +52,4 @@ struct FlowLayout: Layout {
     }
 }
 
-// MARK: - 低于 iOS 16 的回退方案（HStack 手动换行）
-
-/// iOS 16 以下使用：按宽度预算将标签分到不同的 HStack 行
-struct FallbackFlowLayout<Content: View>: View {
-    let spacing: CGFloat
-    let lineSpacing: CGFloat
-    let content: () -> Content
-
-    init(spacing: CGFloat = 4, lineSpacing: CGFloat = 4, @ViewBuilder content: @escaping () -> Content) {
-        self.spacing = spacing
-        self.lineSpacing = lineSpacing
-        self.content = content
-    }
-
-    var body: some View {
-        // 简化回退：单列 VStack，每行一个标签
-        // iOS 16+ 会在上面 FlowLayout 走真正流式布局
-        VStack(alignment: .leading, spacing: lineSpacing) {
-            content()
-        }
-    }
-}
-
 #endif

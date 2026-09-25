@@ -13,12 +13,9 @@ import Foundation
 
     /// ID -> Record（内存）
     private(set) var records: [String: SyncRecord] = [:]
-    /// 每次写入会递增，用作全局时钟（用于 sinceMs 增量拉取）
-    private(set) var monotonicClock: Int64 = 0
 
     /// 把 record 写入，返回是否实际发生变更（调用侧统计）
     func upsert(_ rec: SyncRecord) -> Bool {
-        monotonicClock += 1
         guard let existing = records[rec.id] else {
             records[rec.id] = rec
             return true
@@ -63,7 +60,6 @@ import Foundation
     /// 清空（仅测试用）
     func reset() {
         records.removeAll(keepingCapacity: true)
-        monotonicClock = 0
     }
 
     /// 当前记录数（测试断言用）

@@ -112,13 +112,4 @@ public enum HolidayProvider: Sendable {
         return HolidayInfo(type: .normal, name: "")
     }
 
-    /// 是否为法定假日。
-    public static func isHoliday(_ date: Date) -> Bool {
-        info(for: date).type == .holiday
-    }
-
-    /// 是否为调休补班日。
-    public static func isWorkday(_ date: Date) -> Bool {
-        info(for: date).type == .workday
-    }
 }

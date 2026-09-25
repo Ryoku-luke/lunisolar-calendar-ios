@@ -27,7 +27,6 @@ public struct AICommandError: Error, Equatable, Sendable {
         case badTime
         case outOfRange
         case inThePast
-        case storeFailure
         /// 修改/删除：指令里既没有标题关键词也没有时间提示，无法定位目标
         case missingTarget
         /// 修改/删除：该条件下没有匹配到任何日程
