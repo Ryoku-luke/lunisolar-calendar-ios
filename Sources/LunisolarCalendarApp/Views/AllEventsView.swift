@@ -145,7 +145,9 @@ struct AllEventsView: View {
                         revealedByScroll = false   // 下次进入多选仍从"隐藏 → 滚动/勾选淡入"开始
                     }
                 }
-                .disabled(filteredEvents.isEmpty)
+                // 用 visibleEvents 而不是 filteredEvents：若筛选结果全是"已过去"且当前处于
+                // 折叠状态，进多选后一个可勾选的行都没有（「全选」也灰着），只能再点「完成」退出。
+                .disabled(visibleEvents.isEmpty)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -191,6 +193,10 @@ struct AllEventsView: View {
         .onChange(of: query) { _, _ in exitSelection() }
         .onChange(of: typeFilter) { _, _ in exitSelection() }
         .onChange(of: showCompleted) { _, _ in exitSelection() }
+        // 「显示已过去」同样是可见性开关：折叠后那些行不再可见，而批量删除是按
+        // **选中集合**执行的 → 不退出多选就会把当前看不见的行一起删掉。
+        // 这也是唯一漏掉 exitSelection() 的开关（其它三个筛选都在上面）。
+        .onChange(of: showPast) { _, _ in exitSelection() }
     }
 
     // MARK: - 行
@@ -305,34 +311,20 @@ struct AllEventsView: View {
             .filter { showCompleted || !$0.isCompleted }
     }
 
-    /// 已过去 = 一次性日程且开始时间早于今天。
-    /// 重复日程会继续发生，故归入"今天起"，不随历史起点沉底。
+    /// 已过去：一次性、开始日早于今天，且今天已不再发生（规则见 AllEventsGrouping）
     private func isPast(_ event: CalendarEvent) -> Bool {
-        event.repeatRule == .never && event.startDate < todayStart
+        AllEventsGrouping.isPast(event, todayStart: todayStart)
     }
 
     private var pastEvents: [CalendarEvent] { filteredEvents.filter(isPast) }
     private var pastCount: Int { pastEvents.count }
     private var upcomingGroups: [(day: Date, events: [CalendarEvent])] {
-        groups(from: filteredEvents.filter { !isPast($0) })
+        // 组头从「今天」起算：跨天与重复日程的 startDate 可能早于今天（重复日程的锚点
+        // 甚至在半年前），直接拿它当组头会显示历史日期，与「今天起优先」的承诺矛盾
+        AllEventsGrouping.groups(from: filteredEvents.filter { !isPast($0) }, clampingTo: todayStart)
     }
     private var pastGroups: [(day: Date, events: [CalendarEvent])] {
-        groups(from: pastEvents)
-    }
-
-    /// 按天分组（EventStore 内部按 startDate 升序，分组顺序天然有序）
-    private func groups(from events: [CalendarEvent]) -> [(day: Date, events: [CalendarEvent])] {
-        let cal = QingheCalendarContext.userCalendar
-        var result: [(day: Date, events: [CalendarEvent])] = []
-        for event in events {
-            let day = cal.startOfDay(for: event.startDate)
-            if let last = result.last, last.day == day {
-                result[result.count - 1].events.append(event)
-            } else {
-                result.append((day, [event]))
-            }
-        }
-        return result
+        AllEventsGrouping.groups(from: pastEvents)
     }
 
     // MARK: - 多选操作
