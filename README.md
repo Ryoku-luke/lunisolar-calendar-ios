@@ -109,7 +109,7 @@ Sources/LunisolarCalendarApp/
 Tools/                           # 黄历库生成工具 + 图标生成脚本
 Tests/LunisolarCalendarTests/    # 309 个单元测试（36 个套件）
 UITests/                         # UI 冒烟测试（3 条）
-docs/                            # 上架 / 签名 / 构建 / 真机复测清单 / 待做方案（全天事件、黄历数据源）
+docs/                            # 上架 / 签名 / 构建 / 真机复测清单 / 进度分析与待做方案
 ```
 
 ## 构建与测试
