@@ -146,7 +146,8 @@ public final class EventService {
     // MARK: - 倒数日业务（P0：收口 CountdownView 直连 CountdownStore）
 
     /// 倒数日数据源（写操作走本类业务方法，保持 UI → Service → Store 单向依赖）。
-    private let countdownStore: CountdownStore
+    /// 与 `store` 一样对外只读暴露，便于测试断言"写入确实落在注入实例上"。
+    public let countdownStore: CountdownStore
 
     /// 新增或更新倒数日（按 id 是否已存在决定 add/update）。
     /// flush=true：编辑页保存后立即 dismiss，很可能马上进后台；0.5s 防抖的

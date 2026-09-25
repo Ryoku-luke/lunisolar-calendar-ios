@@ -20,14 +20,17 @@ final class EventServiceIsolationTests: XCTestCase {
 
     @MainActor
     func testCountdownWritesGoToInjectedStoreInsteadOfSharedSingleton() {
-        let service = EventService(store: makeIsolatedEventStore(),
-                                   countdownStore: isolatedCountdownStore())
-        let before = CountdownStore.shared.events.count
+        let isolated = isolatedCountdownStore()
+        let service = EventService(store: makeIsolatedEventStore(), countdownStore: isolated)
+        let sharedBefore = CountdownStore.shared.events.count
 
         service.deleteCountdown(id: UUID())
         service.flushPendingSave()
 
-        XCTAssertEqual(CountdownStore.shared.events.count, before,
+        XCTAssertTrue(service.countdownStore === isolated,
+                      "服务必须持有注入的倒数日 store，而不是共享单例")
+        XCTAssertFalse(service.countdownStore === CountdownStore.shared)
+        XCTAssertEqual(CountdownStore.shared.events.count, sharedBefore,
                        "倒数日写入不得落到共享单例（否则测试会污染真实数据）")
     }
 
