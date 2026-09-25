@@ -89,6 +89,28 @@ public enum DataPortability {
         return []
     }
 
+    // MARK: - 日期格式化器（口径必须显式固定）
+
+    /// 按给定格式构造**与设备区域 / 系统日历无关**的 DateFormatter。
+    ///
+    /// ⚠️ 只设 `dateFormat` 是不够的：不指定 `locale` / `calendar` 时，DateFormatter 会跟随
+    /// `Locale.current` 的日历。系统区域设为佛历 / 和历 / 伊斯兰历时，`yyyy` 是该历法的年号
+    /// （2026 → 佛历 2569），于是：
+    /// - 导入侧：`DTSTART;VALUE=DATE:20260906` 会被解析成公历 1483 年（2026 − 543），
+    ///   事件落到 1900 年之前、日历里根本看不到，用户感受为「导入成功但什么都没有」；
+    /// - 导出侧：写出对方看不懂的年份，ICS/CSV 跨日历互通整体错位；
+    /// - 伪 UUID 侧：种子里的时间戳年份变了 → 同一份 .ics 重复导入会算出不同 UUID，
+    ///   去重失效、产生副本。
+    /// 本工程其它日期路径（DeepLinkRouter / NotificationManager / EventEditView）都已显式固定。
+    static func formatter(_ format: String, timeZone: TimeZone) -> DateFormatter {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        f.dateFormat = format
+        f.timeZone = timeZone
+        return f
+    }
+
     // MARK: - ICS 导出
 
     /// 导出所有事件为 .ics 格式字符串
@@ -101,15 +123,11 @@ public enum DataPortability {
             "METHOD:PUBLISH"
         ]
 
-        let dfmt = DateFormatter()
-        dfmt.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
-        dfmt.timeZone = QingheCalendarContext.utcTimeZone
-        let dfmtAllDay = DateFormatter()
-        dfmtAllDay.dateFormat = "yyyyMMdd"
+        let dfmt = formatter("yyyyMMdd'T'HHmmss'Z'", timeZone: QingheCalendarContext.utcTimeZone)
         // RFC 5545 VALUE=DATE 是「无时区日期」（floating），表示本地历法上的某一整天。
         // 本 App 全天事件 startDate 存为本地 00:00，必须按当前时区取 Y/M/D；
         // 若用 UTC，UTC+8 用户的 9/6 00:00 会被格式化成 9/5，全天事件整体提前一天。
-        dfmtAllDay.timeZone = .current
+        let dfmtAllDay = formatter("yyyyMMdd", timeZone: .current)
 
         for event in events {
             lines.append("BEGIN:VEVENT")
@@ -179,8 +197,7 @@ public enum DataPortability {
         let header = "标题,类型,开始时间,结束时间,全天,地点,备注,重复规则,优先级,已完成,创建时间"
         var rows: [String] = [header]
 
-        let dfmt = DateFormatter()
-        dfmt.dateFormat = "yyyy-MM-dd HH:mm"
+        let dfmt = formatter("yyyy-MM-dd HH:mm", timeZone: .current)
 
         for event in events {
             let row: [String] = [
@@ -226,11 +243,9 @@ public enum DataPortability {
         var idx = 0
         // P2 修复：非全天 DTSTART/DTEND 现在走 parseICSDateTime（支持 TZID/UTC/floating），
         //   不再需要预先创建 dfmtUTC/dfmtLocal。
-        let dfmtAllDay = DateFormatter()
-        dfmtAllDay.dateFormat = "yyyyMMdd"
         // VALUE=DATE 无时区：按当前时区还原为本地 00:00，与全天事件的本地存储约定一致，
         // 也保证跨时区导入后「日历日」不变（9/6 始终落在 9/6，不会因 UTC 换算漂到 9/5）。
-        dfmtAllDay.timeZone = .current
+        let dfmtAllDay = formatter("yyyyMMdd", timeZone: .current)
 
         while idx < lines.count {
             let line = lines[idx]
@@ -251,6 +266,31 @@ public enum DataPortability {
 
                 while idx < lines.count && !lines[idx].uppercased().hasPrefix("END:VEVENT") {
                     let vline = lines[idx]
+
+                    // 子块（VALARM 等）整块跳过——它们不属于事件本身。
+                    // 旧实现只认 END:VEVENT，于是 VALARM 里的键值被当成事件属性解析：
+                    // Apple / Google 导出的事件都带 BEGIN:VALARM / ACTION:DISPLAY /
+                    // DESCRIPTION:提醒，且该行位于事件自身 DESCRIPTION 之后 →
+                    // 导入后备注被替换成「提醒」，原备注永久丢失；
+                    // VALARM 内若还有 UID，会覆盖事件 UID 让重复导入去重失效。
+                    if vline.uppercased().hasPrefix("BEGIN:") {
+                        idx += 1
+                        var depth = 1
+                        while idx < lines.count, depth > 0 {
+                            let inner = lines[idx].uppercased()
+                            // 防御：畸形输入缺 END:<block> 时，跳过逻辑绝不能被 END:VEVENT 收尾，
+                            // 否则下一个事件的内容会被并进当前事件（事件被吞并）
+                            if inner.hasPrefix("END:VEVENT") { break }
+                            if inner.hasPrefix("BEGIN:") { depth += 1 }
+                            else if inner.hasPrefix("END:") {
+                                depth -= 1
+                                if depth == 0 { idx += 1; break }
+                            }
+                            idx += 1
+                        }
+                        continue
+                    }
+
                     let parts = vline.split(separator: ":", maxSplits: 1)
                     guard parts.count == 2 else { idx += 1; continue }
                     // P2 修复：TZID 的值是 IANA 时区标识符（大小写敏感，如 "America/New_York"）。
@@ -450,21 +490,14 @@ public enum DataPortability {
     ///   导入后时间会错位数小时。
     private static func parseICSDateTime(_ value: String, tzid: String?) -> Date? {
         if value.hasSuffix("Z") {
-            let dfmt = DateFormatter()
-            dfmt.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
-            dfmt.timeZone = QingheCalendarContext.utcTimeZone
-            return dfmt.date(from: value)
+            return formatter("yyyyMMdd'T'HHmmss'Z'", timeZone: QingheCalendarContext.utcTimeZone)
+                .date(from: value)
         }
         if let tzid, !tzid.isEmpty, let tz = TimeZone(identifier: tzid) {
-            let dfmt = DateFormatter()
-            dfmt.dateFormat = "yyyyMMdd'T'HHmmss"
-            dfmt.timeZone = tz
-            return dfmt.date(from: value)
+            return formatter("yyyyMMdd'T'HHmmss", timeZone: tz).date(from: value)
         }
         // floating time：无 Z 无 TZID，按设备本地时区
-        let dfmt = DateFormatter()
-        dfmt.dateFormat = "yyyyMMdd'T'HHmmss"
-        return dfmt.date(from: value)
+        return formatter("yyyyMMdd'T'HHmmss", timeZone: .current).date(from: value)
     }
 
     /// 为导入的事件生成稳定伪 UUID：优先用 ics UID 做 hash + seed；否则用 (title, start, end, allDay)。
@@ -483,9 +516,9 @@ public enum DataPortability {
         if let uid = uid, !uid.isEmpty {
             seed += "uid:\(uid)"
         } else {
-            let df = DateFormatter()
-            df.dateFormat = "yyyyMMddHHmmss"
-            df.timeZone = QingheCalendarContext.utcTimeZone
+            // 时间戳必须走固定口径的 formatter：种子里的年份若随系统历法变化，
+            // 同一份 .ics 重复导入会算出不同 UUID → 去重失效、产生副本
+            let df = formatter("yyyyMMddHHmmss", timeZone: QingheCalendarContext.utcTimeZone)
             seed += "t:\(title)|s:\(df.string(from: startDate))|e:\(df.string(from: endDate))|a:\(isAllDay ? 1 : 0)"
         }
         let hash16 = sha256_first16Bytes(of: seed)
