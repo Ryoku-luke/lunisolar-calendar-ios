@@ -100,8 +100,6 @@ struct CalendarMonthView: View {
     /// P1：卡片点击深链进来时高亮的倒数日条目（sheet 关闭后重置）
     @State private var countdownFocusID: UUID?
     @State private var showSettings = false
-    /// AI 助手 Sheet 展示
-    @State private var showAIAssistant = false
     @State private var showNewEventForContextMenu: Date?
     /// P1：深链 / 通知 / Live Activity 点击后要打开的事件详情
     @State private var pendingOpenEvent: CalendarEvent?
@@ -211,6 +209,14 @@ struct CalendarMonthView: View {
             }
         }
         #endif
+        // 本页 sheet 的分工（报告 §74 禁止「用大量 .sheet 堆叠**导航**」，故逐条说明）：
+        // - showDateJump / showNewEventForContextMenu / pendingOpenEvent：真正的**模态**
+        //   （选日期、长按日期格新建、深链打开某事件编辑），不是导航，保留 sheet；
+        // - showCountdown / showSettings：是导航，但只服务于**程序化入口**（深链、iPad 菜单），
+        //   iPhone 上的常规入口走工具栏菜单里的 NavigationLink。
+        //   iPad 侧刻意用 sheet 而非 push：侧栏内 push 会被挤在窄列（见上方工具栏菜单的注释）。
+        // 曾经还有一个 showAIAssistant 的 sheet，全仓无处置为 true（AI 助手在 iPhone 是独立 Tab，
+        // iPad 没有该节），属死代码，已删除。
         .tint(accent)
         .sheet(isPresented: $showDateJump) {
             DateJumpView(targetDate: Binding(
@@ -229,9 +235,6 @@ struct CalendarMonthView: View {
         .sheet(isPresented: $showSettings) {
             // SettingsView 自身不再包导航栈，sheet 场景补一层（push 场景继承外层导航）
             NavigationStack { SettingsView().environment(store) }
-        }
-        .sheet(isPresented: $showAIAssistant) {
-            AIAssistantView()
         }
         .sheet(item: $showNewEventForContextMenu) { date in
             NavigationStack {

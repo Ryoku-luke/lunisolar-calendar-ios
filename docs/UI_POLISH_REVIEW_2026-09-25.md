@@ -73,7 +73,7 @@
 | §42 Toast/Alert 分工 | **部分统一**：AI 助手的行内成功提示改用 `QingheToast`。其余页仍混用 `.alert(`（10 处） |
 | §50 `UI/` 目录六组组件 | 仍未建目录；组件放在 `Views/` 下（`QingheStateViews` / `QingheUIComponents` / `SettingsViewComponents` / `CalendarComponents` / `EventRow`） |
 | §54 成品级状态矩阵（9 Feature × 7 状态） | 仍**无法逐格评估**；但空态/错误态现在有了统一断言锚点（`state.empty` / `state.error` / `state.toast`），可以逐页补齐 |
-| §74 禁止「大量 .sheet 堆叠导航」 | **仍触犯**：`CalendarMonthView` 单文件 **6 个 `.sheet(`**；全仓 14 个 `.sheet` vs 11 个 `NavigationLink/navigationDestination` |
+| §74 禁止「大量 .sheet 堆叠导航」 | **经核查：基本是误报，已更正**（2026-09-25）。全仓 14 个 `.sheet` 里 **13 个是真正的模态**（选日期、新建/编辑事件、文档、倒数日编辑器、AI 助手工具）；只有 2 处是「用 sheet 做导航」，且都限在 iPad，`CalendarMonthView` 里有明确理由（侧栏内 push 会被挤在窄列）。另外删掉了 1 处**死代码**：`CalendarMonthView` 的 `showAIAssistant` sheet 全仓无处置为 true（AI 助手在 iPhone 是独立 Tab、iPad 无此节）。分类已写进 `CalendarMonthView` 的注释，避免下次审计再次误报 |
 
 ## 5.1 本轮发现的两个真问题（1 已修，2 待做）
 
@@ -89,7 +89,8 @@
 | Dynamic Type | ✅ 已做且做对（见 §4） |
 | 44pt 触点 | 部分：`touchTarget` **6 处** |
 | VoiceOver 标签 | **13 处** `accessibilityLabel`，对 21 个 View 文件来说偏薄；日期格已合并朗读（好） |
-| Reduce Motion / Reduce Transparency | ❌ **0 处**（`reduceMotion` 全仓无匹配）——动画（月翻页 Spring、选中回弹、卡片过渡）在开启「减弱动态效果」后不会降级 |
+| Reduce Motion | **已处理（2026-09-25）**：`AppRootView` 用 `@Environment(\.accessibilityReduceMotion)` + `.transaction { disablesAnimations = true }` 在**整棵子树**集中关闭动画；骨架屏另在 `QingheSkeletonBlock` 内单独 gate（呼吸动画）。集中做而不是逐个动画点判断的理由：全仓 22 处动画调用散在 6 个文件，逐处判断易漏且会不一致。代价是开启后「月翻页」也变瞬间切换——这是 reduce motion 的常规解释。**未在真机/模拟器上开启该设置实测过**，需人工确认一次 |
+| Reduce Transparency / 高对比度 | ❌ 仍未处理（`reduceTransparency`、`accessibilityContrast` 全仓无匹配） |
 | 高对比度 / 深色模式 | 深色模式已适配；高对比度未处理 |
 
 ## 7. 验收能力（§54 / §55 / §61）——从 0 到「一小块」
@@ -152,8 +153,9 @@ Flow 6 原本就吃过这个亏：它早期用「筛选到没有数据的类型�
 | 1 | **裁决 iPad 右栏语义**（= 我上一轮的裁决项 A） | 卡住 P0-2、§33–§38、P1「iPad Inspector」四条 | 你 |
 | 2 | ~~**统一三态组件 + 骨架屏**（§37/§41/§50）~~ **已完成（2026-09-25）** | 组件已建立并接进 4 处界面，Flow 6 已自动化验证空态 + 行动按钮 | 已完成 |
 | 3 | **拆 `CalendarMonthView` 的 6 个 sheet**（§74 禁止项） | 触犯明确禁止项；改成 `navigationDestination` 不如完全重做，但可先收口 | 我 |
-| 4 | **Reduce Motion 降级**（§44） | 硬缺口、改动小（几处动画加 gate）；骨架屏那一处本轮已 gate | 我 |
+| 4 | ~~**Reduce Motion 降级**（§44）~~ **已完成（2026-09-25）** | 已在根视图集中关闭动画（22 处动画调用散在 6 个文件，逐处判断易漏）；骨架屏单独 gate | 已完成 |
 | 4b | **对齐 `AppTheme.Radius` 与圆角纪律**（§5.1 问题 2） | Token 的 22/28 不在允许清单里；改值会小幅改动全站圆角，需单独一步并肉眼确认 | 我 |
+| 4c | **Reduce Transparency / 高对比度**（§44） | 仍未处理；需要逐个材质点判断（glassCard 用到 material），属设计决策而非机械改动 | 我 |
 | 5 | 拆 `SettingsView`（790 行）/ `CalendarMonthView`（725 行）为 Feature 子页 | churn 大、收益偏维护性；应在 2 之后做 | 我 |
 | 6 | 补 VoiceOver 标签（现 13 处）与高对比度 | 上架前建议做；`docs/DEVICE_TEST_CHECKLIST.md` 已有检查项 | 我 |
 | 7 | 用 §54 的 9×7 矩阵逐格走一遍，把「没实现」和「没测」分开记账 | 需要先有 2 的组件，否则走不通 | 我（部分需真机） |

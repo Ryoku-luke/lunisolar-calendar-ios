@@ -26,6 +26,8 @@ public struct AppRootView: View {
     /// 场景生命周期：用于在 App 进入后台时把防抖保存立即落盘
     /// （P2：EventStore/CountdownStore 的 0.5s 防抖在后台终止时可能来不及落盘）
     @Environment(\.scenePhase) private var scenePhase
+    /// 系统「减弱动态效果」（设置 → 辅助功能 → 动态效果）
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var appearance: AppAppearance {
         AppAppearance(rawValue: appearanceRaw) ?? .system
@@ -43,6 +45,14 @@ public struct AppRootView: View {
             .environment(countdownStore)
             .preferredColorScheme(appearance.colorScheme)
             .tint(Color.appTint)
+            // 报告 §44：尊重「减弱动态效果」——开启时在**整棵子树**内关闭动画。
+            // 为什么集中在这里而不是逐个动画点加判断：全仓 22 处动画调用散在 6 个文件里，
+            // 逐处判断既容易漏、也会出现「有的降级有的没降」的不一致。
+            // 代价：开启后连「月翻页」也变成瞬间切换——这正是 reduce motion 的常规解释
+            // （iOS 自身也把 App 切换的缩放换成淡入）。若日后想保留淡入过渡，再细化。
+            .transaction { transaction in
+                if reduceMotion { transaction.disablesAnimations = true }
+            }
             .task {
                 AppLifecycleCoordinator.shared.bootstrap(store: store, countdownStore: countdownStore)
                 await AppLifecycleCoordinator.shared.onLaunch()
