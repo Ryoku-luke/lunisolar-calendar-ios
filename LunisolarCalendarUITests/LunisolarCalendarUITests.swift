@@ -243,15 +243,16 @@ final class LunisolarCalendarUITests: XCTestCase {
                       "点「解析并预览」必须有反应（预览或明确错误）")
     }
 
-    // MARK: - Flow 6：全部日程的空态是统一组件，且带行动按钮
+    // MARK: - Flow 6：全部日程的搜索可用 + 空态是统一组件且带行动按钮
 
-    /// 报告 §41 要求空态含四要素（图标 + 标题 + 说明 + 行动按钮），且各页共用同一组件。
+    /// 两个目的：
+    /// 1. 回归「全部日程搜不了」——iOS 26 上 `.searchable` 曾不渲染任何搜索入口，
+    ///    搜索框不出现就直接失败；
+    /// 2. 报告 §41 要求空态含四要素（图标 + 标题 + 说明 + 行动按钮），且各页共用同一组件。
     ///
-    /// 空态用**类型筛选**造（点「提醒」或「记事」）：这两个类型通常没有数据。
-    /// 为什么不用搜索框造空态：iOS 26 上这条 `.searchable` 根本不渲染搜索入口
-    /// （实测整棵无障碍树里没有 SearchField，下拉也不出现）——那是另一个待修的真 bug，
-    /// 不该让本用例替它背锅。若两种类型恰好都有数据，本用例明确跳过而不是假装通过。
-    func testFlow6_allEventsEmptyStateIsUnifiedAndActionable() throws {
+    /// 空态用「搜索一个必然无结果的词」造：与容器里有什么数据无关，任何环境都成立。
+    /// （此前用「筛选到没有数据的类型」造，容器里提醒/记事都有内容时只能跳过——已弃用。）
+    func testFlow6_searchWorksAndEmptyStateIsActionable() {
         let app = launchApp()
 
         // 进「全部日程」：先点工具栏入口菜单，再点菜单项。
@@ -272,22 +273,20 @@ final class LunisolarCalendarUITests: XCTestCase {
                       \(app.debugDescription)
                       """)
 
-        let empty = element(app, ID.stateEmpty)
-
-        // 用「该类型没有数据」造空态
-        var madeEmpty = false
-        for typeName in ["提醒", "记事"] {
-            let chip = label(app, typeName)
-            guard chip.exists else { continue }
-            chip.tap()
-            if empty.waitForExistence(timeout: 3) { madeEmpty = true; break }
-        }
-        try XCTSkipUnless(madeEmpty,
-                          "当前数据里提醒与记事都有内容，无法用类型筛选造出空态")
-
-        XCTAssertTrue(empty.waitForExistence(timeout: 3),
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5),
                       """
-                      筛选后无结果时应出现统一空态（标识 \(ID.stateEmpty)）。
+                      全部日程的搜索框必须可见（「搜不了」的回归保护）。
+                      当前界面树：
+                      \(app.debugDescription)
+                      """)
+        search.tap()
+        search.typeText("zzzzzz")
+
+        let empty = element(app, ID.stateEmpty)
+        XCTAssertTrue(empty.waitForExistence(timeout: 5),
+                      """
+                      搜不到结果时应出现统一空态（标识 \(ID.stateEmpty)）。
                       当前界面树：
                       \(app.debugDescription)
                       """)
@@ -297,7 +296,7 @@ final class LunisolarCalendarUITests: XCTestCase {
                       "空态应带「清除筛选」行动按钮（四要素的第四项）")
         clear.tap()
         XCTAssertFalse(empty.waitForExistence(timeout: 3),
-                       "点「清除筛选」后空态应消失（筛选条件真的被清掉）")
+                       "点「清除筛选」后空态应消失（搜索条件真的被清掉）")
     }
 
     // MARK: - Flow 4：iPad 三栏与侧栏导航（iPhone 上跳过）

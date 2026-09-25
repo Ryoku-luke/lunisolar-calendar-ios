@@ -123,11 +123,16 @@ struct AllEventsView: View {
         #endif
         .navigationTitle(NSLocalizedString("全部日程", comment: ""))
         .inlineTitleBar()
-        // ⚠️ 已知问题（2026-09-25 实测）：iOS 26 上这条 `.searchable` 不渲染任何搜索入口——
-        // 整棵无障碍树里没有 SearchField，下拉也不出现；把修饰符顺序调换同样无效（已验证，
-        // 故顺序不是成因）。表现为「全部日程搜不了」。原因未定位，
-        // 记录在 docs/UI_POLISH_REVIEW_2026-09-25.md 的待修清单里。
+        // ⚠️ 这里 `.searchable` 曾不渲染任何搜索入口（iOS 26 上默认的「自动」抽屉不出现搜索框，
+        // 下拉也不出现；调换修饰符顺序同样无效）。修复：显式要求常驻导航栏抽屉。
+        // 该 placement 是 iOS 专有（macOS 无 navigationBarDrawer），故按平台分支。
+        #if canImport(UIKit)
+        .searchable(text: $query,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: Text(NSLocalizedString("搜索标题 / 地点 / 备注", comment: "")))
+        #else
         .searchable(text: $query, prompt: Text(NSLocalizedString("搜索标题 / 地点 / 备注", comment: "")))
+        #endif
         .toolbar {
             ToolbarItemGroup(placement: .platformTopBarTrailing) {
                 if isSelecting {
