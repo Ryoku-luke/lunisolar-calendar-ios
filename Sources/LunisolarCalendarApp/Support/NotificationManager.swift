@@ -232,7 +232,10 @@ public final class NotificationManager {
               let center = currentCenterIfAvailable else { return false }
 
         let content = buildContent(for: event)
-        content.body = content.body.isEmpty ? "稍后提醒" : "\(content.body)（稍后提醒）"
+        // 通知正文是用户可见文案，必须显式本地化（String 上下文不会自动查表）
+        content.body = content.body.isEmpty
+            ? NSLocalizedString("稍后提醒", comment: "")
+            : String(format: NSLocalizedString("%@（稍后提醒）", comment: ""), content.body)
         let request = UNNotificationRequest(
             identifier: Self.snoozeIdentifier(eventID: eventID, at: Date().timeIntervalSince1970),
             content: content,

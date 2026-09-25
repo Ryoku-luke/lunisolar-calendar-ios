@@ -59,8 +59,8 @@ public enum SystemImportSource: String, Sendable, CaseIterable {
 
     public var displayName: String {
         switch self {
-        case .systemCalendar: return "系统日历"
-        case .contacts:       return "联系人"
+        case .systemCalendar: return NSLocalizedString("系统日历", comment: "")
+        case .contacts:       return NSLocalizedString("联系人", comment: "")
         }
     }
 }

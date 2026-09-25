@@ -463,7 +463,7 @@ struct SettingsView: View {
                 HStack {
                     Label(NSLocalizedString("删除所有数据", comment: ""), systemImage: "trash")
                     Spacer()
-                    Text("\(store.events.count) 条")
+                    Text(String(format: NSLocalizedString("%d 项", comment: ""), store.events.count))
                         .font(AppTheme.Font.caption.weight(.semibold))
                         .foregroundStyle(Color.tertiaryLabel)
                 }
@@ -525,11 +525,16 @@ struct SettingsView: View {
     }
 
     private func conflictPolicyButtonTitle(_ p: ImportConflictPolicy) -> String {
-        p == conflictPolicy ? p.title + "（当前）" : p.title
+        p == conflictPolicy ? p.title + NSLocalizedString("（当前）", comment: "") : p.title
     }
 
     private var conflictPolicyAlertMessage: some View {
-        Text("当前策略：\(conflictPolicy.title) · \(conflictPolicy.subtitle)\n选完策略后会打开 Files 选择文件。")
+        // 拆成两行而不是在一个 key 里塞 `\n`：字符串目录里的换行键既难翻译也易出错
+        VStack(alignment: .leading, spacing: 4) {
+            Text(String(format: NSLocalizedString("当前策略：%@ · %@", comment: ""),
+                        conflictPolicy.title, conflictPolicy.subtitle))
+            Text(NSLocalizedString("选完策略后会打开 Files 选择文件。", comment: ""))
+        }
     }
 
     @ViewBuilder
@@ -552,22 +557,28 @@ struct SettingsView: View {
 
     private var notifStatusText: String {
         switch notifStatus {
-        case .granted:       return "已开启"
-        case .denied:         return "未开启"
-        case .notDetermined: return "未请求"
-        case .unavailable:    return "不可用"
+        case .granted:        return NSLocalizedString("已开启", comment: "")
+        case .denied:         return NSLocalizedString("未开启", comment: "")
+        case .notDetermined:  return NSLocalizedString("未请求", comment: "")
+        case .unavailable:    return NSLocalizedString("不可用", comment: "")
         }
     }
 
     private func importSummaryText(_ r: ImportMergeResult) -> String {
+        // 这些是 String 上下文的文案：必须显式 NSLocalizedString，
+        // 否则无论 .strings 里有没有条目都不会被查表（英文界面永远显示中文）
         var parts: [String] = []
-        if r.added > 0   { parts.append("新增 \(r.added)") }
-        if r.updated > 0 { parts.append("更新 \(r.updated)") }
-        if r.skipped > 0 { parts.append("保留本地 \(r.skipped)") }
-        if r.invalid > 0 { parts.append("无效 \(r.invalid)") }
-        let main = parts.isEmpty ? "没有可导入的事件" : parts.joined(separator: " · ")
+        if r.added > 0   { parts.append(String(format: NSLocalizedString("新增 %d", comment: ""), r.added)) }
+        if r.updated > 0 { parts.append(String(format: NSLocalizedString("更新 %d", comment: ""), r.updated)) }
+        if r.skipped > 0 { parts.append(String(format: NSLocalizedString("保留本地 %d", comment: ""), r.skipped)) }
+        if r.invalid > 0 { parts.append(String(format: NSLocalizedString("无效 %d", comment: ""), r.invalid)) }
+        let main = parts.isEmpty
+            ? NSLocalizedString("没有可导入的事件", comment: "")
+            : parts.joined(separator: " · ")
         if r.hasConflicts {
-            return main + "\n（检测到 \(r.updated + r.skipped) 条冲突，已按「\(conflictPolicy.title)」处理）"
+            let note = String(format: NSLocalizedString("（检测到 %d 条冲突，已按「%@」处理）", comment: ""),
+                              r.updated + r.skipped, conflictPolicy.title)
+            return main + "\n" + note
         }
         return main
     }
@@ -578,7 +589,7 @@ struct SettingsView: View {
         switch result {
         case .success(let url):
             guard url.startAccessingSecurityScopedResource() else {
-                toast = .init(kind: .error, text: "导入失败：无权限读取该文件，请重新选择")
+                toast = .init(kind: .error, text: NSLocalizedString("导入失败：无权限读取该文件，请重新选择", comment: ""))
                 importedResult = .init(invalid: 1)
                 showImportResult = true
                 return
@@ -587,7 +598,7 @@ struct SettingsView: View {
             guard let content = try? String(contentsOf: url, encoding: .utf8) else {
                 importedResult = .init(invalid: 1)
                 showImportResult = true
-                toast = .init(kind: .error, text: "导入失败：文件无法读取或编码不支持（请使用 UTF-8 文本）")
+                toast = .init(kind: .error, text: NSLocalizedString("导入失败：文件无法读取或编码不支持（请使用 UTF-8 文本）", comment: ""))
                 return
             }
             let incoming: [CalendarEvent]
@@ -606,15 +617,18 @@ struct SettingsView: View {
                     EventService.shared.rescheduleAllReminders()
                 }
                 toast = .init(kind: .success,
-                              text: "导入完成：新增 \(r.added) · 更新 \(r.updated)")
+                              text: String(format: NSLocalizedString("导入完成：新增 %d · 更新 %d", comment: ""),
+                                           r.added, r.updated))
             } else {
-                toast = .init(kind: .warning, text: "未导入任何新事件（已有或数据无效）")
+                toast = .init(kind: .warning, text: NSLocalizedString("未导入任何新事件（已有或数据无效）", comment: ""))
             }
         case .failure(let error):
             AppLogger.app.error("导入失败: \(error)")
             importedResult = .init(invalid: 1)
             showImportResult = true
-            toast = .init(kind: .error, text: "导入失败：\(error.localizedDescription)")
+            toast = .init(kind: .error,
+                          text: String(format: NSLocalizedString("导入失败：%@", comment: ""),
+                                       error.localizedDescription))
         }
     }
 
@@ -648,11 +662,15 @@ struct SettingsView: View {
         if events.isEmpty {
             if failures.contains(where: { if case .unauthorized = $0 { return true } else { return false } }) {
                 toast = .init(kind: .error,
-                              text: "\(source.displayName) 权限未授权，请前往系统设置开启")
+                              text: String(format: NSLocalizedString("%@ 权限未授权，请前往系统设置开启", comment: ""),
+                                           source.displayName))
             } else if let f = failures.first {
-                toast = .init(kind: .warning, text: "导入失败：\(f)")
+                toast = .init(kind: .warning,
+                              text: String(format: NSLocalizedString("导入失败：%@", comment: ""), "\(f)"))
             } else {
-                toast = .init(kind: .warning, text: "\(source.displayName) 中没有可导入的事件")
+                toast = .init(kind: .warning,
+                              text: String(format: NSLocalizedString("%@ 中没有可导入的事件", comment: ""),
+                                           source.displayName))
             }
             return
         }
@@ -691,22 +709,27 @@ struct SettingsView: View {
     private func enableSyncFirstTime() async {
         switch await AppLifecycleCoordinator.shared.enableCloudSync() {
         case .success:
-            toast = .init(kind: .success, text: "iCloud 同步已开启")
+            toast = .init(kind: .success, text: NSLocalizedString("iCloud 同步已开启", comment: ""))
         case .unsupportedBuild:
-            toast = .init(kind: .error, text: "当前构建未启用 iCloud 权限，同步暂不可用")
+            toast = .init(kind: .error, text: NSLocalizedString("当前构建未启用 iCloud 权限，同步暂不可用", comment: ""))
         case .accountUnavailable:
-            toast = .init(kind: .error, text: "iCloud 不可用：请在系统设置登录 iCloud 后重试")
+            toast = .init(kind: .error, text: NSLocalizedString("iCloud 不可用：请在系统设置登录 iCloud 后重试", comment: ""))
         case .syncFailed:
-            toast = .init(kind: .error, text: "iCloud 同步开启失败")
+            toast = .init(kind: .error, text: NSLocalizedString("iCloud 同步开启失败", comment: ""))
         }
     }
 
     private func syncStatusText(_ status: SyncStatus) -> String {
         switch status {
-        case .idle: return "空闲"
-        case .inProgress(let dir): return "同步中（\(dir == .push ? "↑推送" : dir == .pull ? "↓拉取" : "↑↓双向")）"
-        case .succeeded: return "已同步"
-        case .failed(let e): return "失败：\(syncErrorBrief(e))"
+        case .idle: return NSLocalizedString("空闲", comment: "")
+        case .inProgress(let dir):
+            let arrow = dir == .push ? NSLocalizedString("↑推送", comment: "")
+                       : dir == .pull ? NSLocalizedString("↓拉取", comment: "")
+                                      : NSLocalizedString("↑↓双向", comment: "")
+            return String(format: NSLocalizedString("同步中（%@）", comment: ""), arrow)
+        case .succeeded: return NSLocalizedString("已同步", comment: "")
+        case .failed(let e):
+            return String(format: NSLocalizedString("失败：%@", comment: ""), syncErrorBrief(e))
         }
     }
 
@@ -721,15 +744,15 @@ struct SettingsView: View {
 
     private func syncErrorBrief(_ e: SyncError) -> String {
         switch e {
-        case .notAvailable: return "iCloud 不可用"
-        case .networkUnavailable: return "无网络"
-        case .permissionDenied: return "权限被拒"
-        case .quotaExceeded: return "容量超限"
-        case .conflict: return "冲突"
-        case .recordNotFound: return "记录不存在"
-        case .invalidPayload: return "数据损坏"
-        case .rateLimited: return "请求过频"
-        case .unknown: return "未知错误"
+        case .notAvailable: return NSLocalizedString("iCloud 不可用", comment: "")
+        case .networkUnavailable: return NSLocalizedString("无网络", comment: "")
+        case .permissionDenied: return NSLocalizedString("权限被拒", comment: "")
+        case .quotaExceeded: return NSLocalizedString("容量超限", comment: "")
+        case .conflict: return NSLocalizedString("冲突", comment: "")
+        case .recordNotFound: return NSLocalizedString("记录不存在", comment: "")
+        case .invalidPayload: return NSLocalizedString("数据损坏", comment: "")
+        case .rateLimited: return NSLocalizedString("请求过频", comment: "")
+        case .unknown: return NSLocalizedString("未知错误", comment: "")
         }
     }
 
@@ -742,7 +765,9 @@ struct SettingsView: View {
         let f = DateFormatter()
         f.dateFormat = "MM-dd HH:mm"
         let time = f.string(from: r.finishedAt)
-        let status = r.isSuccess ? "成功" : "部分失败"
+        let status = r.isSuccess
+            ? NSLocalizedString("成功", comment: "")
+            : NSLocalizedString("部分失败", comment: "")
         return "\(time) · \(status)"
     }
 

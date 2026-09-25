@@ -19,17 +19,17 @@ enum ImportedFileType {
 extension ImportConflictPolicy {
     public var title: String {
         switch self {
-        case .keepLatest: return "保留最新（推荐）"
-        case .keepLocal:  return "保留本地"
-        case .overwrite:  return "覆盖本地"
+        case .keepLatest: return NSLocalizedString("保留最新（推荐）", comment: "")
+        case .keepLocal:  return NSLocalizedString("保留本地", comment: "")
+        case .overwrite:  return NSLocalizedString("覆盖本地", comment: "")
         }
     }
 
     public var subtitle: String {
         switch self {
-        case .keepLatest: return "按 updatedAt 谁更新就用谁"
-        case .keepLocal:  return "同 id 的外部数据一律跳过"
-        case .overwrite:  return "同 id 一律用导入版本覆盖"
+        case .keepLatest: return NSLocalizedString("按 updatedAt 谁更新就用谁", comment: "")
+        case .keepLocal:  return NSLocalizedString("同 id 的外部数据一律跳过", comment: "")
+        case .overwrite:  return NSLocalizedString("同 id 一律用导入版本覆盖", comment: "")
         }
     }
 }
