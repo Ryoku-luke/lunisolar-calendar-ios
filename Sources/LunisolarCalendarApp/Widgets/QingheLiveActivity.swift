@@ -274,15 +274,26 @@ public enum QingheLiveActivityManager {
         case .end:
             // ⚠️ 不能只下岛：决策为 .end 有两种来源——target 为 nil（确实没有候选了），
             // 或 current/target 是**不同事件**（切换候选）。后者的契约由
-            // QingheLiveActivityLifecycle 写明「调用方先 end 再 start」，
+            // QingheLiveActivityLifecycle 写明「调用方负责撤掉旧活动」，
             // 此前只 end 就返回，新候选被静默丢弃 → 岛上留空白直到下一次 refresh()
             // （用户把当前上岛的提醒标记完成 / 改期后，看不到下一个该上岛的日程）。
-            endCurrent()
             guard let target else {
+                endCurrent()
                 return .failure(NSError(domain: "QingheLiveActivity", code: 1,
                                         userInfo: [NSLocalizedDescriptionKey: "ended"]))
             }
-            return start(display: target)
+            // 切换候选走「先上新、后撤旧」，与 CountdownActivityManager.start 的既定顺序一致。
+            // 反过来做（先撤旧再上新）时旧的 end 是异步的，新活动 request 会落进「旧活动仍然存活」
+            // 的窗口里：轻则两颗活动短暂并存，重则 request 被系统拒绝 → 用户看到「切换后不上岛」。
+            // 旧 id 必须先留一手：start 成功后会把记录覆盖成新 id，之后就没法再定位旧活动了。
+            let previousID = UserDefaults.standard.string(forKey: idsKey)
+            let result = start(display: target)
+            // 只有新活动确实起来了才撤旧的。request 失败则旧活动原样保留（记录也没被改写），
+            // 避免出现「旧的撤了、新的没上」的空岛。
+            if case .success(let newID) = result, let previousID, previousID != newID {
+                end(id: previousID)
+            }
+            return result
         case .start:
             return start(display: target!)
         case .update:
@@ -331,9 +342,17 @@ public enum QingheLiveActivityManager {
     }
 
     /// 结束当前时间胶囊活动（立即撤离灵动岛）。
+    /// 会同时清掉记录——只有「确实不要任何时间胶囊了」才用它。
+    /// 切换候选请用 `end(id:)`：那边必须先把新活动立起来再撤旧的。
     public static func endCurrent() {
         guard let id = UserDefaults.standard.string(forKey: idsKey) else { return }
         UserDefaults.standard.removeObject(forKey: idsKey)
+        end(id: id)
+    }
+
+    /// 结束指定 id 的活动（不动 UserDefaults 记录）。
+    /// 与 `start` 搭配时用于「先上新、后撤旧」：新活动已经接管记录，这里只负责撤旧实例。
+    private static func end(id: String) {
         guard let activity = Activity<QingheLiveActivityAttributes>.activities
             .first(where: { $0.id == id }) else { return }
         Task {

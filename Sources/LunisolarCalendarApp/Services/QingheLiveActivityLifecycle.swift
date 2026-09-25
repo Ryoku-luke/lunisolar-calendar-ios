@@ -39,7 +39,9 @@ public enum QingheActivitySyncAction: Equatable, Sendable {
     case start
     /// 同事件内容变化 → 更新
     case update
-    /// 目标为空或切换事件 → 结束（切换时由调用方先 end 再 start）
+    /// 目标为空，或 current/target 是不同事件。
+    /// 后者（切换候选）由调用方负责撤掉旧活动，且顺序必须是**先上新、后撤旧**：
+    /// 旧的 end 是异步的，先撤会让新活动 request 落进旧活动仍存活的窗口。
     case end
     /// 内容一致 → 什么都不做（幂等）
     case none
