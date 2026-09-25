@@ -25,6 +25,14 @@ struct AllEventsView: View {
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
     @State private var confirmBulkDelete = false
+    /// 是否已被滚动唤起：进入多选时操作条先隐藏，滚动或勾选任一行后淡入
+    /// （避免一进页面就多出一条悬浮条压住列表）
+    @State private var revealedByScroll = false
+
+    /// 操作条可见性：多选中，且（已滚动过 或 已有选中项）——保证不会有"选完了却点不到删除"的死角
+    private var showsSelectionBar: Bool {
+        isSelecting && (revealedByScroll || !selection.isEmpty)
+    }
 
     enum TypeFilter: String, CaseIterable, Identifiable {
         case all, schedule, reminder, note
@@ -117,21 +125,43 @@ struct AllEventsView: View {
         .navigationTitle(NSLocalizedString("全部日程", comment: ""))
         .inlineTitleBar()
         .toolbar {
-            ToolbarItem(placement: .platformTopBarTrailing) {
+            ToolbarItemGroup(placement: .platformTopBarTrailing) {
+                if isSelecting {
+                    // 工具栏保留全选出口：操作条在"未滚动且未选中"时是隐藏的，
+                    // 若全选只放在操作条里会出现"点不到"的死角
+                    Button(isAllSelected
+                           ? NSLocalizedString("取消全选", comment: "")
+                           : NSLocalizedString("全选", comment: "")) {
+                        withAnimation(AppTheme.Motion.pressInOut) { toggleSelectAll() }
+                    }
+                    .disabled(visibleEvents.isEmpty)
+                }
                 Button(isSelecting
                        ? NSLocalizedString("完成", comment: "")
                        : NSLocalizedString("选择", comment: "")) {
                     withAnimation(AppTheme.Motion.screen) {
                         isSelecting.toggle()
                         if !isSelecting { selection.removeAll() }
+                        revealedByScroll = false   // 下次进入多选仍从"隐藏 → 滚动/勾选淡入"开始
                     }
                 }
                 .disabled(filteredEvents.isEmpty)
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if isSelecting { selectionBar }
+            if showsSelectionBar {
+                selectionBar
+                    // 淡入 + 自下而上滑入：替代原来的"直接出现"
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }
+        .animation(AppTheme.Motion.screen, value: showsSelectionBar)
+        // 滚动即唤起操作条（simultaneousGesture：不影响点击、左滑删除与原生滚动）
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 8).onChanged { _ in
+                if isSelecting, !revealedByScroll { revealedByScroll = true }
+            }
+        )
         .overlay {
             if filteredEvents.isEmpty {
                 ContentUnavailableView(
@@ -208,7 +238,25 @@ struct AllEventsView: View {
     /// 不再用"全宽材质条 + 分隔线"（在列表里显得突兀）。
     /// 两个动作都做了"选中为空时降级为次要色"的处理，避免禁用态看起来像坏掉。
     private var selectionBar: some View {
-        HStack(spacing: AppTheme.Spacing.lg) {
+        HStack(spacing: AppTheme.Spacing.md) {
+            Button {
+                withAnimation(AppTheme.Motion.pressInOut) { toggleSelectAll() }
+            } label: {
+                Label(isAllSelected
+                      ? NSLocalizedString("取消全选", comment: "")
+                      : NSLocalizedString("全选", comment: ""),
+                      systemImage: isAllSelected ? "checklist.checked" : "checklist")
+                    .font(AppTheme.Font.subheadline.weight(.semibold))
+                    .foregroundStyle(visibleEvents.isEmpty ? Color.tertiaryLabel : Color.label)
+            }
+            .buttonStyle(.plain)
+            .pressableFeedback()
+            .disabled(visibleEvents.isEmpty)
+
+            Rectangle()
+                .fill(Color.separator)
+                .frame(width: AppTheme.Stroke.hair, height: 18)
+
             Button {
                 bulkSetCompleted()
             } label: {
@@ -288,6 +336,24 @@ struct AllEventsView: View {
     }
 
     // MARK: - 多选操作
+
+    /// 当前可见行（已过去折叠时不计入）：全选只作用于此集合，
+    /// 与"筛选变化即退出多选"一致——不让操作触及看不见的行
+    private var visibleEvents: [CalendarEvent] {
+        filteredEvents.filter { !isPast($0) } + (showPast ? pastEvents : [])
+    }
+
+    private var isAllSelected: Bool {
+        !visibleEvents.isEmpty && visibleEvents.allSatisfy { selection.contains($0.id) }
+    }
+
+    private func toggleSelectAll() {
+        if isAllSelected {
+            selection.removeAll()
+        } else {
+            selection = Set(visibleEvents.map(\.id))
+        }
+    }
 
     private func toggleSelection(_ event: CalendarEvent) {
         if selection.contains(event.id) {
