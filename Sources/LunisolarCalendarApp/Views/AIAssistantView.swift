@@ -299,21 +299,34 @@ struct AIAssistantView: View {
                         Button(NSLocalizedString("关闭", comment: "")) { dismiss() }
                     }
                 }
+                // 键盘弹起时，导航栏给一个**一眼可见**的收起入口。
+                // 键盘工具栏上的「完成」在真机上不够显眼（用户反馈「键盘无法关闭」），
+                // 导航栏按钮在键盘弹出时始终可见，是确定的兜底。
+                if inputFocused {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(NSLocalizedString("完成", comment: "AI助手")) { inputFocused = false }
+                            .font(.body.weight(.semibold))
+                            .accessibilityIdentifier(AccessibilityID.aiDone)
+                    }
+                }
             }
             #if canImport(UIKit)
             .scrollDismissesKeyboard(.interactively)
-            // ⚠️ 这里曾经挂过一个「整页点空白处收键盘」的手势，两种写法各自修出一个 bug，已移除：
-            //   · simultaneousGesture(TapGesture())：与子视图手势并行触发，点输入框**本身**也会把
-            //     inputFocused 置 false → updateUIView 立刻 resignFirstResponder()，把刚点起来的
-            //     键盘收掉。它与「UITextView 取得第一响应者」的先后是竞态，所以症状时好时坏
-            //     （真机反馈的「点了输入框没反应」；UI 测试里表现为 typeText 报
-            //      Neither element nor any descendant has keyboard focus）。
-            //   · onTapGesture：不吞子视图手势的写法，但它会**吞掉 List 行内按钮的点击** →
-            //     「解析并预览」点了没有任何反应（UI 测试实测：既不出现预览也不弹错误）。
-            // 结论：键盘收起改走系统标准途径——滚动收起（上一行）+ 键盘工具栏「完成」+ 回车提交。
+            // ⚠️ 这里刻意**没有**「整页点空白处收键盘」的手势。试过三种写法，都不行：
+            //   1. simultaneousGesture(TapGesture())：与子视图手势并行，点输入框**本身**也会把
+            //      inputFocused 置 false → updateUIView 立刻 resignFirstResponder()，把刚点起来的
+            //      键盘收掉。它与「UITextView 取得第一响应者」的先后是竞态，症状时好时坏
+            //      （实测报 Neither element nor any descendant has keyboard focus）。
+            //   2. onTapGesture：不抢子视图手势，但会**吞掉 List 行内按钮的点击** →
+            //      「解析并预览」点了既不出现预览也不弹错误（实测）。
+            //   3. SpatialTapGesture + 排除输入框区域：靠 PreferenceKey 回报输入框 frame，
+            //      但该 frame 始终是 .zero（background 里的 preference 不向上传播），
+            //      于是任何点击都被判成「框外」→ 焦点还是被收掉（实测两条 AI 用例同时失败）。
+            // 结论：键盘收起只走**明确入口**——导航栏「完成」+ 键盘工具栏「完成」+ 滚动收起 + 回车提交。
+            // 这四个都不与输入框/按钮的手势竞争，是可靠的做法。
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
-                    // 明确的收起键盘入口（复用既有本地化键「完成」，四语言均已翻译）
+                    // 键盘上再给一个收起入口（复用既有本地化键「完成」，四语言均已翻译）
                     Button(NSLocalizedString("完成", comment: "AI助手")) { inputFocused = false }
                     Spacer()
                     // 键盘上的「解析」：省去"先收键盘再点列表里的按钮"这一往返

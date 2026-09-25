@@ -31,6 +31,7 @@ private enum ID {
     static let aiInput = "ai.input.draft"
     static let aiParse = "ai.input.parse"
     static let aiConfirm = "ai.preview.confirm"
+    static let aiDone = "ai.input.done"
     static let settingsSyncToggle = "settings.sync.toggle"
     static let settingsSyncStatus = "settings.sync.status"
     static let iPadSidebarCalendar = "ipad.sidebar.calendar"
@@ -182,6 +183,39 @@ final class LunisolarCalendarUITests: XCTestCase {
                 \(app.debugDescription)
                 """)
         }
+    }
+
+    // MARK: - Flow 3b：AI 助手的键盘必须关得掉（用户反馈「键盘无法关闭」）
+
+    /// 回归用户反馈「键盘无法关闭」，同时锁住修复过程中修坏过的竞态。
+    ///
+    /// 焦点态的可观测代理：**导航栏的「完成」按钮只在输入框聚焦时出现**。
+    /// 为什么不用 `app.keyboards`：模拟器（xcodebuild 驱动）不显示软件键盘，
+    /// `app.keyboards` 恒为空，用它断言会永远失效或永远跳过。用「完成」按钮才可以真正断言。
+    func testFlow3b_aiKeyboardCanBeDismissedByDoneButton() throws {
+        let app = launchApp()
+
+        app.tabBars.buttons["AI 助手"].tap()
+
+        let input = element(app, ID.aiInput)
+        XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
+        input.tap()
+
+        let done = element(app, ID.aiDone)
+        // 点输入框**本身**之后焦点必须还在。
+        // 历史 bug：整页「点空白收键盘」手势会把刚点起来的键盘立刻收掉（症状时好时坏）。
+        XCTAssertTrue(done.waitForExistence(timeout: 5),
+                      "点输入框后应保持焦点，导航栏出现「完成」按钮")
+
+        // 明确的收起入口：点导航栏「完成」→ 失去焦点（真机上即键盘收起）
+        done.tap()
+        XCTAssertFalse(done.waitForExistence(timeout: 3),
+                       "点「完成」后应收起键盘（导航栏「完成」随之消失）")
+
+        // 反向：再点输入框应能重新聚焦（收起之后不能变成「再也点不开」）
+        input.tap()
+        XCTAssertTrue(done.waitForExistence(timeout: 5),
+                      "收起后应能重新点开输入框")
     }
 
     // MARK: - Flow 4：iPad 三栏与侧栏导航（iPhone 上跳过）

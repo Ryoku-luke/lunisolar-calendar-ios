@@ -22,6 +22,8 @@ public enum AccessibilityID {
     public static let aiParse = "ai.input.parse"
     public static let aiConfirm = "ai.preview.confirm"
     public static let aiCancel = "ai.preview.cancel"
+    /// 输入框聚焦时导航栏出现的「完成」按钮（收起键盘；也是焦点态的可观测代理）
+    public static let aiDone = "ai.input.done"
     // 设置页
     public static let settingsWeekStart = "settings.week.start"
     public static let settingsSyncToggle = "settings.sync.toggle"
@@ -49,7 +51,7 @@ public enum AccessibilityID {
         monthNewEvent, todayJump, selectedSummary,
         dayDetailNewEvent,
         editSave, editDelete, editTitle,
-        aiInput, aiParse, aiConfirm, aiCancel,
+        aiInput, aiParse, aiConfirm, aiCancel, aiDone,
         settingsWeekStart, settingsSyncToggle, settingsSyncStatus,
         iPadSidebarCalendar, iPadSidebarYear, iPadSidebarAgenda,
         iPadSidebarCountdown, iPadSidebarSettings

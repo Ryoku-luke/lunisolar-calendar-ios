@@ -195,13 +195,14 @@ target `LunisolarCalendarUITests` 已在 Xcode 工程里，测试文件是
 | Flow 1 | 打开 → 点日期 → 选中态唯一且当日摘要卡出现 |
 | Flow 2 | 新建日程 → 保存 → 回日历能看到该事件 |
 | Flow 3 | AI 助手：输入 → 解析 → 必须给出预览或明确错误（不能毫无反应） |
+| Flow 3b | AI 助手：点输入框保持焦点；点导航栏「完成」收起；收起后能重新点开 |
 | Flow 4 | iPad：侧栏切节 → 中栏跟随 → 日期格可点（iPhone 上跳过） |
 | Flow 5 | 设置页 iCloud 区块给出明确状态 |
 
 跑法（两种都行）：
 
 ```bash
-# iPhone：4 通过 + 1 跳过（Flow 4 是 iPad 专用）
+# iPhone：5 通过 + 1 跳过（Flow 4 是 iPad 专用）
 xcodebuild test -project LunisolarCalendar.xcodeproj -scheme LunisolarCalendar \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
   -only-testing:LunisolarCalendarUITests
@@ -230,6 +231,14 @@ xcodebuild test -project LunisolarCalendar.xcodeproj -scheme LunisolarCalendar \
 - iPad **竖屏**下侧栏是浮层且默认收起，展开后会盖住中栏（日期格 `isHittable == false`），
   所以 Flow 4 固定在横屏跑；竖屏那套交互仍走人工复测
   （`docs/DEVICE_TEST_CHECKLIST.md` 第 11 节）。
+- **不要在 AI 助手页加「整页点空白收键盘」的手势**。试过三种写法全部有副作用
+  （simultaneousGesture 抢输入框焦点 / onTapGesture 吞按钮点击 / SpatialTapGesture 的
+  frame 拿不到），详情见 `AIAssistantView.swift` 里的注释。键盘收起只走**明确入口**：
+  导航栏「完成」（聚焦时出现）、键盘工具栏「完成」、滚动收起、回车提交。
+  Flow 3b 就是锁这组行为的。
+- 模拟器（xcodebuild 驱动）**不显示软件键盘**，`app.keyboards` 恒为空，
+  不要用它做焦点断言（会永远失效或永远跳过）。改用「导航栏『完成』按钮是否出现」作为
+  焦点态的可观测代理——见 Flow 3b。
 
 工程里没有单元测试 target 是**正常**的：310 条单测走 SwiftPM，用 `swift test` 跑。
 
