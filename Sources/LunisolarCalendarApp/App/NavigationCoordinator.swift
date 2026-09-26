@@ -32,6 +32,10 @@ public final class NavigationCoordinator {
     /// （中栏的「倒数日」节高亮对应条目）。消费后置 nil。
     public var pendingOpenCountdownID: UUID?
 
+    /// iPad 上下文 Inspector（§33/§36 裁决 2026-09-26）：倒数日节下右栏跟随的选中条目。
+    /// 与 pendingOpenCountdownID 分工：那个只投递一次，这个是常驻选中状态。
+    public var iPadCountdownSelection: UUID?
+
     private init() {}
 
     /// 切到日历入口（三个桌面小组件的 widgetURL `qinghe://calendar` 专用）

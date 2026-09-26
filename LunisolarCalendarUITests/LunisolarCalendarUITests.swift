@@ -36,6 +36,7 @@ private enum ID {
     static let settingsSyncStatus = "settings.sync.status"
     static let iPadSidebarCalendar = "ipad.sidebar.calendar"
     static let iPadSidebarCountdown = "ipad.sidebar.countdown"
+    static let iPadInspectorCountdown = "ipad.inspector.countdown"
     static let monthMenu = "calendar.month.menu"
     static let stateEmpty = "state.empty"
     static let stateError = "state.error"
@@ -337,6 +338,13 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["倒数日"].waitForExistence(timeout: 5),
                       "切到倒数日后，中栏应显示倒数日页")
 
+        // §33/§36 裁决（2026-09-26）：右栏是上下文 Inspector——
+        // 倒数日节下右栏应切换为倒数日详情列（未选中时为空态提示），
+        // 不再是全节常驻的日详情
+        let inspector = element(app, ID.iPadInspectorCountdown)
+        XCTAssertTrue(inspector.waitForExistence(timeout: 5),
+                      "倒数日节下右栏应显示倒数日 Inspector（标识 \(ID.iPadInspectorCountdown)）")
+
         // 切回「日历」→ 月历网格应可再次操作（日期格带稳定标识）
         let calendarRow = element(app, ID.iPadSidebarCalendar)
         XCTAssertTrue(calendarRow.waitForExistence(timeout: 5), "iPad 侧栏应有「日历」行")
@@ -363,8 +371,9 @@ final class LunisolarCalendarUITests: XCTestCase {
                       \(app.debugDescription)
                       """)
 
-        // 说明：右栏（Inspector）该显示什么目前尚未裁决（见 docs/PROGRESS_ANALYSIS_2026-09-25.md §4-A），
-        // 因此这里刻意不断言右栏内容，避免把未定方案固化进测试。
+        // 右栏语义已于 2026-09-26 裁决为上下文 Inspector（§33/§36），
+        // 倒数日节的右栏断言见上方 iPadInspectorCountdown；日历节的右栏
+        // 随选中日期联动，已在选中日期格处隐式覆盖。
     }
 
     // MARK: - Flow 5：设置页 iCloud 同步区块必须给出明确状态

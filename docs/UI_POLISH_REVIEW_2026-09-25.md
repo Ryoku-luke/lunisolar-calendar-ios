@@ -20,7 +20,7 @@
 | 条目 | 状态 | 证据（本次实测） |
 |---|---|---|
 | P0-1 `CalendarMonthView` 过大，必须拆 | **未做** | 现 **725 行**（报告基线 877 行——瘦了 152 行，来自此前抽走 `SelectedDayCardView` 等，但仍是最大 View 之一；报告要求的 7 个子块一个都还没独立成文件） |
-| P0-2 iPad Detail 需 context-aware | **未做，且方向相反** | `LunisolarCalendarApp.swift:181-183` 明确让右栏**在所有节下常驻** `DayDetailView`（当初为消除留白）。与报告 §33/§36 冲突，也与我上一轮列出的裁决项 A 是同一件事 |
+| P0-2 iPad Detail 需 context-aware | **已完成（2026-09-26，随裁决落地）** | 用户裁决采用 UI 报告 §33/§36 的**上下文 Inspector**：日历/年视图节右栏 = 选中日的 `DayDetailView`（原有行为）；倒数日节右栏 = 新增 `CountdownDetailView`（列表行点击变为选中，右栏跟随，编辑器改从右栏 sheet 唤起）；全部日程/设置节右栏整体隐藏（`NavigationSplitView(columnVisibility:)`，等同 Apple 设置）。Flow 4 已加 `ipad.inspector.countdown` 断言锁定 |
 | P0-3 主日历移除 AI Banner | **已完成** | 全仓 grep `aiAssistantBanner` / `QinghePhoneAIChip` 均为 0 处 |
 | P0-4 Card primitive 收敛到 2~3 个 | **基本完成** | `AppTheme.swift` 里 `modernCard` 0 处、`liquidCard` 0 处、`pageBackground` 0 处；剩 `glassCard` 1 处、`softChipBackground` 2 处 |
 | P0-5 `SettingsView` Feature 化 | **未做** | 现 **790 行**（报告基线 759 行——**反而胖了 31 行**）。报告要求的 8 个子页一个都没拆 |
@@ -103,7 +103,7 @@
 | ①打开→今天→点日期→看农历/黄历/天气 | ✅ Flow 1 | 断言选中态唯一 + 选中日摘要卡出现 |
 | ②点日期→新建日程→保存→回日历出现 | ✅ Flow 2 | 端到端 |
 | ③AI 输入→解析→确认→创建→通知 | 部分 ✅ Flow 3/3b | 已覆盖解析与确认交互；**通知能否真的响**没覆盖 |
-| ④iPad→日历→点日期→Detail 更新→Inspector | 部分 ✅ Flow 4 | 覆盖侧栏切节与日期格可点；**右栏语义未定，刻意不断言** |
+| ④iPad→日历→点日期→Detail 更新→Inspector | 部分 ✅ Flow 4 | 覆盖侧栏切节与日期格可点；右栏语义 2026-09-26 已裁决（上下文 Inspector），倒数日节的右栏断言已加（`ipad.inspector.countdown`）；日历节点日期→右栏联动的显式断言仍缺（受 UI 测试数据隔离项制约） |
 | ⑤设置→iCloud→开启→同步→成功状态 | ✅ Flow 5 | 只断言「状态明确」，真同步需真机 + iCloud 账号 |
 | ⑥全部日程：搜索可用 + 空态是统一组件且可行动 | ✅ Flow 6 | 用「搜索必然无结果的词」造空态（与容器数据无关，任何环境都成立），断言搜索框可见 + `state.empty` + 「清除筛选」按钮生效。**它同时是「搜不了」的回归保护** |
 | ⑦AI 助手键盘：点里面保持 / 点外面收起 / 「完成」收起 | ✅ Flow 3b | 五条断言 |
@@ -150,7 +150,7 @@ Flow 6 原本就吃过这个亏：它早期用「筛选到没有数据的类型�
 | 序 | 事项 | 为什么排这里 | 谁做 |
 |---|---|---|---|
 | ~~0~~ | ~~**修「全部日程搜不了」**~~ **已完成（2026-09-25）** | 成因是 `.searchable` 的默认 placement 在 iOS 26 不渲染；显式 `.navigationBarDrawer(displayMode: .always)` 修复，Flow 6 已把它变成回归保护 | 已完成 |
-| 1 | **裁决 iPad 右栏语义**（= 我上一轮的裁决项 A） | 卡住 P0-2、§33–§38、P1「iPad Inspector」四条 | 你 |
+| ~~1~~ | ~~**裁决 iPad 右栏语义**~~ **已裁决并落地（2026-09-26）**：上下文 Inspector | 用户裁决采用 UI 报告 §33/§36 方向：右栏随侧栏节切换——日历/年视图=选中日的日详情；倒数日=选中条目详情列（新增 `CountdownDetailView`）；全部日程/设置=隐藏右栏。P0-2、§33–§38、P1「iPad Inspector」随之闭环，Flow 4 新增右栏断言。竖屏维持中栏+右栏两列（未按总方案 §18 改 sheet，理由见 PROGRESS_ANALYSIS §4-A） | 已完成 |
 | 2 | ~~**统一三态组件 + 骨架屏**（§37/§41/§50）~~ **已完成（2026-09-25）** | 组件已建立并接进 4 处界面，Flow 6 已自动化验证空态 + 行动按钮 | 已完成 |
 | ~~3~~ | ~~**拆 `CalendarMonthView` 的 6 个 sheet**（§74 禁止项）~~ **已完成（2026-09-26）** | 实际剩 5 个（第 6 个是已删的死代码）。收口而非重做：sheet 本体抽到新文件 `CalendarMonthSheets.swift`，5 个状态收敛为 3 个 `.sheet(item:)`（日期跳转 + 枚举 `MonthAuxiliaryPage` 倒数日/设置 + 枚举 `MonthEventEditSheet` 新建/编辑），iPad 用 sheet 而非 push 的理由随注释保留。iPhone 7 条 UI 测试全过；iPad 4 过 0 失败（另修正 3 条 iPhone 专属用例在 iPad 上缺 skip 的测试缺口——基线上即失败，非本次回归） | 已完成 |
 | 4 | ~~**Reduce Motion 降级**（§44）~~ **已完成（2026-09-25）** | 已在根视图集中关闭动画（22 处动画调用散在 6 个文件，逐处判断易漏）；骨架屏单独 gate | 已完成 |

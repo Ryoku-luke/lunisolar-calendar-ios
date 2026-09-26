@@ -39,6 +39,8 @@ public enum AccessibilityID {
     public static let iPadSidebarAgenda = "ipad.sidebar.agenda"
     public static let iPadSidebarCountdown = "ipad.sidebar.countdown"
     public static let iPadSidebarSettings = "ipad.sidebar.settings"
+    /// iPad 上下文 Inspector：倒数日节的右栏详情列（§33/§36 裁决后 Flow 4 的断言锚点）
+    public static let iPadInspectorCountdown = "ipad.inspector.countdown"
 
     /// 月历网格中的某一天（**动态**标识：同一天在网格里只有一格）。
     ///
@@ -62,6 +64,6 @@ public enum AccessibilityID {
         stateEmpty, stateError, stateToast,
         settingsWeekStart, settingsSyncToggle, settingsSyncStatus,
         iPadSidebarCalendar, iPadSidebarYear, iPadSidebarAgenda,
-        iPadSidebarCountdown, iPadSidebarSettings
+        iPadSidebarCountdown, iPadSidebarSettings, iPadInspectorCountdown
     ]
 }

@@ -494,3 +494,7 @@
 
 /* 无障碍 · 月历工具栏入口菜单 */
 "功能菜单" = "Menu";
+
+/* iPad Inspector · 倒数日详情空态 */
+"未选择倒数日" = "No Countdown Selected";
+"在左侧列表中选择一个倒数日，这里会显示它的详情" = "Select a countdown in the list on the left to see its details here.";

@@ -138,9 +138,10 @@ struct PhoneTabRootView: View {
     }
 }
 //
-// sidebar：主导航（日历 / 倒数日 / 设置）
-// content：随 sidebar 切换（月历 / 倒数日 / 设置）
-// detail：右侧常驻当日信息列（日期/农历/宜忌/节气/生肖等，DayDetailView）
+// sidebar：主导航（日历 / 年视图 / 全部日程 / 倒数日 / 设置）
+// content：随 sidebar 切换（月历 / 年视图 / 全部日程 / 倒数日 / 设置）
+// detail：上下文 Inspector（§33/§36 裁决 2026-09-26）——日历/年视图节显示选中日详情，
+//         倒数日节显示选中条目详情，全部日程/设置节隐藏右栏
 struct iPadRootView: View {
     @State private var nav = NavigationCoordinator.shared
     @Environment(EventStore.self) private var store
@@ -148,10 +149,12 @@ struct iPadRootView: View {
     /// 实际高亮目标由本 State 持有——否则 nav 被清空后 focusID 立刻变回 nil，高亮一闪即灭。
     /// （与 iPhone 侧 CalendarMonthView.countdownFocusID 同构）
     @State private var countdownFocusID: UUID?
+    /// 右栏显隐（全部日程 / 设置节隐藏 Inspector，见下方 onChange 同步）
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         @Bindable var nav = nav
-        return NavigationSplitView {
+        return NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: $nav.iPadSection) {
                 ForEach([NavigationCoordinator.iPadSection.calendar, .year, .agenda, .countdown, .settings], id: \.self) { s in
                     switch s {
@@ -197,18 +200,36 @@ struct iPadRootView: View {
             case .agenda:
                 NavigationStack { AllEventsView().environment(store) }
             case .countdown:
-                NavigationStack { CountdownView(focusID: countdownFocusID) }
+                NavigationStack {
+                    CountdownView(focusID: countdownFocusID,
+                                  selectedID: nav.iPadCountdownSelection,
+                                  onSelect: { nav.iPadCountdownSelection = $0 })
+                }
             case .settings:
                 NavigationStack { SettingsView().environment(store) }
             }
         } detail: {
-            // docs #18：右侧常驻「当日信息列」（日期/农历/宜忌/节气/天气/当日安排）。
-            // 原先在倒数日/设置节显示空白占位，导致 iPad 横屏下右栏大面积留白；
-            // 当日信息与所在节无关，故在所有节下都常驻展示。
-            DayDetailView(date: nav.selectedDate, embedsInNavigationStack: false)
-                .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 460)
+            // §33/§36 上下文 Inspector（2026-09-26 裁决）：
+            // 右栏跟随侧栏节的上下文，而非全节常驻日详情。
+            // - 日历 / 年视图：选中日的详情（DayDetailView，与 nav.selectedDate 联动）
+            // - 倒数日：选中条目的详情列（CountdownDetailView）
+            // - 全部日程 / 设置：无合适上下文，右栏整体隐藏（见下方 columnVisibility）
+            switch nav.iPadSection ?? .calendar {
+            case .calendar, .year:
+                DayDetailView(date: nav.selectedDate, embedsInNavigationStack: false)
+                    .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 460)
+            case .countdown:
+                CountdownDetailView(selection: $nav.iPadCountdownSelection)
+                    .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 460)
+            case .agenda, .settings:
+                EmptyView()
+            }
         }
         .navigationSplitViewStyle(.balanced)
+        // 全部日程 / 设置节下隐藏右栏（等同 Apple 设置：无上下文可跟随时不出第三栏）
+        .onChange(of: nav.iPadSection, initial: true) { _, section in
+            columnVisibility = (section == .agenda || section == .settings) ? .doubleColumn : .all
+        }
         // P1：倒数日 / 纪念日卡片点击（qinghe://countdown/<UUID>）→ 高亮该条。
         // 用 initial: true 消费：冷启动直接点卡片进 App 时也生效（与 CalendarMonthView 一致）。
         // iPad 上 CalendarMonthView 不会消费本字段——openCountdownDetail 必然同时把侧栏切到
@@ -216,12 +237,17 @@ struct iPadRootView: View {
         .onChange(of: nav.pendingOpenCountdownID, initial: true) { _, id in
             guard let id else { return }
             countdownFocusID = id
+            // Inspector 选中同步：深链进来右栏直接定位到该条目详情
+            nav.iPadCountdownSelection = id
             nav.pendingOpenCountdownID = nil
         }
-        // 离开「倒数日」节即清高亮，对齐 iPhone 侧 sheet 关闭后的 onDismiss 重置，
-        // 避免下次从侧栏进入仍残留高亮
+        // 离开「倒数日」节即清高亮与 Inspector 选中，对齐 iPhone 侧 sheet 关闭后的
+        // onDismiss 重置，避免下次从侧栏进入仍残留高亮
         .onChange(of: nav.iPadSection) { _, section in
-            if section != .countdown { countdownFocusID = nil }
+            if section != .countdown {
+                countdownFocusID = nil
+                nav.iPadCountdownSelection = nil
+            }
         }
     }
 }

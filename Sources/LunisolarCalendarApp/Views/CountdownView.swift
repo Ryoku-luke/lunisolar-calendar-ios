@@ -9,6 +9,9 @@ import UIKit
 struct CountdownView: View {
     /// 深链 / Live Activity 卡片点击进来时高亮的条目（可选）
     var focusID: UUID? = nil
+    /// iPad Inspector 选中态：传入后行点击变为「选中」（右栏跟随详情），不再直接弹编辑器
+    var selectedID: UUID? = nil
+    var onSelect: ((UUID) -> Void)? = nil
 
     @Environment(CountdownStore.self) private var store
     @State private var showingEditor = false
@@ -33,10 +36,15 @@ struct CountdownView: View {
             } else {
                 ForEach(store.events) { event in
                     CountdownRow(event: event, today: today)
-                        // 卡片点击深链直达：高亮对应条目，帮助用户一眼定位
-                        .listRowBackground(focusID == event.id ? Color.appTint.opacity(0.12) : nil)
+                        // 卡片点击深链直达 / iPad Inspector 选中：高亮对应条目，帮助用户一眼定位
+                        .listRowBackground((focusID == event.id || selectedID == event.id)
+                                           ? Color.appTint.opacity(0.12) : nil)
                         .contentShape(Rectangle())
-                        .onTapGesture { editingEvent = event }
+                        .onTapGesture {
+                            // iPad：点击 = 选中（右栏 Inspector 跟随显示详情）；
+                            // iPhone：点击 = 直接编辑（保持既有行为）
+                            if let onSelect { onSelect(event.id) } else { editingEvent = event }
+                        }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
                                 // P0 收口：倒数日删除走 EventService（内部转 CountdownStore.delete，含下岛清理）
@@ -198,7 +206,7 @@ private struct CountdownRow: View {
 
 // MARK: - 编辑器
 
-private struct CountdownEditor: View {
+struct CountdownEditor: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var title = ""
