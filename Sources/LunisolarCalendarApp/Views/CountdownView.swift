@@ -55,6 +55,7 @@ struct CountdownView: View {
                         .font(.title3)
                 }
                 .touchTarget()
+                .accessibilityLabel(NSLocalizedString("新建倒数日", comment: ""))
             }
         }
         .sheet(isPresented: $showingEditor) {

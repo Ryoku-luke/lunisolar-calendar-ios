@@ -150,6 +150,8 @@ struct CalendarMonthView: View {
                         .symbolRenderingMode(.hierarchical)
                         .touchTarget(min: AppTheme.Touch.minTarget)
                 }
+                // VoiceOver：图标按钮补读名（accessibilityIdentifier 只是测试锚点，不会被朗读）
+                .accessibilityLabel(NSLocalizedString("功能菜单", comment: "月历工具栏入口菜单"))
                 .pressableFeedback()
                 // 稳定标识：菜单标题来自 SF Symbol，随界面语言变化，UI 测试不能按文案找
                 .accessibilityIdentifier(AccessibilityID.monthMenu)
@@ -323,6 +325,8 @@ struct CalendarMonthView: View {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Color.tertiaryLabel)
                         .padding(.bottom, 6)
+                        // 装饰箭头：月/年 Text 已是完整朗读内容，箭头加入只会读出符号名
+                        .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
             }
@@ -352,6 +356,8 @@ struct CalendarMonthView: View {
                 Image(systemName: "leaf")
                     .font(.caption)
                     .foregroundStyle(Color.secondaryLabel)
+                    // 装饰图标：旁边的「下一个节气」文字已是完整语义
+                    .accessibilityHidden(true)
                 Text("下一个节气")
                     .font(.caption)
                     .foregroundStyle(Color.tertiaryLabel)

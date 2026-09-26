@@ -260,6 +260,8 @@ struct EventEditView: View {
             Image(systemName: "chevron.up.chevron.down")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
+                // 装饰箭头：前值文字已是完整朗读内容
+                .accessibilityHidden(true)
         }
     }
 

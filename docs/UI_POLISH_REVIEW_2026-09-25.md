@@ -88,7 +88,7 @@
 |---|---|
 | Dynamic Type | ✅ 已做且做对（见 §4） |
 | 44pt 触点 | 部分：`touchTarget` **6 处** |
-| VoiceOver 标签 | **13 处** `accessibilityLabel`，对 21 个 View 文件来说偏薄；日期格已合并朗读（好） |
+| VoiceOver 标签 | **已补（2026-09-26）**：图标独占按钮全仓扫描后只剩 2 处缺读名（月历「功能菜单」入口、倒数日「新建」），已补 `accessibilityLabel`（「功能菜单」key 入 4 语言 .strings）；4 处纯装饰图标（月标题箭头、节气 leaf、编辑页菜单箭头、空态 sparkles）加 `accessibilityHidden` 消除符号名噪声；灵动岛上岛按钮、多选行、AI 清空等复核已有读名 |
 | Reduce Motion | **已处理（2026-09-25）**：`AppRootView` 用 `@Environment(\.accessibilityReduceMotion)` + `.transaction { disablesAnimations = true }` 在**整棵子树**集中关闭动画；骨架屏另在 `QingheSkeletonBlock` 内单独 gate（呼吸动画）。集中做而不是逐个动画点判断的理由：全仓 22 处动画调用散在 6 个文件，逐处判断易漏且会不一致。代价是开启后「月翻页」也变瞬间切换——这是 reduce motion 的常规解释。**未在真机/模拟器上开启该设置实测过**，需人工确认一次 |
 | Reduce Transparency / 高对比度 | **已处理（2026-09-26）**：`AdaptiveMaterialFill` 在 Reduce Transparency 开启时把材质换成不透明填充；`glassCard`/`softChipBackground` 在 Increase Contrast 下描边上浮（0.20→0.45 / 0.18→0.40）。散点（次操作按钮、两处胶囊、AI 入口卡、`.bar` 删除行）已接入。**未真机开启设置实测**，需人工确认 |
 | 高对比度 / 深色模式 | 深色模式已适配；高对比度未处理 |
@@ -157,7 +157,7 @@ Flow 6 原本就吃过这个亏：它早期用「筛选到没有数据的类型�
 | ~~4b~~ | ~~**对齐 `AppTheme.Radius` 与圆角纪律**（§5.1 问题 2）~~ **已完成（2026-09-26）** | Token xl 22→20、xxl 28→24；顺带把两处硬编码违规收编（AboutSectionView 图标 22→`Radius.xl`、YearOverviewView 月卡 14→`Radius.md`），全仓圆角现全部落在 8/12/16/20/24/999；视觉变更需肉眼过一遍 | 已完成 |
 | ~~4c~~ | ~~**Reduce Transparency / 高对比度**（§44）~~ **已完成（2026-09-26）** | 与 Reduce Motion 同一思路集中做：新增 `AdaptiveMaterialFill`（Reduce Transparency 时材质→不透明填充），`glassCard`/`softChipBackground` 改由它取色并新增 Increase Contrast 描边上浮（0.20→0.45 / 0.18→0.40）；次操作按钮、两处 ultraThin 胶囊、AI 入口卡、删除行 `.bar` 共 5 处散点同步接入；未真机开启「降低透明度/增强对比度」实测，需人工确认一次 | 已完成 |
 | ~~5~~ | ~~**拆 `SettingsView`（790 行）/ `CalendarMonthView`（725 行）为 Feature 子页**~~ **已完成（2026-09-26）** | 纯搬迁零行为变更（排序多重集比对验证只有脚手架/访问级别差异）：SettingsView 790→279 行，拆出 `SettingsAppearanceSections`/`SettingsDataSections`/`SettingsSyncSections`；CalendarMonthView 695→462 行，拆出 `CalendarMonthGridModel`/`CalendarMonthGridBuilder`/`CalendarMonthSwipeGesture`（外加此前的 `CalendarMonthSheets`）。被拆成员及跨文件读写的 @State 放宽为 internal。单测 310 过、双平台构建过、iPhone/iPad UI 测试全绿 | 已完成 |
-| 6 | 补 VoiceOver 标签（现 13 处）与高对比度 | 上架前建议做；`docs/DEVICE_TEST_CHECKLIST.md` 已有检查项 | 我 |
+| ~~6~~ | ~~**补 VoiceOver 标签（现 13 处）与高对比度**~~ **已完成（2026-09-26）** | VoiceOver：图标按钮读名补齐（2 处新增 + 4 处装饰图标降噪），高对比度在 4c 已做。`docs/DEVICE_TEST_CHECKLIST.md` 已有真机检查项 | 已完成 |
 | 7 | 用 §54 的 9×7 矩阵逐格走一遍，把「没实现」和「没测」分开记账 | 需要先有 2 的组件，否则走不通 | 我（部分需真机） |
 | 8 | P2 视觉精修（字体/阴影/材质/动画） | 报告自己规定不得早于 P0/P1 | 待定 |
 

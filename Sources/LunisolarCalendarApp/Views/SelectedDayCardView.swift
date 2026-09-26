@@ -116,6 +116,8 @@ struct SelectedDayCardView: View {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 22, weight: .semibold))
                                 .foregroundStyle(accent)
+                                // 装饰图标：旁边的空态文字已是完整语义
+                                .accessibilityHidden(true)
                         }
                         VStack(alignment: .leading, spacing: 2) {
                             Text(String(localized: "这一天很空闲")).font(AppTheme.Font.bodyBold).foregroundStyle(Color.label)
