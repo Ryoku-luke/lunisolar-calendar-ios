@@ -5,58 +5,6 @@ import LunarCore
 import UIKit
 #endif
 
-fileprivate struct DaySlot: Identifiable, Hashable {
-    let date: Date
-    let inCurrentMonth: Bool
-    /// 以日期作为稳定标识：横滑手势期间 dragOffsetX 每帧触发 body 重算，
-    /// 若用 UUID() 会导致 42 个格子每帧被 ForEach 判定为全新元素而重建掉帧。
-    /// 月历网格内日期天然唯一，可直接作 id。
-    var id: Date { date }
-}
-
-/// 月历单格的全部派生显示数据（农历/黄历/节日色/法定假日/事件统计）。
-/// 这些数据只依赖「日期 + EventStore.revision」，与拖拽偏移/选中态无关，
-/// 按月份整体预计算一次后跨帧复用。
-fileprivate struct GridCellModel: Identifiable {
-    let date: Date
-    let inCurrentMonth: Bool
-    let lunar: LunarDate
-    let huangli: HuangliDay
-    let festivalTint: Color?
-    /// 节假日名（如"中秋节"）：节日当天格内只显示节日名，不显示农历
-    let festivalName: String?
-    /// 节气名（如"秋分"）：节气日格内只显示节气名，不显示农历
-    let solarTermName: String?
-    /// 节气主题色（绿色系），用于格内"·秋分"小字
-    let solarTermTint: Color?
-    let holidayType: HolidayType
-    let eventCount: Int
-    /// 当日全部事件优先级（按事件顺序），格子事件点逐个着色
-    let eventPriorities: [Priority]
-    var id: Date { date }
-}
-
-/// 网格缓存键的**唯一定义**（读、写两侧共用，避免两处字符串拼接各自漂移）。
-///
-/// ⚠️ `weekStart` 必须进键：42 格的前导空格数依赖它，而表头 `WeekHeaderView` 读的是实时值。
-/// 漏掉它时改「每周起始日」只会让表头旋转、网格顺序仍是旧的 → 日期与星期对不上，
-/// 要滑一次月份才自愈。
-fileprivate func monthGridCacheKey(month: Date, revision: Int, weekStart: Int) -> String {
-    "\(month.timeIntervalSince1970)-\(revision)-\(weekStart)"
-}
-
-fileprivate struct MonthGridModel {
-    let monthKey: Date
-    let revision: Int
-    /// 每周起始日（1=周日，2=周一）：网格前导空格数由它决定，故必须参与缓存键
-    let weekStart: Int
-    let cells: [GridCellModel]
-    /// 缓存键（用于多月份网格缓存字典）
-    var cacheKey: String {
-        monthGridCacheKey(month: monthKey, revision: revision, weekStart: weekStart)
-    }
-}
-
 struct CalendarMonthView: View {
     @State var currentMonth: Date = Date().firstDayOfMonth
     /// 本地选中日期（唯一真相，@State 保证点击后必然重绘）。
@@ -66,27 +14,27 @@ struct CalendarMonthView: View {
     @State private var isPanelExpanded: Bool = false
     @State var showDateJump = false
     /// 月份卡片滑动的进入方向：.trailing=下月从右侧滑入，.leading=上月从左侧滑入
-    @State private var monthSlideEdge: Edge = .trailing
+    @State var monthSlideEdge: Edge = .trailing
     #if canImport(UIKit)
     /// 跟手滑动偏移：手指移动多少卡片就移动多少（1:1），松手后回弹或翻页
-    @State private var dragOffsetX: CGFloat = 0
-    @State private var isDragging: Bool = false
+    @State var dragOffsetX: CGFloat = 0
+    @State var isDragging: Bool = false
     /// 拖动中预览的相邻月份（左滑=下月、右滑=上月），缓存预填充后零卡顿
-    @State private var previewMonth: Date? = nil
+    @State var previewMonth: Date? = nil
     /// 日历容器宽度（翻页/回弹阈值判定用），由 background GeometryReader 注入
-    @State private var monthWidth: CGFloat = 0
+    @State var monthWidth: CGFloat = 0
     /// 最小拖动距离：小于该距离视为点按（日期选中仍可用）
-    private let swipeThreshold: CGFloat = 8
+    let swipeThreshold: CGFloat = 8
     #endif
     /// 月网格派生数据缓存：仅当月份或事件版本变化时重建。
     /// 横滑期间 dragOffsetX 每帧令 body 重算，但命中此缓存后 42 格的
     /// 农历转换/黄历生成/节日遍历/事件统计全部 O(1) 复用，不再每帧重算。
     /// 月网格派生数据缓存（多月份字典）：key = "月份-版本"。
     /// 滑动切换月份时相邻月份已预填充 → 动画期间零同步重算，消除卡顿。
-    @State private var gridCache: [String: MonthGridModel] = [:]
+    @State var gridCache: [String: MonthGridModel] = [:]
     /// 每周起始日（Calendar weekday 语义：1=周日，2=周一；设置页可改）
-    @AppStorage("Lunisolar.weekStart") private var weekStart: Int = 1
-    @Environment(EventStore.self) private var store
+    @AppStorage("Lunisolar.weekStart") var weekStart: Int = 1
+    @Environment(EventStore.self) var store
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
     /// 是否由本视图自行包一层 NavigationStack。
@@ -274,12 +222,6 @@ struct CalendarMonthView: View {
     }
 
     /// 预构建某月网格模型写入缓存（滑动切换零卡顿的关键）
-    private func prefetchGrid(for month: Date) {
-        let model = buildGridModel(for: month)
-        gridCache[model.cacheKey] = model
-    }
-
-    /// 月历纵向列：月份标题 + 节气条 + 网格（iPhone 下方还有当日卡片）。
     private func monthColumn(accent: Color) -> some View {
         VStack(spacing: 0) {
             monthHeader()
@@ -439,153 +381,6 @@ struct CalendarMonthView: View {
             .accessibilityLabel(name == "chevron.left" ? String(localized: "上个月") : String(localized: "下个月"))
     }
 
-    /// 卡片式月份切换：设置滑动进入方向后用 withAnimation 变更 currentMonth，
-    /// 触发 ZStack 中日历网格的 .id + .transition 滑动转场（旧网格滑出、新网格滑入）。
-    /// 同时把选中日期联动到新月份（同日存在则保持，否则取月末），
-    /// 避免"切月后日期卡仍显示上月内容"的逻辑不通。
-    private func changeMonth(by offset: Int) {
-        monthSlideEdge = offset > 0 ? .trailing : .leading
-        withAnimation(AppTheme.Motion.screen) {
-            currentMonth = currentMonth.addingMonths(offset)
-            selectedDate = Self.clampedToMonth(selectedDate, in: currentMonth)
-        }
-    }
-
-    /// 将日期钳制到目标月份：同日存在则保持原日，否则取目标月最后一天（如 1/31 → 2/28）。
-    private static func clampedToMonth(_ date: Date, in month: Date) -> Date {
-        let cal = Calendar(identifier: .gregorian)
-        var comps = cal.dateComponents([.year, .month, .day], from: date)
-        let target = cal.dateComponents([.year, .month], from: month)
-        comps.year = target.year
-        comps.month = target.month
-        if let day = comps.day,
-           let dayCount = cal.range(of: .day, in: .month, for: month)?.count,
-           day > dayCount {
-            comps.day = dayCount
-        }
-        return cal.date(from: comps) ?? date
-    }
-
-    #if canImport(UIKit)
-    /// 完全跟手滑动：拖动中卡片 1:1 跟随手指；松手后按位移/甩动速度判定翻页或回弹。
-    private func swipeMonthGesture(width: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: swipeThreshold, coordinateSpace: .local)
-            .onChanged { value in
-                let dx = value.translation.width
-                if !isDragging {
-                    let dy = value.translation.height
-                    // 首次水平判定：水平占主导才进入跟手态；
-                    // 纵向滚动（页面滚动）与轻微点按（日期选中）一律放行
-                    guard abs(dx) > 1.5 * abs(dy) else { return }
-                }
-                isDragging = true
-                dragOffsetX = dx
-                // 左滑预渲染下月（右侧）、右滑预渲染上月（左侧）；缓存预填充后零卡顿
-                previewMonth = dx < 0 ? currentMonth.addingMonths(1) : currentMonth.addingMonths(-1)
-            }
-            .onEnded { value in
-                isDragging = false
-                let dx = value.translation.width
-                let predicted = value.predictedEndTranslation.width
-                // 容器宽度兜底：background GeometryReader 未注入前（首帧）用保守值，防止误翻页
-                let w = width > 0 ? width : 360
-                // 翻页判定：位移超过容器宽度 22% 或甩动速度足够（P2：阈值从 0.28 降到 0.22，更跟手）
-                if abs(dx) > w * 0.22 || abs(predicted - dx) > w * 0.45 {
-                    let target = dx < 0 ? currentMonth.addingMonths(1) : currentMonth.addingMonths(-1)
-                    monthSlideEdge = dx < 0 ? .trailing : .leading
-                    // P2：翻页到位轻触感反馈（UISelectionFeedbackGenerator）
-                    #if canImport(UIKit)
-                    UISelectionFeedbackGenerator().selectionChanged()
-                    #endif
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.82, blendDuration: 0.08)) {
-                        currentMonth = target
-                        selectedDate = Self.clampedToMonth(selectedDate, in: target)
-                        dragOffsetX = 0
-                    }
-                } else {
-                    // 未过阈值：回弹原位（preview 网格在屏幕外，直接清空）
-                    previewMonth = nil
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.82, blendDuration: 0.08)) {
-                        dragOffsetX = 0
-                    }
-                }
-            }
-    }
-    #endif
-
-    /// 返回当前月的网格派生数据；月份/事件版本未变时直接复用缓存。
-    /// SwiftUI 未定义行为警告修复：body 求值期间**不再回写 @State gridCache**
-    /// （Xcode 报 "Modifying state during view update, this will cause undefined behavior"，
-    ///  调用栈直指本方法）。未命中时直接构建返回（纯计算无副作用），
-    /// 缓存由 `.task(id: gridCacheKey)` 在 body 外异步填充。
-    private func gridModel(for month: Date) -> MonthGridModel {
-        // body 求值期间只读缓存，不写 @State（避免 SwiftUI 未定义行为警告）；
-        // 缓存写入统一由 .task(id:) 与 onChange 预填充负责
-        if let cached = gridCache[cacheKey(month: month)] { return cached }
-        return buildGridModel(for: month)
-    }
-
-    /// 纯计算构建网格模型（无副作用，可在 body 与 .task 中安全调用）。
-    private func buildGridModel(for month: Date) -> MonthGridModel {
-        let slots = daysForMonth(month)
-        var cells: [GridCellModel] = []
-        cells.reserveCapacity(slots.count)
-        for slot in slots {
-            let d = slot.date
-            // 农历转换 → 节日查询（复用预计算 lunar）→ 颜色解析，每月只做一次
-            let lunar = d.lunar
-            let festivals = FestivalManager.festivals(on: d, lunar: lunar)
-            // 节气与节日可同日并存（如清明既是节气也是祭祖日）：
-            // 节气 → 格内绿色"节气名"文字标注，不染色背景；
-            // 节日 → 格内节日名文字 + 节日色（不再浅染背景，除选中外无"选择框"）
-            let solarTermFest = festivals.first { $0.kind == .solarTerm }
-            let otherFest = festivals.first { $0.kind != .solarTerm }
-            let festivalTint = otherFest.map { Color(hex: $0.accentHex) }
-            let festivalName = otherFest?.localizedName
-            let solarTermName = solarTermFest?.localizedName
-            let solarTermTint = solarTermFest.map { Color(hex: $0.accentHex) }
-            let stats = store.eventStats(on: d)
-            cells.append(GridCellModel(
-                date: d,
-                inCurrentMonth: slot.inCurrentMonth,
-                lunar: lunar,
-                huangli: HuangliGenerator.generate(for: d),
-                festivalTint: festivalTint,
-                festivalName: festivalName,
-                solarTermName: solarTermName,
-                solarTermTint: solarTermTint,
-                holidayType: HolidayProvider.info(for: d).type,
-                eventCount: stats.count,
-                eventPriorities: stats.priorities
-            ))
-        }
-        return MonthGridModel(monthKey: month, revision: store.revision,
-                              weekStart: weekStart, cells: cells)
-    }
-
-    /// 缓存键：月份 + 事件版本 + 每周起始日（与 `MonthGridModel.cacheKey` 同源定义）
-    private func cacheKey(month: Date) -> String {
-        monthGridCacheKey(month: month, revision: store.revision, weekStart: weekStart)
-    }
-
-    /// 缓存失效键：月份、事件版本或每周起始日变化时重建（用于 .task(id:) 触发）。
-    private var gridCacheKey: String {
-        monthGridCacheKey(month: currentMonth, revision: store.revision, weekStart: weekStart)
-    }
-
-    /// 选中某一天：若它属于相邻月份，连同月份一起切过去并给出滑动方向。
-    ///
-    /// 否则「选中日」与「显示月」不一致（首页标题的月份与选中日期对不上），
-    /// 而且下次翻月时 `clampedToMonth` 会把选中日静默改写成另一个月的同一天。
-    private func selectDay(_ date: Date) {
-        let month = date.firstDayOfMonth
-        if month != currentMonth {
-            monthSlideEdge = month > currentMonth ? .trailing : .leading
-            withAnimation(AppTheme.Motion.screen) { currentMonth = month }
-        }
-        withAnimation(AppTheme.Motion.pressInOut) { selectedDate = date }
-    }
-
     /// 单个月份卡片（表头 + 42 格网格）。
     /// 必须按传入月份取网格：跟手滑动时同一份日历要同时渲染当前月与相邻月。
     private func calendarShell(for month: Date, accent: Color) -> some View {
@@ -655,34 +450,6 @@ struct CalendarMonthView: View {
         }
         .contentShape(Rectangle())
         // 月份横滑手势统一在 monthColumn 以 simultaneousGesture 挂载（避免拦截日期点按与纵向滚动）
-    }
-
-    /// 复制选中日期的中文长格式到剪贴板（上下文菜单动作）
-    private func copyDateText(_ date: Date) {
-        #if canImport(UIKit)
-        UIPasteboard.general.string = date.formatted(
-            Date.FormatStyle(date: .long, time: .omitted, locale: Locale(identifier: "zh_Hans_CN")))
-        #endif
-    }
-
-    private func daysForMonth(_ month: Date) -> [DaySlot] {
-        let first = month.firstDayOfMonth
-        // 按每周起始日计算前置空位：weekStart=1(周日) → (wd-1)；weekStart=2(周一) → (wd+5)%7
-        let leading = (first.weekday - weekStart + 7) % 7
-        let totalDays = month.daysInMonth
-        var result: [DaySlot] = []
-        for i in 0..<leading {
-            result.append(DaySlot(date: first.addingDays(-(leading - i)), inCurrentMonth: false))
-        }
-        for i in 0..<totalDays {
-            result.append(DaySlot(date: first.addingDays(i), inCurrentMonth: true))
-        }
-        var i = 0
-        while result.count < 42 {
-            result.append(DaySlot(date: first.addingDays(totalDays + i), inCurrentMonth: false))
-            i += 1
-        }
-        return result
     }
 
 }

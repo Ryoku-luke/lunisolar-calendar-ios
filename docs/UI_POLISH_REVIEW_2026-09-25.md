@@ -156,7 +156,7 @@ Flow 6 原本就吃过这个亏：它早期用「筛选到没有数据的类型�
 | 4 | ~~**Reduce Motion 降级**（§44）~~ **已完成（2026-09-25）** | 已在根视图集中关闭动画（22 处动画调用散在 6 个文件，逐处判断易漏）；骨架屏单独 gate | 已完成 |
 | ~~4b~~ | ~~**对齐 `AppTheme.Radius` 与圆角纪律**（§5.1 问题 2）~~ **已完成（2026-09-26）** | Token xl 22→20、xxl 28→24；顺带把两处硬编码违规收编（AboutSectionView 图标 22→`Radius.xl`、YearOverviewView 月卡 14→`Radius.md`），全仓圆角现全部落在 8/12/16/20/24/999；视觉变更需肉眼过一遍 | 已完成 |
 | ~~4c~~ | ~~**Reduce Transparency / 高对比度**（§44）~~ **已完成（2026-09-26）** | 与 Reduce Motion 同一思路集中做：新增 `AdaptiveMaterialFill`（Reduce Transparency 时材质→不透明填充），`glassCard`/`softChipBackground` 改由它取色并新增 Increase Contrast 描边上浮（0.20→0.45 / 0.18→0.40）；次操作按钮、两处 ultraThin 胶囊、AI 入口卡、删除行 `.bar` 共 5 处散点同步接入；未真机开启「降低透明度/增强对比度」实测，需人工确认一次 | 已完成 |
-| 5 | 拆 `SettingsView`（790 行）/ `CalendarMonthView`（725 行）为 Feature 子页 | churn 大、收益偏维护性；应在 2 之后做 | 我 |
+| ~~5~~ | ~~**拆 `SettingsView`（790 行）/ `CalendarMonthView`（725 行）为 Feature 子页**~~ **已完成（2026-09-26）** | 纯搬迁零行为变更（排序多重集比对验证只有脚手架/访问级别差异）：SettingsView 790→279 行，拆出 `SettingsAppearanceSections`/`SettingsDataSections`/`SettingsSyncSections`；CalendarMonthView 695→462 行，拆出 `CalendarMonthGridModel`/`CalendarMonthGridBuilder`/`CalendarMonthSwipeGesture`（外加此前的 `CalendarMonthSheets`）。被拆成员及跨文件读写的 @State 放宽为 internal。单测 310 过、双平台构建过、iPhone/iPad UI 测试全绿 | 已完成 |
 | 6 | 补 VoiceOver 标签（现 13 处）与高对比度 | 上架前建议做；`docs/DEVICE_TEST_CHECKLIST.md` 已有检查项 | 我 |
 | 7 | 用 §54 的 9×7 矩阵逐格走一遍，把「没实现」和「没测」分开记账 | 需要先有 2 的组件，否则走不通 | 我（部分需真机） |
 | 8 | P2 视觉精修（字体/阴影/材质/动画） | 报告自己规定不得早于 P0/P1 | 待定 |
