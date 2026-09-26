@@ -132,8 +132,9 @@ public final class CountdownStore {
     /// 测试 / 预览用：把数据落到指定目录，避免污染真实 Documents。
     /// 与 EventStore 的 `storageBaseDir` 初始化同款 —— 有它才能验证
     /// `EventService(store:countdownStore:)` 的倒数日写入确实落在注入实例上。
+    /// public：宿主 App 的 UI 测试启动参数（-uitest-empty-store）也要用它构造隔离库。
     @MainActor
-    init(storageBaseDir: URL) {
+    public init(storageBaseDir: URL) {
         fileURL = storageBaseDir.appendingPathComponent("countdowns.json")
         try? FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),

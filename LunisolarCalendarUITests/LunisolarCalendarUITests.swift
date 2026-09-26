@@ -61,6 +61,8 @@ final class LunisolarCalendarUITests: XCTestCase {
         let app = XCUIApplication()
         // 固定语言/地区：否则英文模拟器下界面走 en.lproj，文案断言全部失配
         app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_Hans_CN"]
+        // §7.1 数据隔离：空库启动，「空态 / 首次使用 / 无数据」类断言与真实容器无关
+        app.launchArguments += ["-uitest-empty-store"]
         app.launch()
         return app
     }
@@ -396,5 +398,44 @@ final class LunisolarCalendarUITests: XCTestCase {
         if toggle.exists {
             XCTAssertTrue(toggle.isEnabled, "有 iCloud 账号时同步开关应可用")
         }
+    }
+
+    // MARK: - Flow 7：空态四要素 + 行动按钮真的可用（依赖 §7.1 数据隔离的干净空库）
+
+    /// 此前「空态」断言只能靠搜索造（Flow 6），因为 UI 测试跑在真实容器上、
+    /// 有没有数据不受控。`-uitest-empty-store` 落地后，倒数日 Tab 天然就是空库——
+    /// 这是第一条**不依赖任何构造手段**的空态用例，同时验证行动按钮（第四要素）点开编辑器。
+    func testFlow7_countdownEmptyStateIsActionable() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "仅在 iPhone 上运行（iPad 走侧栏入口，Flow 4 已覆盖该节）")
+        let app = launchApp()
+
+        // iPhone 没有「倒数日」Tab（底部四项是 日历/黄历/AI 助手/我的）——
+        // 与 Flow 6 同路：月历工具栏入口菜单 → 「倒数日」
+        let menu = element(app, ID.monthMenu)
+        XCTAssertTrue(menu.waitForExistence(timeout: 10), "日历页应有工具栏入口菜单")
+        menu.tap()
+        let countdownItem = app.buttons["倒数日"].firstMatch
+        XCTAssertTrue(countdownItem.waitForExistence(timeout: 5), "入口菜单里应有「倒数日」")
+        countdownItem.tap()
+
+        // 统一空态组件（标识 state.empty）：图标 + 标题 + 说明（前三要素由组件自身保证结构）
+        let empty = element(app, ID.stateEmpty)
+        XCTAssertTrue(empty.waitForExistence(timeout: 10),
+                      """
+                      干净空库下倒数日 Tab 应显示统一空态（标识 \(ID.stateEmpty)）。
+                      若出现却失败，多半是数据隔离参数没生效。
+                      当前界面树：
+                      \(app.debugDescription)
+                      """)
+
+        // 第四要素：行动按钮存在且真的能点开新建编辑器
+        let action = label(app, "新建倒数日")
+        XCTAssertTrue(action.waitForExistence(timeout: 5), "空态应带「新建倒数日」行动按钮")
+        action.tap()
+
+        let cancel = app.buttons["取消"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5),
+                      "点行动按钮应打开倒数日编辑器（出现「取消」）")
     }
 }

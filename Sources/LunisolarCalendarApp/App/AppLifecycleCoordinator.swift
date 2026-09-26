@@ -36,6 +36,10 @@ public final class AppLifecycleCoordinator {
     public func bootstrap(store: EventStore, countdownStore: CountdownStore) {
         self.store = store
         self.countdownStore = countdownStore
+        // 注入隔离库时（UI 测试 -uitest-empty-store）同步重指向 EventService 单例：
+        // 否则视图保存路径（EventEditView → EventService.shared）仍写 EventStore.shared，
+        // 而 UI 读的是注入库——表现为「保存成功但界面看不到」（Flow 2 实测踩到）
+        EventService.shared.bootstrap(store: store, countdownStore: countdownStore)
     }
 
     /// 全量重排本地提醒：同一「前台周期」内只做一次（冷启动的两条触发路径共用）

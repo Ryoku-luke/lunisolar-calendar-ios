@@ -17,7 +17,7 @@ public final class EventService {
     public static let shared = EventService()
 
     /// 数据层（只读数据源；写操作走本类业务方法）
-    public let store: EventStore
+    public private(set) var store: EventStore
 
     /// 默认注入 App 单例；测试传入隔离 store，避免写入真实 Documents
     /// （既有测试统一用 makeIsolatedEventStore() 的临时目录模式）
@@ -147,7 +147,15 @@ public final class EventService {
 
     /// 倒数日数据源（写操作走本类业务方法，保持 UI → Service → Store 单向依赖）。
     /// 与 `store` 一样对外只读暴露，便于测试断言"写入确实落在注入实例上"。
-    public let countdownStore: CountdownStore
+    public private(set) var countdownStore: CountdownStore
+
+    /// 注入隔离库时重指向（AppLifecycleCoordinator.bootstrap 调用；
+    /// 生产路径传入的仍是 .shared，行为不变；UI 测试 -uitest-empty-store 场景
+    /// 必须重指向，否则 EventEditView 的保存写进真实共享库，UI 读注入库「保存丢失」）
+    public func bootstrap(store: EventStore, countdownStore: CountdownStore) {
+        self.store = store
+        self.countdownStore = countdownStore
+    }
 
     /// 新增或更新倒数日（按 id 是否已存在决定 add/update）。
     /// flush=true：编辑页保存后立即 dismiss，很可能马上进后台；0.5s 防抖的

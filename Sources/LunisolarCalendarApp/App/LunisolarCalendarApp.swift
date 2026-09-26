@@ -33,7 +33,11 @@ public struct AppRootView: View {
         AppAppearance(rawValue: appearanceRaw) ?? .system
     }
 
-    public init() {
+    /// 可注入构造（§7.1 数据隔离）：默认仍是单例；UI 测试场景由宿主传临时目录的隔离库。
+    /// 纯增量改动——带默认值，现有调用点（HostApp 的无参调用）不受影响。
+    public init(store: EventStore = .shared, countdownStore: CountdownStore = .shared) {
+        _store = State(initialValue: store)
+        _countdownStore = State(initialValue: countdownStore)
         // 注册偏好默认值域：@AppStorage 的默认值不写盘，raw 读取点靠这里兜底
         // （否则"设置页显示开、逻辑判定关"，见 AppSettings）
         AppSettings.registerDefaults()

@@ -11,9 +11,24 @@ private let appGroupID = "group.com.lumingfeng.lunisolarcalendar"
 
 @main
 struct HostApp: App {
+    /// UI 测试数据隔离（审查文档 §7.1）：启动参数带 `-uitest-empty-store` 时，
+    /// store 落到每次启动都不同的临时目录 → 每个用例都跑在干净的空库上，
+    /// 「空态 / 首次使用 / 无数据」类断言不再受真实容器数据影响。
+    private let rootStore: EventStore
+    private let rootCountdownStore: CountdownStore
+
     init() {
         // 注入 App Group，让 EventStore 把 Widget 快照写到共享容器。
         EventStore.shared.widgetAppGroupID = appGroupID
+        if CommandLine.arguments.contains("-uitest-empty-store") {
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("uitest-store-\(UUID().uuidString)")
+            rootStore = EventStore(storageBaseDir: dir)
+            rootCountdownStore = CountdownStore(storageBaseDir: dir)
+        } else {
+            rootStore = .shared
+            rootCountdownStore = .shared
+        }
     }
 
     var body: some Scene {
@@ -23,7 +38,7 @@ struct HostApp: App {
             // 深链（qinghe://）交由框架内的 AppRootView 统一处理（onOpenURL → DeepLinkRouter）。
             // 宿主不再自己转存 UserDefaults：原先"只写键、等 onAppear / scenePhase 消费"的写法，
             // 在 App 已处于前台时没有任何消费点，表现为点灵动岛 / 小组件没反应。
-            AppRootView()
+            AppRootView(store: rootStore, countdownStore: rootCountdownStore)
         }
     }
 }
