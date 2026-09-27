@@ -85,15 +85,19 @@ struct SelectedDayCardView: View {
                 }
             }
 
+            // P2-3（2026-09-28 用户裁决）：选中卡只做「摘要 + 入口」——
+            // 宜/忌各留 3 条（一行），完整宜忌列表只归「黄历」Tab（DayDetailView，
+            // 含冲煞/五行/纳音/神位的「更多黄历」折叠区）；卡片保留「查看黄历详情」CTA 作入口。
             HStack(alignment: .top, spacing: AppTheme.Spacing.md) {
-                yiBlock(huangli.yi, maxShown: 6)
+                yiBlock(huangli.yi, maxShown: 3)
                 Divider().frame(maxHeight: .infinity)
-                jiBlock(huangli.ji, maxShown: 6)
+                jiBlock(huangli.ji, maxShown: 3)
             }
             // minHeight + 不裁剪，替代原来的 `frame(height: 78) + clipped()`：
-            // 超大辅助字号下 caption2 会被放大 2~3 倍，FlowLayout 换行后必然超过 78pt，
+            // 超大辅助字号下 caption2 会被放大 2~3 倍，FlowLayout 换行后必然超过固定高度，
             // 硬裁会把后面的标签整段切掉且无法滚动查看。宁可卡片变高，也不丢内容。
-            .frame(minHeight: 78, alignment: .top)
+            // P2-3 后摘要只有一行标签，基准高度随之收到 56（minHeight 仍会随字号放大）。
+            .frame(minHeight: 56, alignment: .top)
             .padding(.top, AppTheme.Spacing.sm)
             .padding(.horizontal, AppTheme.Spacing.sm)
             .padding(.bottom, AppTheme.Spacing.sm)
