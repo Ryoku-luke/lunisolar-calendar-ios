@@ -119,7 +119,7 @@ swift build        # 编译所有 Target
 swift test         # 运行全部单元测试
 ```
 
-> Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；本仓库**未配置 CI**（无 `.github/workflows`，推送不会触发构建）。本地自检：`swift build` / `swift test`（macOS 宿主，2026-09-24 起可用）+ `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS 视图层与宿主编译），详见 `docs/XCODE_BUILD_GUIDE.md` §4。行为级验证：UI 测试见下方「UI 测试」一节，真机复测见 [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md)。
+> Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；CI 已配置（`.github/workflows/ci.yml`，push/PR 到 main 自动跑编译 + 单测 + iOS SDK 构建三条通道；双端 UI 测试因 runner 稳定性留在本地 `Tools/run_tests.sh` 全量跑）。本地自检：`swift build` / `swift test`（macOS 宿主，2026-09-24 起可用）+ `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS 视图层与宿主编译），详见 `docs/XCODE_BUILD_GUIDE.md` §4。行为级验证：UI 测试见下方「UI 测试」一节，真机复测见 [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md)。
 
 ### 一键验证（推荐用它，别手拼命令）
 

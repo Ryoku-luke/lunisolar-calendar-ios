@@ -1,0 +1,28 @@
+name: CI
+
+# 触发：main 分支的推送与 PR。按总方案 §49 接 CI，替代 README 里「未配置 CI」的状态。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # 本项目验证 = 四通道串行（Tools/run_tests.sh 的纪律：两个 xcodebuild 并行会互相干扰）。
+      # CI 上跑前三条（编译 + 单测 + iOS SDK 构建）；UI 测试（双端模拟器）在 runner 上
+      # 慢且偶发不稳定，保留给本地 run_tests.sh 全量跑。
+      - name: swift build（macOS 宿主）
+        run: swift build
+
+      - name: 单元测试（swift test）
+        run: swift test
+
+      - name: iOS SDK 构建（视图层与宿主编译）
+        run: |
+          swift build \
+            --triple arm64-apple-ios17.0-simulator \
+            --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
