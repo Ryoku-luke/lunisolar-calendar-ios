@@ -162,6 +162,7 @@ swift test         # 运行全部单元测试
 | AIOccurrenceResolutionTests | 4 | 重复日程「命中那一次」的解析 |
 | LunarDataResourceTests | 3 | lunar_calendar.json 合法性与内置表一致 |
 | AccessibilityIDTests | 4 | 无障碍标识命名与唯一性、动态日期格标识格式锁定 |
+| AccentContrastTests | 9 | 节日强调色对比度：23 个节日色的 WCAG 全量校验（浅/深两模式）、压暗/提亮的单调性与分层接线 |
 | HuangliTests | 2 | 宜忌稳定性、冲煞验证 |
 | EventServiceIsolationTests | 2 | EventService 可注入，不倒向共享单例 |
 
@@ -252,7 +253,7 @@ xcodebuild test -project LunisolarCalendar.xcodeproj -scheme LunisolarCalendar \
   不要用它做焦点断言（会永远失效或永远跳过）。改用「导航栏『完成』按钮是否出现」作为
   焦点态的可观测代理——见 Flow 3b。
 
-工程里没有单元测试 target 是**正常**的：310 条单测走 SwiftPM，用 `swift test` 跑。
+工程里没有单元测试 target 是**正常**的：单测走 SwiftPM，用 `swift test` 跑（数量以实际输出为准，不写死）。
 
 ## 发布清单（Release Checklist）
 

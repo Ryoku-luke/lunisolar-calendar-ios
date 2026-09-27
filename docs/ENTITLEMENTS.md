@@ -93,9 +93,18 @@
 
 | Key | 用途 | 当前文案 |
 |---|---|---|
+| `NSLocationWhenInUseUsageDescription` | 天气需要当前位置 | "用于获取当前位置，在日历详情中显示当地天气。" |
 | `NSContactsUsageDescription` | 导入联系人生日 | "用于导入联系人生日，并按农历每年重复提醒。" |
 | `NSCalendarsFullAccessUsageDescription` | 从系统日历导入日程（iOS 17+） | "用于从系统日历导入日程安排，方便迁移历史事件。" |
 | `NSCalendarsUsageDescription` | 从系统日历导入日程（iOS 16 及以下） | "用于从系统日历导入日程安排，方便迁移历史事件。" |
+
+> ⚠️ **光配 `Info.plist` 不够：四个 `lproj/InfoPlist.strings` 也要有同样的键。**
+> `InfoPlist.strings` 的查表在首选语言里找不到键时，会回落到**开发语言（en）**的同一张表，
+> **不会**回落到 `Info.plist` 的基值。真实踩过的坑就是：`Info.plist` 里明明是中文，
+> 但 `zh-Hans.lproj/InfoPlist.strings` 只有 `CFBundleDisplayName` 一个键 ——
+> 于是**简体中文用户看到的是英文权限弹窗**（定位 / 联系人 / 日历全中），
+> 而系统弹窗恰恰是 App Review 一定会看到的界面。2026-09-27 已补齐。
+> **新增任何权限键时，请同时检查四个 `InfoPlist.strings`（zh-Hans / zh-Hant / ja / en）。**
 
 > 通知权限（`UNUserNotificationCenter`）**不需要**在 Info.plist 中声明，运行时调用 `requestAuthorization` 即可。
 
