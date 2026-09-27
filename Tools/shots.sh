@@ -23,7 +23,7 @@
 #   Tools/shots.sh [device] [outdir]                 # 深链巡游（默认机型 iPhone 17 Pro）
 #   Tools/shots.sh --tour [device] [outdir]          # XCUITest 巡游 + 导出附件
 #   Tools/shots.sh --appearance dark [device]        # 深色外观（light / dark，默认不动设备）
-#   Tools/shots.sh --lang en [device]                # 英文界面（en / zh，默认 zh）
+#   Tools/shots.sh --lang en [device]                # 界面语言（en / ja / zh-Hant / zh，默认 zh）
 #   Tools/shots.sh --tour --appearance dark "iPad Pro 11-inch (M5)" /tmp/shots-ipad
 #
 # 选项与两个位置参数可任意顺序混排；位置参数依次是**机型名**与**输出目录**。
@@ -124,8 +124,10 @@ case "${APPEARANCE}" in
 esac
 case "${LANG_CODE}" in
   zh|zh-Hans) LANGUAGE="(zh-Hans)"; LOCALE="zh_Hans_CN" ;;
+  zh-Hant)    LANGUAGE="(zh-Hant)"; LOCALE="zh_Hant_TW" ;;
   en)         LANGUAGE="(en)";      LOCALE="en_US" ;;
-  *) fatal "「--lang」只认 zh / en（收到「${LANG_CODE}」）" ;;
+  ja)         LANGUAGE="(ja)";      LOCALE="ja_JP" ;;
+  *) fatal "「--lang」只认 zh / zh-Hant / en / ja（收到「${LANG_CODE}」）" ;;
 esac
 
 # ───────────────────────── 步骤 1：解析机型 ─────────────────────────
@@ -340,7 +342,9 @@ tour_mode() {
 
   local log="/tmp/shots-tour.log"
   rm -rf "${RESULT_BUNDLE}"
-  if ! TEST_RUNNER_SHOTS=1 xcodebuild test -project "${PROJECT}" -scheme "${SCHEME}" \
+  # 环境变量带 TEST_RUNNER_ 前缀才会被 xcodebuild 转发给模拟器上的测试进程（且剥掉前缀）；
+  # SHOTS=1 是本用例的开关，SHOTS_LANG 供 launchApp 决定 -AppleLanguages（--lang 截图语言）
+  if ! TEST_RUNNER_SHOTS=1 TEST_RUNNER_SHOTS_LANG="${LANG_CODE}" xcodebuild test -project "${PROJECT}" -scheme "${SCHEME}" \
        -destination "id=${UDID}" -derivedDataPath "${DERIVED}" \
        -resultBundlePath "${RESULT_BUNDLE}" \
        -only-testing:"${TOUR_TEST}" >"${log}" 2>&1; then

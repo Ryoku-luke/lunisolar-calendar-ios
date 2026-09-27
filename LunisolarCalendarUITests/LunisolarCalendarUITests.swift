@@ -63,8 +63,15 @@ final class LunisolarCalendarUITests: XCTestCase {
     @discardableResult
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
-        // 固定语言/地区：否则英文模拟器下界面走 en.lproj，文案断言全部失配
-        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_Hans_CN"]
+        // 固定语言/地区：否则英文模拟器下界面走 en.lproj，文案断言全部失配。
+        // shots.sh --tour --lang 用 SHOTS_LANG 覆盖（截图巡游按指定语言出图）；
+        // 普通 Flow 用例不传该变量，固定 zh-Hans 保证断言稳定。
+        switch ProcessInfo.processInfo.environment["SHOTS_LANG"] ?? "zh-Hans" {
+        case "en":      app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        case "ja":      app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        case "zh-Hant": app.launchArguments += ["-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_Hant_TW"]
+        default:        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_Hans_CN"]
+        }
         // §7.1 数据隔离：空库启动，「空态 / 首次使用 / 无数据」类断言与真实容器无关
         app.launchArguments += ["-uitest-empty-store"]
         app.launch()
@@ -665,11 +672,45 @@ final class LunisolarCalendarUITests: XCTestCase {
         }
     }
 
+    /// 巡游文案查表：--lang 切语言后 Tab 名 / 菜单项 / 导航标题都本地化，
+    /// 硬编码中文会失配（截图批次实测踩到）。普通 Flow 用例固定 zh-Hans 不受影响。
+    private func tourLabel(_ zh: String) -> String {
+        let lang = ProcessInfo.processInfo.environment["SHOTS_LANG"] ?? "zh-Hans"
+        guard lang != "zh-Hans" else { return zh }
+        switch (lang, zh) {
+        case ("en", "日历"): return "Calendar"
+        case ("en", "黄历"): return "Almanac"
+        case ("en", "我的"): return "Me"
+        case ("en", "全部日程"): return "All Events"
+        case ("en", "倒数日"): return "Countdown"
+        case ("en", "AI 助手"): return "AI Assistant"
+        case ("en", "设置"): return "Settings"
+        case ("en", "AI 日历助手"): return "AI Calendar Assistant"
+        case ("ja", "日历"): return "カレンダー"
+        case ("ja", "黄历"): return "黄暦"
+        case ("ja", "我的"): return "マイページ"
+        case ("ja", "全部日程"): return "すべての予定"
+        case ("ja", "倒数日"): return "カウントダウン"
+        case ("ja", "AI 助手"): return "AI アシスタント"
+        case ("ja", "设置"): return "設定"
+        case ("ja", "AI 日历助手"): return "AI カレンダーアシスタント"
+        case ("zh-Hant", "日历"): return "日曆"
+        case ("zh-Hant", "黄历"): return "黃曆"
+        case ("zh-Hant", "我的"): return "我的"
+        case ("zh-Hant", "全部日程"): return "所有行程"
+        case ("zh-Hant", "倒数日"): return "倒數日"
+        case ("zh-Hant", "AI 助手"): return "AI 助理"
+        case ("zh-Hant", "设置"): return "設定"
+        case ("zh-Hant", "AI 日历助手"): return "AI 行事曆助理"
+        default: return zh
+        }
+    }
+
     /// 切 Tab。**刻意不等「已被选中」**：`isSelected` 只能靠 `expectation` 轮询，
     /// 实测一次要 2~3 秒（4 次切换就是十几秒）；而每站「到了没」由调用方等一个
     /// 该页独有的元素来保证，一次约 1 秒，加起来反而更快也更准。
     private func switchTab(_ app: XCUIApplication, _ title: String) {
-        app.tabBars.buttons[title].tap()
+        app.tabBars.buttons[tourLabel(title)].tap()
     }
 
     /// 经月历工具栏菜单进二级页并截图（iPhone 上进「全部日程 / 倒数日」的唯一路径，见 Flow 6/7/8）
@@ -687,10 +728,11 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertTrue(menuReady, "日历页应有工具栏入口菜单")
         menu.tap()
 
-        let entry = app.buttons[item].firstMatch
+        let entry = app.buttons[tourLabel(item)].firstMatch
         XCTAssertTrue(entry.waitForExistence(timeout: 5), "入口菜单里应有「\(item)」")
         entry.tap()
-        XCTAssertTrue(app.navigationBars[readyNav].waitForExistence(timeout: 10), "应进入「\(item)」页")
+        XCTAssertTrue(app.navigationBars[tourLabel(readyNav)].waitForExistence(timeout: 10),
+                      "应进入「\(item)」页")
         shot(name)
     }
 
@@ -775,7 +817,7 @@ final class LunisolarCalendarUITests: XCTestCase {
             XCTAssertTrue(row.waitForExistence(timeout: 5),
                           "iPad 侧栏应有「\(s.label)」行（标识 \(s.row)）")
             row.tap()
-            XCTAssertTrue(app.navigationBars[s.ready].waitForExistence(timeout: 10),
+            XCTAssertTrue(app.navigationBars[tourLabel(s.ready)].waitForExistence(timeout: 10),
                           "切到「\(s.label)」后中栏应显示导航栏标题「\(s.ready)」")
             shot(s.name)
         }
