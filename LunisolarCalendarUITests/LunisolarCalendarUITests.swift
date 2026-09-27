@@ -35,6 +35,8 @@ private enum ID {
     static let settingsSyncToggle = "settings.sync.toggle"
     static let settingsSyncStatus = "settings.sync.status"
     static let iPadSidebarCalendar = "ipad.sidebar.calendar"
+    static let iPadSidebarAI = "ipad.sidebar.ai"
+    static let iPadSidebarAgenda = "ipad.sidebar.agenda"
     static let iPadSidebarCountdown = "ipad.sidebar.countdown"
     static let iPadInspectorCountdown = "ipad.inspector.countdown"
     static let monthMenu = "calendar.month.menu"
@@ -470,5 +472,56 @@ final class LunisolarCalendarUITests: XCTestCase {
                        "「回到今天」不应在菜单里重复——工具栏「今天」按钮已是唯一入口")
         XCTAssertFalse(app.buttons["设置"].exists,
                        "「设置」不应在菜单里重复——底部「我的」Tab 已承担")
+    }
+
+    // MARK: - Flow 9：iPad 侧栏的两处结构变更（批次 3）
+
+    /// 两件事：
+    /// 1. 侧栏新增「AI 助手」节（P0-3，原先只能从设置页头部卡进、入口埋两层深），
+    ///    同时年视图节已移出（P0-1 裁决走方案 C）；
+    /// 2. **实测** `.doubleColumn` 在「无 Inspector 节」下的真实语义。
+    ///    `LunisolarCalendarApp.swift` 的注释一直声称它「隐藏右栏」，而按 Apple 的定义它是
+    ///    「显示内容列 + 详情列、隐藏侧栏」——两者不可能都对。这条断言把事实钉住：
+    ///    切到「全部日程」后**侧栏必须仍然可见可用**。若这里红，就是取值选错了。
+    func testFlow9_iPadSidebarStructureChange() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad,
+                          "仅在 iPad 上运行（iPhone 无侧栏）")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+
+        let app = launchApp()
+
+        // ① 侧栏应有「AI 助手」节（该尺寸下若仍收起，先展开——真实用户也是这一步）
+        let aiRow = element(app, ID.iPadSidebarAI)
+        if !aiRow.waitForExistence(timeout: 5) {
+            let showSidebar = app.buttons["显示边栏"].firstMatch
+            if showSidebar.waitForExistence(timeout: 5) { showSidebar.tap() }
+        }
+        XCTAssertTrue(aiRow.waitForExistence(timeout: 10),
+                      """
+                      iPad 侧栏应有「AI 助手」行（标识 \(ID.iPadSidebarAI)）。
+                      当前界面树：
+                      \(app.debugDescription)
+                      """)
+        XCTAssertFalse(app.staticTexts["年视图"].exists,
+                       "「年视图」已移出侧栏（方案 C），侧栏不应再有这一行")
+
+        // ② 切到「全部日程」→ 侧栏不应消失（见本用例头部说明）
+        element(app, ID.iPadSidebarAgenda).tap()
+        XCTAssertTrue(app.navigationBars["全部日程"].waitForExistence(timeout: 10),
+                      "切到「全部日程」后中栏应显示该页")
+        let calendarRow = element(app, ID.iPadSidebarCalendar)
+        XCTAssertTrue(calendarRow.waitForExistence(timeout: 5),
+                      """
+                      切到「全部日程」后侧栏**不应消失**。这里若红，说明 `.doubleColumn`
+                      在无 Inspector 节下把侧栏也收掉了（见 LunisolarCalendarApp.swift 的注释）。
+                      当前界面树：
+                      \(app.debugDescription)
+                      """)
+
+        // ③ 侧栏行仍可点：切回日历
+        calendarRow.tap()
+        XCTAssertTrue(app.navigationBars["日历"].waitForExistence(timeout: 10),
+                      "切回「日历」应生效（说明侧栏仍可交互）")
     }
 }

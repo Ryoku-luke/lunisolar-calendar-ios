@@ -26,6 +26,9 @@ struct CalendarMonthView: View {
     /// 最小拖动距离：小于该距离视为点按（日期选中仍可用）
     let swipeThreshold: CGFloat = 8
     #endif
+    /// 中栏可视高度（仅 iPad 用）：弹性行高的计算依据，由背景 GeometryReader 注入。
+    /// 0 = 尚未测量，此时行高退回 `minHeight: 56` 的旧行为（多一次布局即可修正）。
+    @State private var columnHeight: CGFloat = 0
     /// 月网格派生数据缓存：仅当月份或事件版本变化时重建。
     /// 横滑期间 dragOffsetX 每帧令 body 重算，但命中此缓存后 42 格的
     /// 农历转换/黄历生成/节日遍历/事件统计全部 O(1) 复用，不再每帧重算。
@@ -82,10 +85,21 @@ struct CalendarMonthView: View {
             festiveBackground(accent: accent)
                 .ignoresSafeArea()
 
-            // iPhone：当日卡片内容可能超过一屏，允许纵向滚动；
-            // iPad 侧栏：同样包 ScrollView，防止内容超高被裁切（网格 7 列在窄栏自适应）
+            // iPhone：当日卡片内容可能超过一屏，允许纵向滚动。
+            // iPad：仍包 ScrollView（防止内容超高被裁切），但先把可视高度量出来交给月卡，
+            // 让格子按可视区高度弹性分配（56~96pt），避免月卡下方留出大片空白。
+            // 量高度放在背景 GeometryReader 里：不参与布局、不改变高度（与 monthWidth 同一手法）。
             ScrollView(showsIndicators: false) {
                 monthColumn(accent: accent)
+            }
+            .background {
+                if isIPadSplit {
+                    GeometryReader { geo in
+                        Color.clear
+                            .onAppear { columnHeight = geo.size.height }
+                            .onChange(of: geo.size.height) { _, h in columnHeight = h }
+                    }
+                }
             }
         }
         .navigationTitle("日历")
@@ -384,6 +398,18 @@ struct CalendarMonthView: View {
             .accessibilityLabel(name == "chevron.left" ? String(localized: "上个月") : String(localized: "下个月"))
     }
 
+    /// iPad 中栏的弹性行高：把可视高度扣掉「月份标题 + 节气条 + 星期表头 + 内边距」后
+    /// 按行均分，夹在 56（可点下限）~96（大屏上限）之间。
+    /// 返回 nil 表示不限高 —— iPhone 走原来的 `minHeight` 行为，完全不受影响。
+    ///
+    /// ⚠️ `chrome` 是估算值：偏小只会让内容轻微可滚（有 ScrollView 兜底），偏大则月卡下方
+    /// 仍有留白（96pt 上限本身就意味着 13" 屏上不可能完全铺满）。两种都不会裁切内容。
+    private func elasticCellHeight(rows: Int) -> CGFloat? {
+        guard isIPadSplit, columnHeight > 0, rows > 0 else { return nil }
+        let chrome: CGFloat = 170
+        return min(96, max(AppTheme.Touch.minCellHeight, (columnHeight - chrome) / CGFloat(rows)))
+    }
+
     /// 单个月份卡片（表头 + 42 格网格）。
     /// 必须按传入月份取网格：跟手滑动时同一份日历要同时渲染当前月与相邻月。
     private func calendarShell(for month: Date, accent: Color) -> some View {
@@ -410,6 +436,9 @@ struct CalendarMonthView: View {
                                 solarTermTint: cell.solarTermTint,
                                 holidayType: cell.holidayType)
                         .equatable()
+                        // iPad：按可视高度弹性分配行高；iPhone：nil → 不限高，
+                        // 由下一行的 minHeight 给出可点下限
+                        .frame(height: elasticCellHeight(rows: grid.cells.count / 7))
                         .frame(minHeight: AppTheme.Touch.minCellHeight)
                         .contentShape(Rectangle())
                         .onTapGesture {

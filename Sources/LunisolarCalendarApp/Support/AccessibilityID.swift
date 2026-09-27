@@ -37,7 +37,9 @@ public enum AccessibilityID {
     // iPad 侧栏（SwiftUI 的 List(selection:) 行在 XCUITest 里未必暴露成 Button，
     // 按标识定位才不会因元素类型变化而失配）
     public static let iPadSidebarCalendar = "ipad.sidebar.calendar"
-    public static let iPadSidebarYear = "ipad.sidebar.year"
+    /// 侧栏「AI 助手」节（2026-09-27 批次 3 新增）。
+    /// 原 `iPadSidebarYear` 已随「年视图改走方案 C（移出侧栏）」一并删除。
+    public static let iPadSidebarAI = "ipad.sidebar.ai"
     public static let iPadSidebarAgenda = "ipad.sidebar.agenda"
     public static let iPadSidebarCountdown = "ipad.sidebar.countdown"
     public static let iPadSidebarSettings = "ipad.sidebar.settings"
@@ -65,7 +67,7 @@ public enum AccessibilityID {
         aiInput, aiParse, aiConfirm, aiCancel, aiDone,
         stateEmpty, stateError, stateToast, toastAction,
         settingsWeekStart, settingsSyncToggle, settingsSyncStatus,
-        iPadSidebarCalendar, iPadSidebarYear, iPadSidebarAgenda,
+        iPadSidebarCalendar, iPadSidebarAI, iPadSidebarAgenda,
         iPadSidebarCountdown, iPadSidebarSettings, iPadInspectorCountdown
     ]
 }

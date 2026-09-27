@@ -20,7 +20,10 @@ public final class NavigationCoordinator {
     public var phoneTab: PhoneTab = .calendar
 
     /// iPad Sidebar 选中（List(selection:) 需要 optional binding）
-    public enum iPadSection: Hashable { case calendar, year, agenda, countdown, settings }
+    /// 2026-09-27 批次 3：去掉 `.year`（年视图改走方案 C——移出侧栏，入口统一到
+    /// 「跳转到日期 → 全年视图」，见 docs/IPAD_UI_DESIGN_2026-09-27.md 的 P0-1 裁决）；
+    /// 新增 `.ai`（AI 助手原先只能从设置页头部卡进，入口埋两层深）。
+    public enum iPadSection: Hashable { case calendar, ai, agenda, countdown, settings }
     public var iPadSection: iPadSection? = .calendar
 
     /// P1：待打开的事件详情 ID（深链 / 通知 / Live Activity 点击设置）。
