@@ -106,7 +106,7 @@ Sources/LunisolarCalendarApp/
 ├── Widgets/                     # 3 种小组件 + 倒数日灵动岛（Live Activity）
 ├── Views/                       # 月视图 / 年视图 / 日详情 / 编辑 / 倒数日 / 设置 / 天气卡
 └── Resources/                   # lunar_calendar.json、huangli_db.json、4 套 lproj 本地化
-Tools/                           # 黄历库生成工具 + 图标生成脚本
+Tools/                           # 一键验证脚本（run_tests.sh）/ 截图取证脚本（shots.sh）+ 黄历库生成工具 + 图标生成脚本
 Tests/LunisolarCalendarTests/    # 单元测试（走 SwiftPM；数量以 swift test 输出为准，README 不写死）
 LunisolarCalendarUITests/        # UI 测试（XCUITest，走 Xcode 工程）
 docs/                            # 上架 / 签名 / 构建 / 真机复测清单 / 进度分析与待做方案
@@ -120,6 +120,27 @@ swift test         # 运行全部单元测试
 ```
 
 > Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；本仓库**未配置 CI**（无 `.github/workflows`，推送不会触发构建）。本地自检：`swift build` / `swift test`（macOS 宿主，2026-09-24 起可用）+ `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS 视图层与宿主编译），详见 `docs/XCODE_BUILD_GUIDE.md` §4。行为级验证：UI 测试见下方「UI 测试」一节，真机复测见 [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md)。
+
+### 一键验证（推荐用它，别手拼命令）
+
+```bash
+Tools/run_tests.sh                    # 四通道：swift test + iOS 构建 + iPhone/iPad UI 测试
+```
+
+**串行**执行（并行跑两个 `xcodebuild` 会互相干扰，实测会出现随机失败）、逐条汇总、任一通道失败即非零退出。
+可用参数：`Tools/run_tests.sh "iPhone 16 Pro"`（指定机型）、`IPAD_SIM=…`、`OS_VER=27.0`、`SKIP_UI=1`（只跑编译 + 单测）。
+每条通道的完整日志落在 `/tmp/run_tests.<通道>.log`。
+
+### 界面截图取证（视觉改动的改前 / 改后）
+
+```bash
+Tools/shots.sh "iPhone 17 Pro" ./shots              # 深链巡游（纯 shell，不必跑测试）
+Tools/shots.sh --tour "iPhone SE 验收" ./shots      # XCUITest 巡游：连需要点击的页面一起拍，并导出附件
+Tools/shots.sh --appearance dark --lang en "iPhone 17 Pro" ./shots   # 深色 / 英文界面
+```
+
+模拟器上的**定位权限弹窗会被预授权绕过**（不绕过会挡住界面）。多机型 × 深浅色 × 多语言都是同一条命令换参数；
+后续任何视觉改动都可以「改前拍一组、改后拍一组」来取证——这比口头描述可靠。
 
 ## 测试覆盖（单元测试）
 

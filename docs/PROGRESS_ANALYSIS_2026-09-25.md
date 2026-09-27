@@ -30,7 +30,7 @@
 | Package resource warning | 已完成 | 已清理；本轮改全天事件时新增的 `Models/CalendarDayKey.swift` 也补了 LunarCore 的 exclude |
 | AppRootView 不再知道 ActivityKit/CloudKit/通知重排 | 已完成 | `App/LunisolarCalendarApp.swift:14-17` 明文声明，且该文件确已无 `import ActivityKit` |
 | 统一 App State 含 `selectedEventID` / `presentedRoute` | 部分 | 有等价物 `pendingOpenEventID` / `pendingOpenCountdownID`；但没有统一的 `presentedRoute`（路由仍是若干布尔 + sheet 组合） |
-| `CalendarDaySummary` + `CurrentDateContext`（§5-P0） | 未做 | **全仓不存在此类型**。各页仍自行调用 `HuangliGenerator.generate` / `SolarTermProvider` / 天气等派生数据（如 `SelectedDayCardView.swift:14`、`DayDetailView.swift:78,187`、`CalendarMonthView.swift:582`） |
+| `CalendarDaySummary` + `CurrentDateContext`（§5-P0） | **已完成（2026-09-27）** | 新增 `Models/CalendarDaySummary.swift`：一日派生数据的**单一来源**（农历 / 黄历 / 节日 / 当天节气 / 休假类型 / 当日事件）。本条点名的 7 处调用点已全部收口：`SelectedDayCardView`、`DayDetailView`（两处）不再各自调 `HuangliGenerator.generate` 与 `FestivalManager.festivals`；`SettingsView` / `EventEditView` 改用已有的 `DayAccent`。新增 6 条单测断言「summary 各字段 == 直接调用生成器」。⚠️ **`CurrentDateContext` 没有独立成类型**：与「今天」绑定的派生数据目前只有「下一个节气」一处消费者（月历节气条），再包一层只是换个名字——不做，理由记在此处。 |
 
 > 这条是唯一「文档标 P0、实际未做」的条目。它被路线图排进了 PR3，而 PR1/PR2 已做，所以它只是被跳过了。
 
@@ -42,7 +42,7 @@
 | UI-P0-4 收敛 Card primitive | 已完成（基本） | `AppTheme.swift` 里 modernCard / liquidCard / pageBackground 已为 0 处；仅剩 glassCard×1、softChipBackground×2 |
 | UI-P0-1 拆分 CalendarMonthView | 未做 | `Views/CalendarMonthView.swift` 仍有 **725 行 / 36.6 KB** |
 | UI-P0-5 拆分 SettingsView | 未做 | `Views/SettingsView.swift` **786 行**（文档记录的是 759 行——它变长了） |
-| P1 统一 CalendarDaySummary | 未做 | 同 §1 末条 |
+| P1 统一 CalendarDaySummary | **已完成（2026-09-27）** | 同 §1 末条 |
 | P1 设计系统 Token 固定 | 部分 | `Support/AppTheme.swift` 存在；但文档要求「禁止 14/18/22/26/28/30 圆角随意出现」，未逐处核对 |
 | P1 iPad responsive layout | 部分 | `AdaptiveRootView` 按 sizeClass 分流；列宽用 `navigationSplitViewColumnWidth(min:ideal:max:)`，但**未按 11 英寸 / 13 英寸 分别设定**（UI 报告 §37 要求 220/520/320 与 240/640/380） |
 | P1 UI Test 补 7 条路径 | 未做 | 见 §3 —— 连 target 都没有 |
@@ -137,14 +137,12 @@ UI 测试节全部改为「以 swift test 实际输出为准」的措辞，并�
 - 「多语言字符串走查：9 个 uiLabel + P2 文案未走 4 语言」→ 已完成，字符串表 199 → 476 条 × 4 语言。
 - 「隐私清单 PrivacyInfo.xcprivacy」→ 已进 App 与 Widget 两个 target 的 resources。
 
-仍然成立、且值得单独点出来的**一条真 bug**：
-
-- 「天气定位失败兜底：硬编码北京坐标」**仍是现状** —— `Support/WeatherService.swift:224`
-  在定位失败时用北京坐标，第 240 行再把城市名显示为「北京」。
-  不在北京的用户会被**明确告知自己在北京市** —— 这比「不显示天气」更误导。
-  更值得留意的是：紧邻的注释写着「用北京坐标兜底，天气仍可显示（**不伪造城市名**）」，
-  与实际行为相反 —— 这类「注释声称 A、代码做 B」的地方，排查时最费时间。
-  这是清单里少数「描述准确、且仍未修」的项，修起来也很小（改文案 + 决定降级口径）。
+**已修（2026-09-27）**：`Support/WeatherService.swift` 不再用任何写死的坐标兜底——
+定位超时/无信号时如实返回 `.failed`（天气卡显示「天气加载失败 / 重试」，重试会重新定位），
+「北京」这个城市名与兜底坐标一并删除。判据抽成 `WeatherProvider.coordinate(from:)`
+并由 `Tests/.../WeatherFallbackTests.swift` 3 条单测锁住（含一条反面断言：
+「没有定位」的分支不得给出北京坐标）。这条正是本文件自己点名的
+「注释声称 A、代码做 B」的典型，现已一致。
 
 ## 6. 剩余改进的建议顺序
 
@@ -153,11 +151,11 @@ UI 测试节全部改为「以 swift test 实际输出为准」的措辞，并�
 | 序 | 事项 | 为什么排这里 | 谁做 |
 |---|---|---|---|
 | ~~1~~ | ~~**建 UI 测试 target + 补 5 条真实用户路径**（UI 报告 §55）~~ | **已完成（2026-09-25）**：target 已建，5 条用例已写并跑通；第一次运行就抓出并修掉了 AI 助手的焦点 bug（§3.1） | 已完成 |
-| 2 | **修「定位失败显示北京」** | 真 bug、用户可见、改动极小 | 我 |
-| 3 | **裁决 iPad 右栏语义**（§4-A） | 不裁决，「iPad 适配」整条线停摆 | 你 |
-| 4 | **`CalendarDaySummary` 统一派生数据** | 文档标 P0、唯一被跳过的 P0；也是拆分巨型 View 的前置 | 我 |
+| ~~2~~ | ~~**修「定位失败显示北京」**~~ | **已完成（2026-09-27）**：定位失败不再用北京坐标兜底，如实走失败分支；判据由 3 条单测锁住 | 已完成 |
+| 3 | **裁决 iPad 右栏语义**（§4-A） | 不裁决，「iPad 适配」整条线停摆 | ~~你~~ **已裁决并落地** |
+| ~~4~~ | ~~**`CalendarDaySummary` 统一派生数据**~~ | **已完成（2026-09-27）**：唯一被跳过的 P0 已补；7 处调用点收口为单一来源 + 6 条单测 | 已完成 |
 | 5 | **统一状态组件**（Loading/Empty/Error/Toast/确认） | 文档两处都要求；也是继续补 UI 测试时的断言锚点 | 我 |
-| 6 | **把 UI 测试接进 CI**（或至少一个可一键跑脚本） | 现在有测试但**没人自动跑**；不接 CI，「回归保护」只是纸面承诺 | 我（需要你定：本机脚本 or GitHub Actions） |
+| ~~6~~ | ~~**把 UI 测试接进 CI**（或至少一个可一键跑脚本）~~ → **一键脚本已完成（2026-09-27）**：`Tools/run_tests.sh` 把四通道串成一条命令并汇总退出码；另加 `Tools/shots.sh`（深链 + XCUITest 两种模式的截图取证） | **CI 本身仍未接**（仓库里没有 `.github/workflows`，要不要上 GitHub Actions 需要你定） | 脚本已完成 |
 | 7 | **Reduce Motion** | 无障碍硬缺口，全仓 0 处理，改动小 | 我 |
 | 8 | 拆分 SettingsView / CalendarMonthView | churn 大、收益偏维护性，且应在 4/5 之后做 | 我 |
 | 9 | README 测试数去写死（§4-B） | 小事，但每次新增测试都要手工维护 | 你点头即可 |
@@ -173,7 +171,8 @@ UI 测试节全部改为「以 swift test 实际输出为准」的措辞，并�
 
 路线图的 PR 顺序是「架构 → 服务 → Domain → Calendar → Settings → iPad → DeepLink → AI」。
 实际已完成的部分与它一致（PR1/2/3 的架构侧、PR7/8 的 DeepLink 与 AI 都提前做了），
-但**跳过了 PR3 的 `CalendarDaySummary`**，并且**始终没做 PR11 的 UI Test**。
+但**跳过了 PR3 的 `CalendarDaySummary`**（**已于 2026-09-27 补上**，见 §1 末条），
+并且**始终没做 PR11 的 UI Test**（**已于 2026-09-25 补上**，现有 Flow 1–10 + 一条截图巡游）。
 
 我现在建议的顺序（§6）把「验证能力」提到了最前，理由是：这个项目已经出现过多次
 「本机四通道全绿、真机行为不符」的情况（灵动岛、全天事件、AI 助手交互都属此类），
