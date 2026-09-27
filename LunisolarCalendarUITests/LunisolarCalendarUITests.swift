@@ -26,6 +26,7 @@ private enum ID {
     static let monthNewEvent = "calendar.month.new"
     static let todayJump = "calendar.month.today"
     static let selectedSummary = "calendar.selected.summary"
+    static let dayDetailNewEvent = "calendar.day.detail.new"
     static let editTitle = "event.edit.title"
     static let editSave = "event.edit.save"
     static let aiInput = "ai.input.draft"
@@ -38,6 +39,7 @@ private enum ID {
     static let iPadSidebarAI = "ipad.sidebar.ai"
     static let iPadSidebarAgenda = "ipad.sidebar.agenda"
     static let iPadSidebarCountdown = "ipad.sidebar.countdown"
+    static let iPadSidebarSettings = "ipad.sidebar.settings"
     static let iPadInspectorCountdown = "ipad.inspector.countdown"
     static let monthMenu = "calendar.month.menu"
     static let stateEmpty = "state.empty"
@@ -605,5 +607,177 @@ final class LunisolarCalendarUITests: XCTestCase {
                                  网格最后一行不应被底部 TabBar 压住：
                                  日期格底边 y=\(last.frame.maxY)，TabBar 顶边 y=\(tabBar.frame.minY)。
                                  """)
+    }
+
+    // MARK: - 截图巡游（仅在 Tools/shots.sh --tour 时运行）
+
+    /// 视觉取证的「必须点击才能到达」那一半：把 Tab、月历菜单二级页、iPad 侧栏各节走一遍，
+    /// 每站挂一张 `XCUIScreen.main.screenshot()`，由 `Tools/shots.sh --tour` 从结果包导出 PNG。
+    /// 「无需点击就能到达」的页面走深链，由同脚本的默认模式（纯 shell）覆盖，不必进测试。
+    ///
+    /// 为什么默认跳过：它的断言是「页面到了」而非业务正确性，还会截图、耗时，
+    /// 不该混进 `Tools/run_tests.sh` 的四通道。开关由脚本传——`TEST_RUNNER_` 前缀的
+    /// 环境变量会被 xcodebuild 转发到模拟器上的测试进程（即 `TEST_RUNNER_SHOTS=1` → 这里看到 `SHOTS=1`）。
+    ///
+    /// 不 sleep：每一站的同步都靠「等一个该页独有的元素」，既准又快（目标 ≤ 40 秒）。
+    func testScreenshotTour() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["SHOTS"] == "1",
+                          "截图巡游：由 Tools/shots.sh --tour 通过 TEST_RUNNER_SHOTS=1 开启")
+
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        // 固定方向并在结束时还原：iPad 只在横屏才是「三栏并排」
+        // （Flow 4 的结论：竖屏时侧栏是浮层且默认收起，展开会盖住中栏）
+        XCUIDevice.shared.orientation = isPad ? .landscapeLeft : .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+
+        let app = launchApp()
+        if isPad {
+            tourPad(app)
+        } else {
+            tourPhone(app)
+        }
+    }
+
+    /// 全屏截图挂成附件。`name` 就是导出后的文件名——`Tools/shots.sh` 会按 manifest.json
+    /// 的 `suggestedHumanReadableName` 把 xcresult 里的随机名还原成它。
+    ///
+    /// 横屏（iPad 巡游）必须把像素转正：`XCUIScreen.screenshot()` 给的图是**像素竖着存**的
+    /// （1668×2420 而界面是横的），直接导出会躺倒 90°，取证时得歪头看。
+    private func shot(_ name: String) {
+        let attachment = XCTAttachment(image: uprightIfNeeded(XCUIScreen.main.screenshot().image))
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    /// 横屏时把图转正（竖屏原样返回，iPhone 巡游不受影响）
+    ///
+    /// 判据用 **cgImage 的像素宽高**而不是 `image.size`：`XCUIScreenshot` 的像素始终是
+    /// 「竖着存」的（1668×2420），横屏只体现在 `UIImage.imageOrientation` 上 —— 所以
+    /// `image.size` 已经是横的、`cgImage` 还是竖的，而 `XCTAttachment(image:)` 写的是
+    /// **cgImage 的像素**，于是导出的 PNG 躺倒 90°。这里用一次重绘把 orientation
+    /// 烘进像素（`image.draw` 会应用 orientation），竖屏图 orientation == .up，重绘后不变。
+    private func uprightIfNeeded(_ image: UIImage) -> UIImage {
+        guard let cg = image.cgImage, cg.width < cg.height,
+              UIDevice.current.userInterfaceIdiom == .pad else { return image }
+        return UIGraphicsImageRenderer(size: image.size).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
+    }
+
+    /// 切 Tab。**刻意不等「已被选中」**：`isSelected` 只能靠 `expectation` 轮询，
+    /// 实测一次要 2~3 秒（4 次切换就是十几秒）；而每站「到了没」由调用方等一个
+    /// 该页独有的元素来保证，一次约 1 秒，加起来反而更快也更准。
+    private func switchTab(_ app: XCUIApplication, _ title: String) {
+        app.tabBars.buttons[title].tap()
+    }
+
+    /// 经月历工具栏菜单进二级页并截图（iPhone 上进「全部日程 / 倒数日」的唯一路径，见 Flow 6/7/8）
+    private func shotViaMonthMenu(_ app: XCUIApplication,
+                                 item: String, readyNav: String, name: String) {
+        switchTab(app, "日历")
+        let menu = element(app, ID.monthMenu)
+        // 一次查询够用就不要查第二次：`waitForExistence` 本身要 1 秒，两站省下的就是 2 秒多
+        var menuReady = menu.waitForExistence(timeout: 5)
+        if !menuReady {
+            // 兜底：上一次从菜单进的二级页还压在这个 Tab 的导航栈上，先退回根
+            app.navigationBars.buttons.firstMatch.tap()
+            menuReady = menu.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(menuReady, "日历页应有工具栏入口菜单")
+        menu.tap()
+
+        let entry = app.buttons[item].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 5), "入口菜单里应有「\(item)」")
+        entry.tap()
+        XCTAssertTrue(app.navigationBars[readyNav].waitForExistence(timeout: 10), "应进入「\(item)」页")
+        shot(name)
+    }
+
+    /// 往上拖日历页（把月卡下方的选中日卡拖进视野）。
+    ///
+    /// ⚠️ **不要**以为「月卡区域拖不动」。巡游实现时一度观察到「从月卡上起手动不了、
+    /// 换个起点才行」，还归因于月卡的横向翻页手势吃掉了纵向拖动；事后用 A/B 探针复测
+    /// **否掉了这个结论**：同一次运行里从月卡中部（日期格上）起手照样能滚
+    /// （`selectedSummary` 的 y 从 599 → 271 → −77）。
+    /// 真正会出问题的是 **XCUITest 的合成拖拽偶发不落到 App 上**（表现为连拖几次都
+    /// 纹丝不动、截图仍是原样）。所以这里不假设一次就成功——调用处循环拖到目标
+    /// 元素真的露出来为止再截图。
+    private func scrollCalendarUp(_ app: XCUIApplication) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.22))
+            .press(forDuration: 0.05,
+                   thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02)))
+    }
+
+    private func tourPhone(_ app: XCUIApplication) {
+        // ① 日历首屏
+        XCTAssertTrue(element(app, ID.monthMenu).waitForExistence(timeout: 15), "日历首屏应有月历工具栏")
+        shot("01-日历首屏")
+
+        // ② 点月中日后的选中摘要（月中日只出现在当月网格里，见 midMonthTarget 的说明）。
+        //    摘要卡在网格下方且默认是收起的紧凑卡 —— 它**已经在屏幕内**（被底部 TabBar 压住大半），
+        //    所以可见性判据要用 TabBar 的顶边，不能拿 app.frame 比（比出来永远成立，一张都不滑）。
+        let t = midMonthTarget
+        let cell = element(app, ID.monthDay(year: t.year, month: t.month, day: t.day))
+        XCTAssertTrue(cell.waitForExistence(timeout: 10), "月历网格应有本月 \(t.day) 日")
+        cell.tap()
+
+        let summary = element(app, ID.selectedSummary)
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "选中后应出现选中日摘要卡")
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.exists, "应有底部 TabBar")
+        for _ in 0..<3 where summary.frame.maxY > tabBar.frame.minY {
+            scrollCalendarUp(app)
+        }
+        XCTAssertLessThanOrEqual(summary.frame.maxY, tabBar.frame.minY,
+                                 "往下滑后选中日摘要卡应完整露出（否则截出来的不是摘要）")
+        shot("02-选中日摘要")
+
+        // ③ 黄历 Tab。就绪标志用它工具栏里的「新建日程」——黄历页的导航栏标题是星期名，
+        //    而该按钮只挂在 DayDetailView（日历 Tab 用的是行内摘要卡），因此是它独有的
+        switchTab(app, "黄历")
+        XCTAssertTrue(element(app, ID.dayDetailNewEvent).waitForExistence(timeout: 10),
+                      "黄历页应出现工具栏「新建日程」")
+        shot("03-黄历")
+
+        // ④⑤ 全部日程 / 倒数日：iPhone 上只有一个入口 —— 月历工具栏菜单
+        shotViaMonthMenu(app, item: "全部日程", readyNav: "全部日程", name: "04-全部日程")
+        shotViaMonthMenu(app, item: "倒数日", readyNav: "倒数日", name: "05-倒数日")
+
+        // ⑥ 我的（设置）：iCloud 同步区块在首屏之下，滚到它再截（Flow 5 的断言点）
+        switchTab(app, "我的")
+        XCTAssertTrue(scrollUntilVisible(app, element(app, ID.settingsSyncStatus), maxSwipes: 5),
+                      "设置页应能找到 iCloud 同步状态行")
+        shot("06-我的-设置")
+
+        // ⑦ AI 助手
+        switchTab(app, "AI 助手")
+        XCTAssertTrue(element(app, ID.aiInput).waitForExistence(timeout: 10), "AI 助手应有输入区")
+        shot("07-AI助手")
+    }
+
+    private func tourPad(_ app: XCUIApplication) {
+        // (侧栏显示名, 侧栏锚点, 中栏就绪标志 = 该节的导航栏标题, 截图名)
+        let sections: [(label: String, row: String, ready: String, name: String)] = [
+            ("日历", ID.iPadSidebarCalendar, "日历", "01-iPad-日历"),
+            ("AI 助手", ID.iPadSidebarAI, "AI 日历助手", "02-iPad-AI助手"),
+            ("全部日程", ID.iPadSidebarAgenda, "全部日程", "03-iPad-全部日程"),
+            ("倒数日", ID.iPadSidebarCountdown, "倒数日", "04-iPad-倒数日"),
+            ("设置", ID.iPadSidebarSettings, "设置", "05-iPad-设置"),
+        ]
+        for s in sections {
+            let row = element(app, s.row)
+            if !row.waitForExistence(timeout: 5) {
+                // 侧栏收起时的兜底（与 Flow 4 / Flow 9 同款，真实用户也是这一步）
+                let showSidebar = app.buttons["显示边栏"].firstMatch
+                if showSidebar.waitForExistence(timeout: 5) { showSidebar.tap() }
+            }
+            XCTAssertTrue(row.waitForExistence(timeout: 5),
+                          "iPad 侧栏应有「\(s.label)」行（标识 \(s.row)）")
+            row.tap()
+            XCTAssertTrue(app.navigationBars[s.ready].waitForExistence(timeout: 10),
+                          "切到「\(s.label)」后中栏应显示导航栏标题「\(s.ready)」")
+            shot(s.name)
+        }
     }
 }
