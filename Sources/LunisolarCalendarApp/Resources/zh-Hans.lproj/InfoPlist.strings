@@ -1,2 +1,7 @@
 /* InfoPlist 本地化（zh-Hans） */
+
 "CFBundleDisplayName" = "清和日历";
+"NSLocationWhenInUseUsageDescription" = "用于获取当前位置，在日历详情中显示当地天气。";
+"NSContactsUsageDescription" = "用于导入联系人生日，并按农历每年重复提醒。";
+"NSCalendarsFullAccessUsageDescription" = "用于从系统日历导入日程安排，方便迁移历史事件。";
+"NSCalendarsUsageDescription" = "用于从系统日历导入日程安排，方便迁移历史事件。";

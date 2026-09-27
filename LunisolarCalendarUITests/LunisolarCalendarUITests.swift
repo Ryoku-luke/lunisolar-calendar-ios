@@ -66,7 +66,28 @@ final class LunisolarCalendarUITests: XCTestCase {
         // §7.1 数据隔离：空库启动，「空态 / 首次使用 / 无数据」类断言与真实容器无关
         app.launchArguments += ["-uitest-empty-store"]
         app.launch()
+        dismissSystemPermissionPromptIfNeeded()
         return app
+    }
+
+    /// 关掉可能挡住首屏的系统权限弹窗（当前只有定位会弹）。
+    ///
+    /// 为什么必须显式处理：这个弹窗属于 **SpringBoard**，不在 App 的元素树里，
+    /// 所以 `app.buttons["不允许"]` 找不到它；而它一旦挂上，App 内的点击全部落空。
+    /// 在**全新模拟器**上第一次跑必然遇到——本项目此前的 UI 测试只在已经授权过的
+    /// 机器上跑过，所以一直没暴露这个问题（用新建的 iPhone SE 验收时踩到）。
+    private func dismissSystemPermissionPromptIfNeeded() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        // 先判「有没有弹窗」再找按钮：没有就直接返回，
+        // 否则每个用例都会为了 3 个标题各白等 3 秒（10 条用例就是一分半）。
+        guard springboard.alerts.firstMatch.waitForExistence(timeout: 2) else { return }
+        for title in ["不允许", "允许一次", "好"] {
+            let button = springboard.buttons[title].firstMatch
+            if button.exists {
+                button.tap()
+                return
+            }
+        }
     }
 
     /// 按标识查找元素，不关心它映射成哪一类（textField / textView / other / button…）
@@ -97,6 +118,21 @@ final class LunisolarCalendarUITests: XCTestCase {
         let cal = Calendar(identifier: .gregorian)
         let c = cal.dateComponents([.year, .month, .day], from: Date())
         return (c.year ?? 2026, c.month ?? 1, c.day ?? 1)
+    }
+
+    /// 当月最后一天 —— 网格**最后一行**的探针。
+    ///
+    /// 与 `midMonthTarget` 的取舍正好相反：这里**故意**用月末，因为它最能代表
+    /// 「整月是否一屏可见」（P0-1 的验收）。它的风险是跟手滑动时相邻月的网格会
+    /// 一起渲染、同一天出现两次；但 Flow 10 全程不滑动，稳态下只有当前月的网格。
+    private var monthEndTarget: (year: Int, month: Int, day: Int) {
+        let cal = Calendar(identifier: .gregorian)
+        let c = cal.dateComponents([.year, .month], from: Date())
+        let year = c.year ?? 2026, month = c.month ?? 1
+        var dc = DateComponents(); dc.year = year; dc.month = month
+        let firstOfMonth = cal.date(from: dc) ?? Date()
+        let days = cal.range(of: .day, in: .month, for: firstOfMonth)?.count ?? 28
+        return (year, month, days)
     }
 
     /// 往下滚动直到元素出现（设置页很长）
@@ -523,5 +559,51 @@ final class LunisolarCalendarUITests: XCTestCase {
         calendarRow.tap()
         XCTAssertTrue(app.navigationBars["日历"].waitForExistence(timeout: 10),
                       "切回「日历」应生效（说明侧栏仍可交互）")
+    }
+
+    // MARK: - Flow 10：月历首屏必须完整容纳整月（UI_DESIGN_REVIEW P0-1 的验收）
+
+    /// 把「打开即见整月，无需滚动」做成可执行断言：**不滚动**，直接查当月最后一天
+    /// （网格最后一行）是否已经可点。页面需要滚动才能看到时，该格要么还没被
+    /// `LazyVGrid` 创建（`exists == false`）、要么不在可点区域（`isHittable == false`），
+    /// 两种都判失败。这比截图更严格，也能当长期回归护栏。
+    ///
+    /// 在 iPhone SE（375×667）上跑最能说明问题——那是验收文档点名的机型。
+    ///
+    /// 只在 iPhone 上跑：验收文档点名的就是 iPhone SE / Pro Max；
+    /// 而且末条断言要拿底部 TabBar 当参照，iPad 是侧栏布局、根本没有 TabBar。
+    func testFlow10_monthGridFitsOnFirstScreen() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "仅在 iPhone 上运行（iPad 无底部 TabBar，且验收针对的是 iPhone SE / Pro Max）")
+        let app = launchApp()
+        let t = monthEndTarget
+        let id = ID.monthDay(year: t.year, month: t.month, day: t.day)
+        let last = element(app, id)
+
+        XCTAssertTrue(last.waitForExistence(timeout: 10),
+                      """
+                      当月最后一天（\(t.year)-\(t.month)-\(t.day)）的日期格在首屏就该存在
+                      （标识 \(id)）。不存在通常意味着它在首屏之外，LazyVGrid 还没创建它。
+                      当前界面树：
+                      \(app.debugDescription)
+                      """)
+        XCTAssertTrue(last.isHittable,
+                      """
+                      当月最后一天应**无需滚动**即可见可点（P0-1 的验收「打开即见整月」）。
+                      isHittable == false 表示它落在首屏之外，或被底部 TabBar 遮挡。
+                      当前界面树：
+                      \(app.debugDescription)
+                      """)
+
+        // 再加一条量化的：网格最后一行必须整体位于底部 TabBar 之上。
+        // `isHittable` 只看元素中心点——被 TabBar 压住一点点也仍算「可点」；
+        // 这条把「完全没被压住」也钉住，两条合起来才是「打开即见整月」。
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.exists, "应有底部 TabBar")
+        XCTAssertLessThanOrEqual(last.frame.maxY, tabBar.frame.minY,
+                                 """
+                                 网格最后一行不应被底部 TabBar 压住：
+                                 日期格底边 y=\(last.frame.maxY)，TabBar 顶边 y=\(tabBar.frame.minY)。
+                                 """)
     }
 }
