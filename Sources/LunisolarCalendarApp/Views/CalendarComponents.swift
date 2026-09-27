@@ -30,13 +30,16 @@ struct WeekHeaderView: View {
     var body: some View {
         HStack(spacing: 0) {
             ForEach(0..<7, id: \.self) { idx in
-                // 按起始日旋转顺序；weekday 1=周日 / 7=周六 恒为红色（周末语义与起始日无关）
+                // 按起始日旋转顺序；weekday 1=周日 / 7=周六（周末语义与起始日无关）。
+                // 周末不再用红色 —— 见下方 foregroundStyle 的说明。
                 let wd = ((idx + weekStart - 1) % 7) + 1
                 Text(Self.narrowWeekdays[wd - 1])
                     // 复用 AppTheme.Font 阶梯（caption/caption2），避免散落硬编码
+                    // 周末不再用红：红色语义只留给「今天」与「节日」，否则旺季整月一片红、
+                    // 层级被稀释（UI_DESIGN_REVIEW P2-2）。用 secondaryLabel 的透明度区分周末即可。
                     .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
                     .foregroundStyle(wd == 1 || wd == 7
-                                     ? Color.systemRed.opacity(0.65)
+                                     ? Color.secondaryLabel.opacity(0.8)
                                      : Color.secondaryLabel.opacity(0.85))
                     .frame(maxWidth: .infinity)
             }
@@ -245,7 +248,11 @@ struct DayCellView: View {
         if let ft = festivalTint { return ft }
         if isToday { return Color.systemRed }
         let wd = date.weekday
-        if wd == 1 || wd == 7 { return Color.systemRed.opacity(0.78) }
+        // 周末改用中性色「略淡」，而不是红色：红色语义只留给「今天」与「节日」，
+        // 否则旺季（春节 / 国庆连休）整月一片红、层级被稀释（UI_DESIGN_REVIEW P2-2）。
+        // 这里才是「周末与其它格拉开层级」的主力——星期表头那处的周末与工作日
+        // 只差 0.05 透明度，肉眼基本看不出差别（已记入待肉眼确认项）。
+        if wd == 1 || wd == 7 { return Color.secondaryLabel.opacity(0.8) }
         return Color.label
     }
     private var foregroundForLunar: Color {

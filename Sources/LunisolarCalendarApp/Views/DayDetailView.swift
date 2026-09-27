@@ -133,12 +133,16 @@ struct DayDetailView: View {
                     (NSLocalizedString("喜神", comment: ""), huangli.xiShenDirection.isEmpty ? "—" : huangli.xiShenDirection, Color.systemPink),
                     (NSLocalizedString("财神", comment: ""), huangli.caiShenDirection.isEmpty ? "—" : huangli.caiShenDirection, Color.systemGold)
                 ]
-                HStack(spacing: AppTheme.Spacing.xs) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: AppTheme.Spacing.xs),
+                                    GridItem(.flexible(), spacing: AppTheme.Spacing.xs)],
+                          spacing: AppTheme.Spacing.xs) {
                     ForEach(rows, id: \.0) { item in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.0).font(AppTheme.Font.caption2).foregroundStyle(Color.tertiaryLabel)
                             Text(item.1).font(AppTheme.Font.caption.weight(.semibold))
-                                .foregroundStyle(item.2).lineLimit(1)
+                                .foregroundStyle(item.2)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, AppTheme.Spacing.sm)

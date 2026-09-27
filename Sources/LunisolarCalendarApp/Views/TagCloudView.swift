@@ -10,7 +10,7 @@ struct TagCloudView: View {
             ForEach(tags, id: \.self) { tag in
                 Text(tag).font(font).fontWeight(.medium)
                     .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .background(RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous)
                         .fill(tint.opacity(0.12)))
                     .foregroundStyle(tint)
             }

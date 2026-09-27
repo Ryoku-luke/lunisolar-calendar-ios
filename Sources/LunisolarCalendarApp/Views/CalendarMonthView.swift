@@ -445,10 +445,10 @@ struct CalendarMonthView: View {
         // 月历是主视觉：白/浅色卡片 + 极轻边界，减少玻璃效果噪声。
         .background(
             Color.secondarySystemGroupedBackground,
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+            in: RoundedRectangle(cornerRadius: AppTheme.Radius.xxl, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: AppTheme.Radius.xxl, style: .continuous)
                 .stroke(Color.themeSeparator.opacity(0.18), lineWidth: 0.7)
         }
         .contentShape(Rectangle())

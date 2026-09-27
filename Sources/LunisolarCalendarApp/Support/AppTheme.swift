@@ -19,8 +19,19 @@ public enum AppTheme {
         public static let md: CGFloat = 12
         public static let lg: CGFloat = 16
         public static let xl: CGFloat = 20
-        public static let xxl: CGFloat = 28
+        /// 28 → 32（2026-09-27）：原值与设计纪律的允许清单（4/8/12/16/20/24/32）冲突，
+        /// 与批次 0 修 `Radius.xl` 22→20 是同一类问题——「用了 Token」不等于「合规」。
+        public static let xxl: CGFloat = 32
         public static let section: CGFloat = 24
+        // 适用范围：本阶梯覆盖视图间距与内边距。
+        // 以下为**显式豁免**（完整清单与计数见 docs/UI_DESIGN_REVIEW_2026-09-27.md 的 P2-1 落地）：
+        //   ① 固定密度迷你网格内的微调（年视图迷你月卡、倒数日行的紧凑 chip、
+        //      月历日格与星期头的 6/4pt 档）——跟着 Token 走会撑破格子；
+        //   ② 与 UIKit 逐点对齐的偏移（AI 输入框 `.padding(.top, 12)` 对齐 UITextView 的
+        //      textContainerInset，换 Token 会错位）；
+        //   ③ 结构性留白（月历底部 96pt 留给悬浮工具条、标题基线 6pt 微调）。
+        // 另有一批「值本来合法、只是写成了字面量」（8/12/16/24 共约 16 处）：纯清洁工作，
+        // 零视觉收益，未在批次 2 一并扫，需要时可一次改完。
     }
     public enum Radius {
         public static let sm: CGFloat = 8
@@ -85,6 +96,12 @@ public enum AppTheme {
         // 用户在系统设置里放大字号后回到 App，这些字号纹丝不动，而系统语义字体（.body 等）
         // 已经变大 → 同一屏出现两套字号节奏，辅助字号用户看到的排版是坏的。
         // 代价：每次访问重算一次 UIFont + 缩放查表（微秒量级），换「字号即时生效」值得。
+        // 适用范围：本阶梯只覆盖**文字**排版。
+        // 以下三类刻意不走阶梯，属显式豁免（清单见 docs/UI_DESIGN_REVIEW_2026-09-27.md 的 P2-1）：
+        //   ① SF Symbol 字形字号（图标在固定方框内定尺寸，不是排版）；
+        //   ② 固定方框内的 emoji 字号（同上）；
+        //   ③ 固定密度的迷你网格（年视图迷你月卡、月历星期表头——按格子宽度定的字号，
+        //      跟随 Dynamic Type 反而会撑破网格）。
         public static var hero: SwiftUI.Font { scaled(38, weight: .bold, textStyle: .largeTitle) }
         public static var title2: SwiftUI.Font { scaled(22, weight: .semibold, textStyle: .title2) }
         public static var title3: SwiftUI.Font { scaled(18, weight: .semibold, textStyle: .title3) }

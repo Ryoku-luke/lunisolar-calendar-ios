@@ -139,7 +139,8 @@ private struct CountdownRow: View {
     var body: some View {
         HStack(spacing: AppTheme.Spacing.lg) {
             Text(event.emoji)
-                // 用 AppTheme.Font.numeralXL 而非散落硬编码 size: 32
+                // emoji 字形按 48×48 方框定尺寸，不是文字排版，故不走 AppTheme.Font 阶梯
+                // （numeralXL 是 56，塞进这个方框会溢出）。UI_DESIGN_REVIEW P2-1 把它列为豁免。
                 .font(.system(size: 30, weight: .semibold, design: .rounded))
                 .frame(width: 48, height: 48)
                 .background(Color.themeQuaternaryFill)
@@ -292,7 +293,7 @@ struct CountdownEditor: View {
                                 .font(.system(size: 28))
                                 .frame(width: 44, height: 44)
                                 .background(emoji == e ? Color.accentColor.opacity(0.2) : Color.clear)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.sm))
                                 .onTapGesture { emoji = e }
                         }
                     }

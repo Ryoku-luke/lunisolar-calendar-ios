@@ -102,7 +102,7 @@ public struct CountdownLiveActivityWidget: Widget {
                         .font(.system(size: 22, weight: .semibold))
                         .padding(7)
                         .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
                                 .fill(Color.black.opacity(0.9))
                         )
                         .widgetURL(URL(string: "qinghe://countdown/\(context.attributes.eventID.uuidString)"))
@@ -130,7 +130,7 @@ public struct CountdownLiveActivityWidget: Widget {
                     .font(.system(size: 18, weight: .semibold))
                     .padding(4)
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous)
                             .fill(Color.black.opacity(0.9))
                     )
             } compactTrailing: {

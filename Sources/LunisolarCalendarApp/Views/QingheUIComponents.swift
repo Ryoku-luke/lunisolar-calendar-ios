@@ -11,7 +11,7 @@ struct QingheSettingsHeroCard: View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
             HStack(spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [Color.appTint.opacity(0.95), Color.systemIndigo.opacity(0.82)],
@@ -27,7 +27,7 @@ struct QingheSettingsHeroCard: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("清和日历")
-                        .font(.system(size: 19, weight: .bold, design: .rounded))
+                        .font(AppTheme.Font.title3)
                         .foregroundStyle(Color.label)
                     Text("让日历更懂你的生活")
                         .font(AppTheme.Font.caption)
@@ -51,16 +51,16 @@ struct QingheSettingsHeroCard: View {
                 .foregroundStyle(Color.appTint)
                 .padding(.horizontal, 14)
                 .frame(minHeight: 44)
-                .background(Color.appTint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Color.appTint.opacity(0.08), in: RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous))
             }
             .buttonStyle(.plain)
         }
         .padding(16)
         .background {
             AdaptiveMaterialFill(material: .regularMaterial,
-                                 shape: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                 shape: RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous)
                         .stroke(Color.appTint.opacity(0.10), lineWidth: 0.6)
                 }
         }
@@ -81,7 +81,7 @@ struct QingheSectionHeader: View {
     var body: some View {
         HStack(alignment: .lastTextBaseline, spacing: 8) {
             Text(title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(AppTheme.Font.subheadline)
                 .foregroundStyle(Color.secondaryLabel)
             if let subtitle {
                 Text(subtitle)

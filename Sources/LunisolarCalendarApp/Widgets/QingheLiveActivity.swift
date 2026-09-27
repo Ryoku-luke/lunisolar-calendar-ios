@@ -140,7 +140,7 @@ public struct QingheLiveActivityWidget: Widget {
                         .foregroundStyle(.white)
                         .padding(7)
                         .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
                                 .fill(Color.black.opacity(0.9))
                         )
                 }
@@ -207,7 +207,7 @@ public struct QingheLiveActivityWidget: Widget {
                     .foregroundStyle(.white)
                     .padding(4)
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous)
                             .fill(Color.black.opacity(0.9))
                     )
             } compactTrailing: {
