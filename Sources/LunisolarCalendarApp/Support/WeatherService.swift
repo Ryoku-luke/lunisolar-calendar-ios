@@ -209,36 +209,34 @@ enum WeatherProvider {
         return result
     }
 
+    /// 定位结果 → 取天气用的坐标。**只有真的拿到定位才返回坐标。**
+    ///
+    /// 为什么这条要单独抽出来、还要有单测盯着：这里曾经的写法是
+    /// 「定位超时/无信号 → 用北京坐标兜底，天气仍可显示（**不伪造城市名**）」，
+    /// 紧接着又把城市名显示成「北京」——注释声称不伪造，代码却在伪造。
+    /// 对不在北京的用户，天气卡会明确告诉他当地是「北京」，这比不显示天气更误导。
+    /// 现在拿不到定位就如实失败，UI 走「天气加载失败 / 重试」（重试会重新定位）。
+    static nonisolated func coordinate(from outcome: LocationOutcome) -> CLLocationCoordinate2D? {
+        if case .location(let loc) = outcome { return loc.coordinate }
+        return nil
+    }
+
     private static func fetchWeather() async -> WeatherResult {
         // 定位内部自带 6s 轮询超时（LocationService + 60s 定位缓存），此处直接 await，绝不挂起
         let outcome = await LocationService.shared.currentLocation()
-        let coordinate: CLLocationCoordinate2D
-        switch outcome {
-        case .location(let loc):
-            coordinate = loc.coordinate
-        case .denied:
-            // 用户明确拒绝定位：仍返回 .denied，UI 提示去系统设置开启
-            return .denied
-        case .failed:
-            // 定位超时/无信号：用北京坐标兜底，天气仍可显示（不伪造城市名）
-            coordinate = CLLocationCoordinate2D(latitude: 39.9042, longitude: 116.4074)
+        // 唯一的判据：只有真拿到定位才继续取天气
+        guard let coordinate = coordinate(from: outcome) else {
+            // 没拿到定位：区分「用户明确拒绝」（引导去系统设置）与「定位失败」（可重试）
+            if case .denied = outcome { return .denied }
+            return .failed
         }
         let coordKey = String(format: "%.4f,%.4f", coordinate.latitude, coordinate.longitude)
         if let cached = cachedSnapshot(coordKey: coordKey) { return .success(cached) }
 
-        // 真实定位成功才反地理编码城市名；兜底坐标直接显示"北京"
-        let isRealLocation: Bool
-        switch outcome {
-        case .location: isRealLocation = true
-        default: isRealLocation = false
-        }
-        let name: String
-        if isRealLocation {
-            name = await reverseGeocode(CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
-                ?? NSLocalizedString("当前位置", comment: "")
-        } else {
-            name = NSLocalizedString("北京", comment: "")
-        }
+        // 反地理编码城市名；失败回落「当前位置」——不再有「兜底坐标 → 显示北京」的分支
+        let name = await reverseGeocode(CLLocation(latitude: coordinate.latitude,
+                                                  longitude: coordinate.longitude))
+            ?? NSLocalizedString("当前位置", comment: "")
         do {
             var comps = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
             comps.queryItems = [
