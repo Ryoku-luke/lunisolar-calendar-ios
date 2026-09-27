@@ -99,7 +99,19 @@ public enum FestivalManager: Sendable {
         }
         return dict
     }()
+    /// 节气节日的强调色（清明/冬至等在 `festivals(on:)` 里现构造，不在这两张表里）
+    public static let solarTermAccentHex = "#15803D"
+
     private static let chuxi: Festival? = lunarFestivals.first { $0.name == "除夕" }
+
+    /// 全部会用作强调色的 hex —— 供对比度审计与单测遍历（含节气那一支）。
+    /// 与 `AccessibilityID.all` 同一定位：把「必须被逐一校验的取值」集中成一等公民，
+    /// 免得新增节日时漏掉对比度检查。
+    public static var allAccentHexes: [String] {
+        var set = Set((solarFestivals + lunarFestivals).map(\.accentHex))
+        set.insert(solarTermAccentHex)
+        return set.sorted()
+    }
 
     // MARK: - 查询接口
 
@@ -137,7 +149,7 @@ public enum FestivalManager: Sendable {
         if let term = SolarTermProvider.termOn(norm) {
             result.append(Festival(
                 name: term, emoji: "🌿", kind: .solarTerm,
-                month: m, day: d, accentHex: "#15803D"
+                month: m, day: d, accentHex: solarTermAccentHex
             ))
         }
 

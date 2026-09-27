@@ -46,6 +46,7 @@ struct SettingsView: View {
         let fs = FestivalManager.festivals(on: today, lunar: today.lunar)
         return fs.first.map { Color(hex: $0.accentHex) } ?? Color.appTint
     }
+    private var controlTint: Color { DayAccent(date: Date()).controlTint }
 
     var body: some View {
         // 不再自包 NavigationStack：push 场景继承外层导航（返回箭头天然存在）；
@@ -87,7 +88,7 @@ struct SettingsView: View {
         .toolbarBackground(.navBar, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         #endif
-        .tint(accent)
+        .tint(controlTint)
         .task {
             notifStatus = await EventService.shared.notificationAuthorizationStatus()
         }

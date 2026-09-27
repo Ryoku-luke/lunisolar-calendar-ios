@@ -46,6 +46,7 @@ struct EventEditView: View {
         let fs = FestivalManager.festivals(on: defaultDate, lunar: defaultDate.lunar)
         return fs.first.map { Color(hex: $0.accentHex) } ?? Color.appTint
     }
+    private var controlTint: Color { DayAccent(date: defaultDate).controlTint }
 
     init(editing: CalendarEvent?, defaultDate: Date = Date()) {
         self.original = editing
@@ -222,7 +223,7 @@ struct EventEditView: View {
                     .accessibilityIdentifier(AccessibilityID.editSave)
             }
         }
-        .tint(accent)
+        .tint(controlTint)
         // 编辑态底部红色删除（系统日历同款布局）
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isEditing {

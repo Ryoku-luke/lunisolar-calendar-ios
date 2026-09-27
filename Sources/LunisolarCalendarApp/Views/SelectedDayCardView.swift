@@ -5,7 +5,7 @@ import LunarCore
 struct SelectedDayCardView: View {
     let selectedDate: Date
     @Binding var isPanelExpanded: Bool
-    let accent: Color
+    let accent: DayAccent
     @Environment(EventStore.self) private var store
     /// 天气结果（由天气文字块上报）：与并排的大图标共享，避免两者各拉一份、状态不一致
     @State private var weatherSnapshot: WeatherSnapshot?
@@ -33,7 +33,7 @@ struct SelectedDayCardView: View {
                     RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
                         .fill(selectedDate.isToday ? Color.todayCapsule : Color.themeQuaternaryFill)
                     RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)
-                        .stroke(accent.opacity(0.16), lineWidth: AppTheme.Stroke.hair)
+                        .stroke(accent.decorative.opacity(0.16), lineWidth: AppTheme.Stroke.hair)
                 }
 
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
@@ -66,7 +66,7 @@ struct SelectedDayCardView: View {
                                     .font(AppTheme.Font.caption).fontWeight(.bold)
                                     .capsuleTag(fill: Color(hex: f.accentHex).opacity(0.16),
                                                 border: Color(hex: f.accentHex).opacity(0.25))
-                                    .foregroundStyle(Color(hex: f.accentHex))
+                                    .foregroundStyle(accent.controlTint)
                                     // P2-7：节日标签 spring 入场（缩放+淡入）
                                     .transition(.opacity.combined(with: .scale(scale: 0.85)))
                             }
@@ -111,11 +111,11 @@ struct SelectedDayCardView: View {
                     HStack(spacing: AppTheme.Spacing.md) {
                         ZStack {
                             Circle()
-                                .fill(accent.opacity(0.10))
+                                .fill(accent.decorative.opacity(0.10))
                                 .frame(width: 48, height: 48)
                             Image(systemName: "sparkles")
                                 .font(.system(size: 22, weight: .semibold))
-                                .foregroundStyle(accent)
+                                .foregroundStyle(accent.controlTint)
                                 // 装饰图标：旁边的空态文字已是完整语义
                                 .accessibilityHidden(true)
                         }
@@ -150,11 +150,11 @@ struct SelectedDayCardView: View {
                             HStack {
                                 Spacer()
                                 Text(isPanelExpanded ? String(localized: "收起") : String(format: NSLocalizedString("查看全部 %d 项 →", comment: ""), todaysEvents.count))
-                                    .font(AppTheme.Font.caption.weight(.bold)).foregroundStyle(accent)
+                                    .font(AppTheme.Font.caption.weight(.bold)).foregroundStyle(accent.controlTint)
                                 Spacer()
                             }
                             .frame(minHeight: AppTheme.Touch.chipHeight)
-                            .background(Capsule().fill(accent.opacity(0.10)))
+                            .background(Capsule().fill(accent.decorative.opacity(0.10)))
                             .contentShape(Capsule())
                         }.buttonStyle(.plain)
                             .pressableFeedback()
@@ -169,20 +169,20 @@ struct SelectedDayCardView: View {
                 } label: {
                     Label("新建日程", systemImage: "plus")
                 }
-                .buttonStyle(PrimaryActionButtonStyle(accent: accent))
+                .buttonStyle(PrimaryActionButtonStyle(accent: accent.controlFill))
 
                 NavigationLink {
                     DayDetailView(date: selectedDate, embedsInNavigationStack: false).environment(store)
                 } label: {
                     Label("查看黄历详情", systemImage: "doc.text.magnifyingglass")
                 }
-                .buttonStyle(SecondaryActionButtonStyle(accent: accent))
+                .buttonStyle(SecondaryActionButtonStyle(accent: accent.decorative))
             }
             .padding(.top, AppTheme.Spacing.md)
         }
         .padding(AppTheme.Spacing.lg)
         .glassCard(radius: 24, material: .regularMaterial,
-                   tint: accent, shadow: AppTheme.Shadow.raised)
+                   tint: accent.decorative, shadow: AppTheme.Shadow.raised)
         // 选中日摘要卡的稳定锚点（UI 测试用；卡片全屏只渲染一次）
         .accessibilityIdentifier(AccessibilityID.selectedSummary)
     }

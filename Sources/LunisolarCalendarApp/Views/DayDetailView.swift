@@ -17,11 +17,12 @@ struct DayDetailView: View {
     }
 
     private var isWide: Bool { hSizeClass == .regular }
-    /// 节日自适应强调色：整页 tint、按钮、强调线都跟随它
-    private var accent: Color {
-        let fs = FestivalManager.festivals(on: date, lunar: date.lunar)
-        return fs.first.map { Color(hex: $0.accentHex) } ?? Color.appTint
-    }
+    /// 当天节日强调色，按 P0-4 分两层：装饰层用节日原色，控件层用经对比度校验的变体。
+    /// 例：中秋当天装饰是金黄，但金底白字只有 1.97:1，控件层会自动压暗到达标。
+    private var dayAccent: DayAccent { DayAccent(date: date) }
+    private var accent: Color { dayAccent.decorative }
+    private var controlTint: Color { dayAccent.controlTint }
+    private var controlFill: Color { dayAccent.controlFill }
 
     var body: some View {
         if embedsInNavigationStack {
@@ -54,7 +55,7 @@ struct DayDetailView: View {
                 ToolbarItem(placement: .platformTopBarTrailing) {
                     Button { showAdd = true } label: {
                         Image(systemName: "plus.circle.fill")
-                            .font(.title3).foregroundStyle(accent)
+                            .font(.title3).foregroundStyle(controlTint)
                             .touchTarget(min: AppTheme.Touch.minTarget)
                     }
                     .accessibilityLabel("新建日程")
@@ -63,7 +64,7 @@ struct DayDetailView: View {
                 }
             }
             #endif
-            .tint(accent)
+            .tint(controlTint)
             .sheet(isPresented: $showAdd) {
                 // EventEditView 不自包 NavigationStack（push 继承外层导航），sheet 场景由这里补包
                 NavigationStack {
@@ -109,7 +110,7 @@ struct DayDetailView: View {
                                     .font(AppTheme.Font.caption.weight(.bold))
                                     .capsuleTag(fill: Color(hex: f.accentHex).opacity(0.18),
                                                 border: Color(hex: f.accentHex).opacity(0.25), hPad: 10, vPad: 5)
-                                    .foregroundStyle(Color(hex: f.accentHex))
+                                    .foregroundStyle(controlTint)
                             }
                         }
                     }
@@ -238,7 +239,7 @@ struct DayDetailView: View {
                     .font(AppTheme.Font.title3).foregroundStyle(Color.label)
                 Spacer()
                 if !todays.isEmpty {
-                    ChipLabel(title: String(format: NSLocalizedString("%d 项", comment: ""), todays.count), systemImage: "calendar.day.timeline.left", tint: accent)
+                    ChipLabel(title: String(format: NSLocalizedString("%d 项", comment: ""), todays.count), systemImage: "calendar.day.timeline.left", tint: controlTint)
                 }
             }
             if todays.isEmpty {
@@ -250,7 +251,7 @@ struct DayDetailView: View {
                             .frame(width: 52, height: 52)
                         Image(systemName: "sparkles")
                             .font(.system(size: 24, weight: .semibold))
-                            .foregroundStyle(accent)
+                            .foregroundStyle(controlTint)
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(String(localized: "这一天很空闲")).font(AppTheme.Font.bodyBold).foregroundStyle(Color.label)
@@ -279,7 +280,7 @@ struct DayDetailView: View {
             } label: {
                 Label(String(format: NSLocalizedString("新建%@", comment: ""), EventType.schedule.uiLabel), systemImage: "plus.circle.fill")
             }
-            .buttonStyle(PrimaryActionButtonStyle(accent: accent))
+            .buttonStyle(PrimaryActionButtonStyle(accent: controlFill))
         }
         .padding(AppTheme.Spacing.xl)
         .glassCard(radius: AppTheme.Radius.xl, material: .thinMaterial,
