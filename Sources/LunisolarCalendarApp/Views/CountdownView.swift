@@ -14,8 +14,12 @@ struct CountdownView: View {
     var onSelect: ((UUID) -> Void)? = nil
 
     @Environment(CountdownStore.self) private var store
-    @State private var showingEditor = false
-    @State private var editingEvent: CountdownEvent?
+    /// 编辑器目标：`nil` = 不呈现。合并自原先两个 sheet（`showingEditor` + `editingEvent`）——
+    /// 两者指向同一个编辑器，状态不同步时会互相顶掉（月历页已用 `MonthEventEditSheet` 解决过同类问题）。
+    @State private var editorTarget: CountdownEditorTarget?
+    /// 行内「上岛」失败提示。从 `CountdownRow` 提升到列表层：
+    /// 行本身是 `.accessibilityElement(children: .combine)`，把行动按钮放进行里会点不到。
+    @State private var islandProblem: IslandProblem?
 
     private let today = Date()
 
@@ -30,12 +34,11 @@ struct CountdownView: View {
                     message: NSLocalizedString("点击右上角添加生日、纪念日或重要日期", comment: ""),
                     actionTitle: NSLocalizedString("新建倒数日", comment: "")
                 ) {
-                    editingEvent = nil
-                    showingEditor = true
+                    editorTarget = .new
                 }
             } else {
                 ForEach(store.events) { event in
-                    CountdownRow(event: event, today: today)
+                    CountdownRow(event: event, today: today) { islandProblem = $0 }
                         // 卡片点击深链直达 / iPad Inspector 选中：高亮对应条目，帮助用户一眼定位
                         .listRowBackground((focusID == event.id || selectedID == event.id)
                                            ? Color.appTint.opacity(0.12) : nil)
@@ -43,7 +46,7 @@ struct CountdownView: View {
                         .onTapGesture {
                             // iPad：点击 = 选中（右栏 Inspector 跟随显示详情）；
                             // iPhone：点击 = 直接编辑（保持既有行为）
-                            if let onSelect { onSelect(event.id) } else { editingEvent = event }
+                            if let onSelect { onSelect(event.id) } else { editorTarget = .existing(event) }
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
@@ -58,7 +61,7 @@ struct CountdownView: View {
         .largeTitleBar()
         .toolbar {
             ToolbarItem(placement: .platformTopBarTrailing) {
-                Button { editingEvent = nil; showingEditor = true } label: {
+                Button { editorTarget = .new } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title3)
                 }
@@ -66,13 +69,61 @@ struct CountdownView: View {
                 .accessibilityLabel(NSLocalizedString("新建倒数日", comment: ""))
             }
         }
-        .sheet(isPresented: $showingEditor) {
-            CountdownEditor(event: editingEvent)
+        .sheet(item: $editorTarget) { target in
+            CountdownEditor(event: target.event)
         }
-        .sheet(item: $editingEvent) { event in
-            CountdownEditor(event: event)
+        // 结果反馈不再用模态 alert（UI_DESIGN_REVIEW P0-3）：行内 toast。
+        // 需要行动的场景（灵动岛未开启）在 toast 上带「去设置」按钮——不能退化成纯文案，
+        // 否则就是 DEVICE_TEST_CHECKLIST §1.2 明令禁止的「静默失败」。
+        .qingheToast(Binding(
+            get: { islandProblem.map { toast(for: $0) } },
+            set: { if $0 == nil { islandProblem = nil } }
+        ))
+    }
+
+    private func toast(for problem: IslandProblem) -> ToastMessage {
+        switch problem {
+        case .denied(let message):
+            return ToastMessage(kind: .warning, text: message,
+                                actionTitle: NSLocalizedString("去设置", comment: "")) {
+                islandProblem = nil
+                #if canImport(UIKit)
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+                #endif
+            }
+        case .failed(let message):
+            return ToastMessage(kind: .error, text: message)
         }
     }
+}
+
+/// 倒数日编辑器的目标：新建 / 编辑已有条目（一个枚举驱动一个 `.sheet(item:)`）
+enum CountdownEditorTarget: Identifiable {
+    case new
+    case existing(CountdownEvent)
+    var id: String {
+        switch self {
+        case .new:                 return "new"
+        case .existing(let event): return event.id.uuidString
+        }
+    }
+    /// nil = 新建
+    var event: CountdownEvent? {
+        switch self {
+        case .new:                 return nil
+        case .existing(let event): return event
+        }
+    }
+}
+
+/// 倒数日行「上岛」失败的两类原因
+enum IslandProblem: Equatable {
+    /// 系统「实时活动」或 App 内「时间胶囊」开关被关 → 要指引用户去开（带行动按钮）
+    case denied(message: String)
+    /// Activity.request 启动失败（系统预算等）→ 如实告知具体原因
+    case failed(message: String)
 }
 
 // MARK: - 行
@@ -80,16 +131,10 @@ struct CountdownView: View {
 private struct CountdownRow: View {
     let event: CountdownEvent
     let today: Date
+    /// 上岛失败的上报出口。呈现放在 CountdownView 那一层（理由见 `IslandProblem` 的注释）
+    var onIslandProblem: (IslandProblem) -> Void
     /// 该倒数日是否已上灵动岛（Live Activity 活跃）
     @State private var isOnIsland = false
-    /// 系统「实时活动」权限被关闭 / App 内时间胶囊开关被关闭（设置→通知→清和日历）
-    @State private var showLADeniedAlert = false
-    /// 未开启的具体原因文案（区分系统权限与 App 内开关）
-    @State private var laDeniedMessage = ""
-    /// Activity.request 启动失败（预算/系统限制等）
-    @State private var showLAFailedAlert = false
-    /// 启动失败的具体错误（如实展示，便于定位）
-    @State private var lastLAError = ""
 
     var body: some View {
         HStack(spacing: AppTheme.Spacing.lg) {
@@ -150,29 +195,6 @@ private struct CountdownRow: View {
         .accessibilityLabel("\(event.title) \(event.displayText(today: today))")
         .onAppear { refreshIslandState() }
         .onChange(of: event) { _, _ in refreshIslandState() }
-        // 灵动岛未开启：区分"系统权限被关"与"App 内时间胶囊开关被关"，给出对应指引
-        .alert("灵动岛未开启", isPresented: $showLADeniedAlert) {
-            Button("去设置") {
-                #if canImport(UIKit)
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
-                #endif
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text(laDeniedMessage.isEmpty
-                 ? NSLocalizedString("请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。", comment: "")
-                 : laDeniedMessage)
-        }
-        // 启动失败（系统预算等）：如实告知具体原因
-        .alert("上岛失败", isPresented: $showLAFailedAlert) {
-            Button("好", role: .cancel) {}
-        } message: {
-            Text(lastLAError.isEmpty
-                 ? NSLocalizedString("暂时无法启动实时活动，请稍后重试。", comment: "")
-                 : lastLAError)
-        }
     }
 
     private func refreshIslandState() {
@@ -189,17 +211,17 @@ private struct CountdownRow: View {
             isOnIsland = false
         case .systemDenied:
             // 系统「实时活动」总开关关闭（用户可在 设置→通知→清和日历 重新开启）
-            laDeniedMessage = NSLocalizedString("请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。", comment: "")
-            showLADeniedAlert = true
+            onIslandProblem(.denied(message: NSLocalizedString(
+                "请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。", comment: "")))
         case .appSettingDisabled:
             // App 内「时间胶囊」总开关关闭（设置 → 提醒与时间胶囊）
-            laDeniedMessage = NSLocalizedString(
-                "「时间胶囊」已关闭。请在 App 内「我的 → 提醒与时间胶囊」中开启后重试。", comment: "")
-            showLADeniedAlert = true
+            onIslandProblem(.denied(message: NSLocalizedString(
+                "「时间胶囊」已关闭。请在 App 内「我的 → 提醒与时间胶囊」中开启后重试。", comment: "")))
         case .failed(let message):
             // 启动失败（系统预算 / 权限窗口 / 设备限制等）：如实展示具体错误以便定位
-            lastLAError = message
-            showLAFailedAlert = true
+            onIslandProblem(.failed(message: message.isEmpty
+                ? NSLocalizedString("暂时无法启动实时活动，请稍后重试。", comment: "")
+                : message))
         }
     }
 }
@@ -214,7 +236,8 @@ struct CountdownEditor: View {
     @State private var kind: CountdownKind = .countdown
     @State private var emoji = "📅"
     @State private var note = ""
-    @State private var showOutOfRangeAlert = false
+    /// 越界提示（行内，不再用模态 alert；见 `save()` 的说明）
+    @State private var rangeHint: String?
 
     private let editing: CountdownEvent?
     private let emojis = ["📅", "🎂", "💍", "🎓", "🏖️", "✈️", "🏠", "🎉", "❤️", "🎯", "📝", "🎁"]
@@ -275,6 +298,18 @@ struct CountdownEditor: View {
                     }
                 }
 
+                // 越界提示：行内文案，不再用模态 alert（UI_DESIGN_REVIEW P0-3）。
+                // 这是「极不可能发生」的程序级兜底（DatePicker 已 in: range），
+                // 为它弹一个需要点「好」的模态不划算。
+                if let rangeHint {
+                    Section {
+                        Label(rangeHint, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(Color.systemOrange)
+                            .accessibilityIdentifier(AccessibilityID.stateError)
+                    }
+                }
+
                 Section("备注（可选）") {
                     TextField("添加备注", text: $note, axis: .vertical)
                         .lineLimit(2...4)
@@ -284,12 +319,6 @@ struct CountdownEditor: View {
                 ? NSLocalizedString("新建倒数日", comment: "")
                 : NSLocalizedString("编辑倒数日", comment: ""))
             .inlineTitleBar()
-            .alert("日期超出支持范围", isPresented: $showOutOfRangeAlert) {
-                Button("好", role: .cancel) { }
-            } message: {
-                Text(String(format: NSLocalizedString("请将日期调整到 %d 年 1 月 1 日 — %d 年 12 月 31 日之间。", comment: ""),
-                            ChineseCalendar.minYear, ChineseCalendar.maxYear))
-            }
             .toolbar {
                 ToolbarItem(placement: .platformTopBarTrailing) {
                     Button("保存") { save() }
@@ -306,7 +335,8 @@ struct CountdownEditor: View {
     private func save() {
         // 范围兜底（即使 DatePicker 已 in: range，极端场景再做一次程序级校验）
         guard allowedDateRange.contains(date) else {
-            showOutOfRangeAlert = true
+            rangeHint = String(format: NSLocalizedString("请将日期调整到 %d 年 1 月 1 日 — %d 年 12 月 31 日之间。", comment: ""),
+                               ChineseCalendar.minYear, ChineseCalendar.maxYear)
             return
         }
         let event = CountdownEvent(

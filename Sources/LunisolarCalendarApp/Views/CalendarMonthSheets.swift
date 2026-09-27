@@ -5,26 +5,26 @@ import SwiftUI
 // 审查报告 §74 禁止「用大量 .sheet 堆叠**导航**」，故把月历页全部 sheet 集中到此文件并逐条说明分工：
 // - showDateJump / MonthEventEditSheet：真正的**模态**（选日期、长按日期格新建、
 //   深链打开某事件编辑），不是导航，保留 sheet；
-// - MonthAuxiliaryPage：是导航（倒数日 / 设置），但只服务于**程序化入口**（深链、iPad 菜单），
+// - MonthAuxiliaryPage：是导航（只剩倒数日），但只服务于**程序化入口**（深链）。
 //   iPhone 上的常规入口走工具栏菜单里的 NavigationLink。
 //   iPad 侧刻意用 sheet 而非 push：侧栏内 push 会被挤在窄列
 //   （见 CalendarMonthView 工具栏菜单的注释）。
 // 曾经还有一个 showAIAssistant 的 sheet，全仓无处置为 true（AI 助手在 iPhone 是独立 Tab、
 // iPad 没有该节），属死代码，已删除。
+// 同理，`.settings` 辅助页也已删除：它唯一的赋值点是 iPad 月历菜单项，而该菜单项随
+// UI_DESIGN_REVIEW P0-2 的入口收敛被删（iPad 的「设置」归侧栏独有），深链里也没有设置路由。
 //
 // 5 个布尔/可选状态收敛为 showDateJump + auxiliaryPage + eventEditSheet 三个 item，
 // 其中后两个为枚举驱动：同一时刻至多呈现一类目标，不会再出现两个 sheet 争抢弹出的组合爆炸。
 
-/// 程序化入口的辅助页（导航性质：倒数日 / 设置）
+/// 程序化入口的辅助页（导航性质：倒数日）
 enum MonthAuxiliaryPage: Identifiable {
     /// focusID：卡片点击深链进来时高亮对应条目（枚举值随 sheet 关闭销毁，
     /// 下次从菜单进入携带 nil，天然实现旧的「关闭后重置」语义）
     case countdown(focusID: UUID?)
-    case settings
     var id: String {
         switch self {
         case .countdown: return "countdown"
-        case .settings: return "settings"
         }
     }
 }
@@ -68,9 +68,6 @@ struct MonthSheetsModifier: ViewModifier {
                     case .countdown(let focusID):
                         // CountdownView 的列表自身不包导航栈，sheet 中补一层
                         CountdownView(focusID: focusID)
-                    case .settings:
-                        // SettingsView 自身不再包导航栈，sheet 场景补一层（push 场景继承外层导航）
-                        SettingsView().environment(store)
                     }
                 }
             }

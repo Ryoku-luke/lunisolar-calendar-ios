@@ -21,8 +21,6 @@ struct SettingsView: View {
     @State var notifStatus: NotificationAuthStatus = .unavailable
     @State var showImportPicker = false
     @State var importingFileType: ImportedFileType = .ics
-    @State var importedResult: ImportMergeResult?
-    @State var showImportResult = false
     @State var showClearConfirm = false
     @State var toast: ToastMessage? = nil
     @State var conflictPolicy: ImportConflictPolicy = .keepLatest
@@ -105,9 +103,6 @@ struct SettingsView: View {
             fileType: importingFileType,
             onResult: { handleImportResult($0, fileType: importingFileType) }
         ))
-        .alert(NSLocalizedString("导入结果", comment: ""), isPresented: $showImportResult) {
-            Button(NSLocalizedString("好", comment: "")) {}
-        } message: { importResultAlertMessage }
         .alert(NSLocalizedString("导入前：冲突处理策略", comment: ""), isPresented: $showConflictPolicy) {
             conflictPolicyAlertButtons
         } message: { conflictPolicyAlertMessage }
@@ -128,8 +123,7 @@ struct SettingsView: View {
         } message: {
             Text(NSLocalizedString("此操作不可恢复。", comment: ""))
         }
-        .overlay(alignment: .top) { toastOverlayContent }
-        .animation(AppTheme.Motion.toast, value: toast)
+        .qingheToast($toast)
     }
 
     func storeCount(of type: EventType) -> Int {
@@ -239,22 +233,6 @@ struct SettingsView: View {
                 .font(AppTheme.Font.subheadline.weight(.semibold))
                 .foregroundStyle(Color.secondaryLabel)
                 .lineLimit(1)
-        }
-    }
-
-    @ViewBuilder
-    private var toastOverlayContent: some View {
-        if let t = toast {
-            ToastBannerView(message: t)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .padding(.top, 12)
-                .padding(.horizontal, AppTheme.Spacing.md)
-                .onAppear {
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 2_200_000_000)
-                        if toast?.id == t.id { toast = nil }
-                    }
-                }
         }
     }
 

@@ -32,6 +32,8 @@ public enum AccessibilityID {
     public static let stateEmpty = "state.empty"
     public static let stateError = "state.error"
     public static let stateToast = "state.toast"
+    /// toast 上的行动按钮（如倒数日的「去设置」）：不弹模态也要能把下一步交给用户
+    public static let toastAction = "state.toast.action"
     // iPad 侧栏（SwiftUI 的 List(selection:) 行在 XCUITest 里未必暴露成 Button，
     // 按标识定位才不会因元素类型变化而失配）
     public static let iPadSidebarCalendar = "ipad.sidebar.calendar"
@@ -61,7 +63,7 @@ public enum AccessibilityID {
         dayDetailNewEvent,
         editSave, editDelete, editTitle,
         aiInput, aiParse, aiConfirm, aiCancel, aiDone,
-        stateEmpty, stateError, stateToast,
+        stateEmpty, stateError, stateToast, toastAction,
         settingsWeekStart, settingsSyncToggle, settingsSyncStatus,
         iPadSidebarCalendar, iPadSidebarYear, iPadSidebarAgenda,
         iPadSidebarCountdown, iPadSidebarSettings, iPadInspectorCountdown

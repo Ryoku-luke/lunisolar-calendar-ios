@@ -171,15 +171,20 @@ struct AIAssistantView: View {
     @State private var pendingCommand: AIStructuredCommand?
     /// 行内成功提示（创建 / 删除 / 修改完成）：2 秒后自动消失，替代模态 alert
     @State private var completedMessage: String?
-    @State private var showError = false
-    @State private var errorText = ""
+    /// 行内失败提示（UI_DESIGN_REVIEW P0-3）：原先是「无法解析 → 好」的模态 alert。
+    /// 解析失败往往只需改几个字重试，模态要点两次才回到输入框，故与成功提示同区呈现。
+    @State private var inlineError: String?
     @State private var inputFocused: Bool = false
 
     var body: some View {
         NavigationStack {
             List {
-                // 行内成功提示：替代「已创建 → 好」这类模态 alert（少两次点击，也不打断连续输入）
-                if let completedMessage {
+                // 行内提示区：成功与失败同一位置，替代模态 alert（少两次点击，也不打断连续输入）
+                if let inlineError {
+                    Section {
+                        QingheToast(icon: "xmark.circle.fill", message: inlineError, tint: .systemRed)
+                    }
+                } else if let completedMessage {
                     // 统一行内提示（报告 §42：同一件事不要既 Toast 又 Alert）
                     Section {
                         QingheToast(message: completedMessage)
@@ -397,11 +402,6 @@ struct AIAssistantView: View {
                 }
             }
             #endif
-            .alert(NSLocalizedString("无法解析", comment: "AI助手"), isPresented: $showError) {
-                Button(NSLocalizedString("好", comment: ""), role: .cancel) {}
-            } message: {
-                Text(errorText)
-            }
         }
     }
 
@@ -418,6 +418,9 @@ struct AIAssistantView: View {
         queryDate = nil
         destructiveTarget = nil
         destructiveLabel = nil
+        // 行内提示也一起清：上一轮的红字不该继续挂在新一轮的输入旁边
+        completedMessage = nil
+        inlineError = nil
         pendingCommand = nil
 
         // 收起键盘：否则预览 / 结果区被键盘挡在屏幕下方，用户会以为「点了没反应」
@@ -566,6 +569,7 @@ struct AIAssistantView: View {
 
     /// 行内成功提示：2 秒后自动消失（不打断连续输入，也省掉模态的两次点击）
     private func showSuccess(_ text: String) {
+        inlineError = nil
         completedMessage = text
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
@@ -573,10 +577,9 @@ struct AIAssistantView: View {
         }
     }
 
-    /// 结构化错误统一展示（文案来自 AICommandError.message）
+    /// 结构化错误统一展示（文案来自 AICommandError.message），行内呈现而非模态
     private func present(_ error: AICommandError) {
-        errorText = error.message
-        showError = true
+        inlineError = error.message
     }
 }
 #endif

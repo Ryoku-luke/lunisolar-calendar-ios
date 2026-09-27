@@ -14,8 +14,10 @@ struct DateJumpView: View {
     // P2 修复：快捷跳转越界或手动拼日期落入 1900/2100 之外时，
     // 不 dismiss 静默 apply 假数据（否则 lunarDate(from:) 返回
     // Gregorian 镜像——用户看得到假『农历几月几日』在界面误导），
-    // 应该弹错误提示、留在跳转页让用户重新选或回到今天。
-    @State private var showOutOfRangeAlert = false
+    // 应该给出错误提示、留在跳转页让用户重新选。
+    // 提示形态由模态 alert 改为行内文案（UI_DESIGN_REVIEW P0-3）：它不是「不可逆二次确认」，
+    // 而 alert 里那个「回到今天」本页「快捷跳转」区就有一个（下方 Button），删弹窗不损失任何能力。
+    @State private var rangeHint: String?
     /// 年视图入口：全年总览，点击月份直接跳转
     @State private var showYearOverview = false
 
@@ -58,6 +60,16 @@ struct DateJumpView: View {
                     }
                 }
 
+                // 越界提示：行内文案，不再用模态 alert（理由见本文件顶部的注释）
+                if let rangeHint {
+                    Section {
+                        Label(rangeHint, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(Color.systemOrange)
+                            .accessibilityIdentifier(AccessibilityID.stateError)
+                    }
+                }
+
                 Section {
                     Label(String(format: NSLocalizedString("支持范围：%d 年 1 月 1 日 — %d 年 12 月 31 日", comment: ""), ChineseCalendar.minYear, ChineseCalendar.maxYear),
                           systemImage: "calendar.badge.clock")
@@ -76,23 +88,6 @@ struct DateJumpView: View {
             }
             .navigationTitle("跳转到日期")
             .inlineTitleBar()
-            .alert("暂不支持该年份",
-                   isPresented: $showOutOfRangeAlert) {
-                Button("回到今天", role: .cancel) {
-                    targetDate = today
-                    dismiss()
-                }
-                Button("留在当前页", role: .none) {
-                    // 用户自行重新调整日期 picker
-                }
-            } message: {
-                // 拆成两行而不是在一个 key 里塞 `\n`：字符串目录里的换行键既难翻译也易出错
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(String(format: NSLocalizedString("清和日历支持的日期范围为 %d 年 1 月至 %d 年 12 月。", comment: ""),
-                                ChineseCalendar.minYear, ChineseCalendar.maxYear))
-                    Text(NSLocalizedString("请在此范围内选择，或点击上方「回到今天」直接返回。", comment: ""))
-                }
-            }
             .toolbar {
                 ToolbarItem(placement: .platformTopBarTrailing) {
                     Button("跳转") { jumpToDate() }
@@ -122,16 +117,22 @@ struct DateJumpView: View {
         return cal.range(of: .day, in: .month, for: date)?.count ?? 31
     }
 
+    /// 越界提示文案（复用既有本地化键，四语言都在）
+    private var outOfRangeText: String {
+        String(format: NSLocalizedString("清和日历支持的日期范围为 %d 年 1 月至 %d 年 12 月。", comment: ""),
+               ChineseCalendar.minYear, ChineseCalendar.maxYear)
+    }
+
     private func jumpToDate() {
         var dc = DateComponents()
         dc.year = year; dc.month = month; dc.day = day
         guard let date = cal.date(from: dc) else {
-            showOutOfRangeAlert = true
+            rangeHint = outOfRangeText
             return
         }
-        // 范围校验：不支持的日期 → 留在弹窗提示，不 apply 假数据
+        // 范围校验：不支持的日期 → 留在本页行内提示，不 apply 假数据
         guard ChineseCalendar.isSupported(date) else {
-            showOutOfRangeAlert = true
+            rangeHint = outOfRangeText
             return
         }
         targetDate = date
@@ -142,7 +143,7 @@ struct DateJumpView: View {
         // 快捷跳转同样做范围校验（1900-01 点 上个月→1899，2100 点 一年后→2101
         //   都会越过 LunarDate 的数据边界）。
         guard ChineseCalendar.isSupported(date) else {
-            showOutOfRangeAlert = true
+            rangeHint = outOfRangeText
             return
         }
         targetDate = date

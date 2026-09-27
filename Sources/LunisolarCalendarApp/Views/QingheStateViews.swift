@@ -234,16 +234,21 @@ public struct QingheErrorView: View {
 public struct QingheToast: View {
     public var icon: String
     public var message: String
+    /// 语义色：nil = App 主色（成功态默认），失败/警告传 systemRed / systemOrange。
+    /// 用 Optional 而不是 `= .appTint` 做默认值：默认实参必须是 public 可见的符号，
+    /// 而 `Color.appTint` 是模块内的 internal 扩展，写进默认值会编译失败。
+    public var tint: Color?
 
-    public init(icon: String = "checkmark.circle.fill", message: String) {
+    public init(icon: String = "checkmark.circle.fill", message: String, tint: Color? = nil) {
         self.icon = icon
         self.message = message
+        self.tint = tint
     }
 
     public var body: some View {
         Label(message, systemImage: icon)
             .font(AppTheme.Font.subheadline.weight(.semibold))
-            .foregroundStyle(Color.appTint)
+            .foregroundStyle(tint ?? Color.appTint)
             .accessibilityIdentifier(AccessibilityID.stateToast)
     }
 }

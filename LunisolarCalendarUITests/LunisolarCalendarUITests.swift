@@ -189,11 +189,14 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertTrue(parseButton.waitForExistence(timeout: 5), "应有「解析并预览」按钮")
         parseButton.tap()
 
-        // 期望：要么出现预览（含确认创建），要么弹出明确的错误提示；绝不能毫无反应
+        // 期望：要么出现预览（含确认创建），要么给出明确的错误提示；绝不能毫无反应。
+        // 错误自 P0-3 起改为行内 QingheToast（不再弹模态），三种形态都要认——
+        // 否则「错误表现得更轻」会被误判成「毫无反应」。
         let preview = element(app, ID.aiConfirm)
         let previewAppeared = preview.waitForExistence(timeout: 6)
+        let toastAppeared = element(app, ID.stateToast).exists
         let alertAppeared = app.alerts.firstMatch.exists
-        if !previewAppeared && !alertAppeared {
+        if !previewAppeared && !toastAppeared && !alertAppeared {
             XCTFail("""
                 点「解析并预览」后必须给出结果（预览或明确错误），不能毫无反应。
                 当前界面树：
@@ -245,8 +248,12 @@ final class LunisolarCalendarUITests: XCTestCase {
         //    （历史 bug：onTapGesture 时代这个按钮的点击会被整页手势吞掉）
         app.staticTexts["用一句话描述"].firstMatch.tap()   // 确保先失焦
         element(app, ID.aiParse).tap()
-        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5)
-                      || element(app, ID.aiConfirm).exists,
+        // 「必须有反应」的三种合法形态：预览卡 / 行内错误 / 旧式模态 alert。
+        // 解析失败自 P0-3 起改为行内 QingheToast（不再弹模态），这里必须一起认，
+        // 否则这条断言会因为「错误表现得更轻」而误报失败。
+        let reacted = element(app, ID.aiConfirm).waitForExistence(timeout: 5)
+            || element(app, ID.stateToast).waitForExistence(timeout: 5)
+        XCTAssertTrue(reacted || app.alerts.firstMatch.exists,
                       "点「解析并预览」必须有反应（预览或明确错误）")
     }
 
@@ -437,5 +444,31 @@ final class LunisolarCalendarUITests: XCTestCase {
         let cancel = app.buttons["取消"].firstMatch
         XCTAssertTrue(cancel.waitForExistence(timeout: 5),
                       "点行动按钮应打开倒数日编辑器（出现「取消」）")
+    }
+
+    // MARK: - Flow 8：工具栏入口收敛（UI_DESIGN_REVIEW P0-2）
+
+    /// 同一功能只留一条主路径（Phase 1 的验收项之一）：
+    /// - 「回到今天」只留工具栏按钮，菜单里不再重复；
+    /// - iPhone 的「设置」由底部「我的」Tab 承担，菜单里不再重复；
+    /// - 同时锁住「全部日程 / 倒数日」**仍在**菜单里——它们是 iPhone 上唯一的入口
+    ///   （Flow 6 / Flow 7 都从这里进），误删等于让功能消失。
+    func testFlow8_monthMenuHasSingleEntryPerFeature() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "菜单按 isIPadSplit 分流；iPad 的权威入口是侧栏，由 Flow 4 覆盖")
+        let app = launchApp()
+
+        let menu = element(app, ID.monthMenu)
+        XCTAssertTrue(menu.waitForExistence(timeout: 10), "日历页应有工具栏入口菜单")
+        menu.tap()
+
+        for title in ["跳转到日期", "全部日程", "倒数日"] {
+            XCTAssertTrue(app.buttons[title].waitForExistence(timeout: 5),
+                          "入口菜单应保留「\(title)」（iPhone 上它是唯一入口）")
+        }
+        XCTAssertFalse(app.buttons["回到今天"].exists,
+                       "「回到今天」不应在菜单里重复——工具栏「今天」按钮已是唯一入口")
+        XCTAssertFalse(app.buttons["设置"].exists,
+                       "「设置」不应在菜单里重复——底部「我的」Tab 已承担")
     }
 }

@@ -71,15 +71,6 @@ extension SettingsView {
     // MARK: - Alert / Overlay
 
     @ViewBuilder
-    var importResultAlertMessage: some View {
-        if let r = importedResult {
-            Text(importSummaryText(r))
-        } else {
-            Text("导入完成")
-        }
-    }
-
-    @ViewBuilder
     var conflictPolicyAlertButtons: some View {
         ForEach(ImportConflictPolicy.allCases, id: \.self) { p in
             Button(conflictPolicyButtonTitle(p)) {
@@ -124,18 +115,17 @@ extension SettingsView {
     // MARK: - 导入操作
 
     func handleImportResult(_ result: Result<URL, Error>, fileType: ImportedFileType) {
+        // 结果**只**走行内 toast（UI_DESIGN_REVIEW P0-3）。
+        // 原先每条分支都同时置 `showImportResult = true` 与 `toast = ...`，
+        // 同一件事既弹模态又弹 banner——正是报告 §42「同一件事不要既 Toast 又 Alert」禁止的重复播报。
         switch result {
         case .success(let url):
             guard url.startAccessingSecurityScopedResource() else {
                 toast = .init(kind: .error, text: NSLocalizedString("导入失败：无权限读取该文件，请重新选择", comment: ""))
-                importedResult = .init(invalid: 1)
-                showImportResult = true
                 return
             }
             defer { url.stopAccessingSecurityScopedResource() }
             guard let content = try? String(contentsOf: url, encoding: .utf8) else {
-                importedResult = .init(invalid: 1)
-                showImportResult = true
                 toast = .init(kind: .error, text: NSLocalizedString("导入失败：文件无法读取或编码不支持（请使用 UTF-8 文本）", comment: ""))
                 return
             }
@@ -146,24 +136,19 @@ extension SettingsView {
             }
             // P0 收口：批量合并导入走 EventService（内部转 EventStore.merge）
             let r = EventService.shared.mergeImportedEvents(incoming, policy: conflictPolicy, skipSync: true)
-            importedResult = r
-            showImportResult = true
             // 新增/更新的事件如果是 reminder，需要被挂到 UNUserNotificationCenter。
             // 由于本 merge 是 O(N) 数据导入，用 rescheduleAllReminders（内部 cancelAll+重排）一次性刷新全局
             if r.added + r.updated > 0 {
                 Task { @MainActor in
                     EventService.shared.rescheduleAllReminders()
                 }
-                toast = .init(kind: .success,
-                              text: String(format: NSLocalizedString("导入完成：新增 %d · 更新 %d", comment: ""),
-                                           r.added, r.updated))
-            } else {
-                toast = .init(kind: .warning, text: NSLocalizedString("未导入任何新事件（已有或数据无效）", comment: ""))
             }
+            // 摘要用完整的 `importSummaryText`（含「保留本地 N / 无效 N」与冲突提示），
+            // 而不是原先那句只报新增/更新的短文案——删掉模态后，这里是用户唯一能看到导入细节的地方。
+            toast = .init(kind: r.added + r.updated > 0 ? .success : .warning,
+                          text: importSummaryText(r))
         case .failure(let error):
             AppLogger.app.error("导入失败: \(error)")
-            importedResult = .init(invalid: 1)
-            showImportResult = true
             toast = .init(kind: .error,
                           text: String(format: NSLocalizedString("导入失败：%@", comment: ""),
                                        error.localizedDescription))
@@ -212,10 +197,7 @@ extension SettingsView {
 
         // P0 收口：批量合并导入走 EventService（内部转 EventStore.merge）
         let r = EventService.shared.mergeImportedEvents(events, policy: conflictPolicy, skipSync: true)
-        // 系统导入的结果用**行内 toast** 呈现（见下），不走「导入结果」alert：
-        // 原先这里还给 importedResult 赋值、紧接着 showImportResult = false，
-        // 那个状态永远不会被展示（死赋值），已移除；这行只做防御性收起。
-        showImportResult = false
+        // 系统导入的结果只走行内 toast（「导入结果」alert 已随 P0-3 一并删除）
         // 系统导入成功后重排所有 pending 通知，把新增 reminder 挂到 UNUserNotificationCenter
         if r.added + r.updated > 0 {
             Task { @MainActor in

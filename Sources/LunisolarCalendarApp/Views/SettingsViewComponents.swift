@@ -43,6 +43,17 @@ struct ToastMessage: Identifiable, Equatable {
     var id = UUID()
     var kind: Kind
     var text: String
+    /// 可选行动按钮（例如倒数日的「去设置」）。带行动的 toast 停留更久，点行动即收起。
+    /// **需要行动的场景不能退回纯文案 toast**——那等于把用户该走的下一步藏起来
+    /// （`docs/DEVICE_TEST_CHECKLIST.md` §1.2 明确要求「不是静默失败」）。
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
+
+    // 手写 Equatable：成员里有闭包，合成实现要求闭包可比较（不可能）。
+    // 只比呈现相关字段，闭包身份不参与——`.animation(value:)` 与自动消失判据用的都是这些。
+    static func == (lhs: ToastMessage, rhs: ToastMessage) -> Bool {
+        lhs.id == rhs.id && lhs.kind == rhs.kind && lhs.text == rhs.text && lhs.actionTitle == rhs.actionTitle
+    }
 }
 
 struct ToastBannerView: View {
@@ -64,6 +75,13 @@ struct ToastBannerView: View {
                 .foregroundStyle(Color.label)
                 .lineLimit(3)
             Spacer(minLength: 8)
+            if let title = message.actionTitle, let action = message.action {
+                Button(title) { action() }
+                    .font(AppTheme.Font.subheadline.weight(.semibold))
+                    .foregroundStyle(bgAccent)
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(AccessibilityID.toastAction)
+            }
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
         .padding(.vertical, AppTheme.Spacing.md)
@@ -71,6 +89,8 @@ struct ToastBannerView: View {
                    material: .thickMaterial,
                    tint: bgAccent,
                    shadow: AppTheme.Shadow.floating)
+        // 统一锚点：UI 测试断言「出现了反馈」只认这一个标识，不必分辨是哪个页面的 toast
+        .accessibilityIdentifier(AccessibilityID.stateToast)
     }
 
     private var iconName: String {
@@ -87,6 +107,41 @@ struct ToastBannerView: View {
         case .warning: return .systemOrange
         case .error:   return .systemRed
         }
+    }
+}
+
+/// 统一 toast 宿主：顶部浮层 + 进出场动画 + 自动消失。
+/// 抽成 modifier 是因为要被多个页面共用（设置 / 倒数日 / 跳转到日期）——
+/// 复制多份的结果必然是几份不同的计时与动画。
+struct QingheToastHost: ViewModifier {
+    @Binding var toast: ToastMessage?
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .top) {
+                if let t = toast {
+                    ToastBannerView(message: t)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.top, 12)
+                        .padding(.horizontal, AppTheme.Spacing.md)
+                        .onAppear {
+                            Task { @MainActor in
+                                // 带行动按钮的多给几秒：用户要先读完才知道点不点
+                                let ns: UInt64 = t.actionTitle == nil ? 2_200_000_000 : 6_000_000_000
+                                try? await Task.sleep(nanoseconds: ns)
+                                if toast?.id == t.id { toast = nil }
+                            }
+                        }
+                }
+            }
+            .animation(AppTheme.Motion.toast, value: toast)
+    }
+}
+
+extension View {
+    /// 挂上统一 toast 浮层（传 nil 即不显示）
+    func qingheToast(_ toast: Binding<ToastMessage?>) -> some View {
+        modifier(QingheToastHost(toast: toast))
     }
 }
 

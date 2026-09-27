@@ -127,22 +127,19 @@ struct CalendarMonthView: View {
             }
             ToolbarItem(placement: .platformTopBarTrailing) {
                 Menu {
-                    Button { withAnimation(AppTheme.Motion.screen) {
-                        currentMonth = Date().firstDayOfMonth; selectedDate = Date()
-                    } } label: { Label("回到今天", systemImage: "location.circle") }
+                    // 入口收敛（UI_DESIGN_REVIEW P0-2）：同一功能只留一条主路径。
+                    // - 「回到今天」已由左侧工具栏按钮承担，菜单里删掉；
+                    // - iPhone 的「设置」由底部「我的」Tab 承担；
+                    // - iPad 的「倒数日 / 设置」由侧栏承担（本页在 iPad 只是月历节）。
+                    // 保留 iPhone 的「倒数日」：它是 iPhone 上**唯一**的入口（没有对应 Tab，
+                    // 只有卡片深链能绕开菜单），删掉等于让这个功能消失。
                     Button { showDateJump = true } label: { Label("跳转到日期", systemImage: "calendar.badge.clock") }
-                    Divider()
-                    if isIPadSplit {
-                        // iPad 侧栏内 push 会被挤在窄列，改为 sheet 弹出
-                        Button { auxiliaryPage = .countdown(focusID: nil) } label: { Label("倒数日", systemImage: "hourglass") }
-                        Button { auxiliaryPage = .settings } label: { Label("设置", systemImage: "gearshape") }
-                    } else {
+                    if !isIPadSplit {
+                        Divider()
                         // 全部日程：统一管理页（搜索 / 筛选 / 批量查看）
                         NavigationLink { AllEventsView().environment(store) }
                             label: { Label("全部日程", systemImage: "list.bullet.rectangle") }
                         NavigationLink { CountdownView() } label: { Label("倒数日", systemImage: "hourglass") }
-                        NavigationLink { SettingsView().environment(store) }
-                            label: { Label("设置", systemImage: "gearshape") }
                     }
                 } label: {
                     Image(systemName: "slider.horizontal.3")
