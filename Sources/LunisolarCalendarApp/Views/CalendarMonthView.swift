@@ -82,7 +82,6 @@ struct CalendarMonthView: View {
         let dayAccent = dayAccentForToday
         let accent = dayAccent.decorative
         let controlTint = dayAccent.controlTint
-        let controlFill = dayAccent.controlFill
         return ZStack {
             // 节日自适应柔和渐变背景（春节自动偏红、中秋偏金、平日系统灰）
             festiveBackground(accent: accent)
