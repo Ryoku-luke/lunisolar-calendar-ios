@@ -404,8 +404,7 @@ struct AllEventsView: View {
     // MARK: - 文案
 
     private func dayHeader(_ day: Date) -> String {
-        let text = day.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted,
-                                                  locale: Locale(identifier: "zh_Hans_CN")))
+        let text = day.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted))
         return QingheCalendarContext.userCalendar.isDateInToday(day)
             ? String(format: NSLocalizedString("%@（今天）", comment: ""), text)
             : text

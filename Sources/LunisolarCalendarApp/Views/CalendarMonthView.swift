@@ -226,7 +226,7 @@ struct CalendarMonthView: View {
     /// 预构建某月网格模型写入缓存（滑动切换零卡顿的关键）
     private func monthColumn(accent: Color) -> some View {
         VStack(spacing: 0) {
-            monthHeader()
+            monthHeader(accent: accent)
                 .padding(.horizontal, AppTheme.Spacing.xl)
                 .padding(.top, 8).padding(.bottom, AppTheme.Spacing.sm)
             solarTermBar(accent: accent)
@@ -306,7 +306,7 @@ struct CalendarMonthView: View {
         }
     }
 
-    private func monthHeader() -> some View {
+    private func monthHeader(accent: Color) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.md) {
             // 月份标题可点击 → 弹出日期跳转（主流日历交互：点标题选月份/年份）
             Button {
@@ -338,11 +338,11 @@ struct CalendarMonthView: View {
             HStack(spacing: AppTheme.Spacing.sm) {
                 Button {
                     changeMonth(by: -1)
-                } label: { chevronButton("chevron.left") }
+                } label: { chevronButton("chevron.left", accent: accent) }
                     .pressableFeedback()
                 Button {
                     changeMonth(by: 1)
-                } label: { chevronButton("chevron.right") }
+                } label: { chevronButton("chevron.right", accent: accent) }
                     .pressableFeedback()
             }
         }
@@ -380,8 +380,8 @@ struct CalendarMonthView: View {
         }
     }
 
-    private func chevronButton(_ name: String) -> some View {
-        Image(systemName: name).font(.title2.weight(.semibold)).foregroundStyle(Color.systemBlue)
+    private func chevronButton(_ name: String, accent: Color) -> some View {
+        Image(systemName: name).font(.title2.weight(.semibold)).foregroundStyle(accent)
             .frame(width: AppTheme.Touch.minTarget, height: AppTheme.Touch.minTarget)
             .contentShape(Circle())
             .accessibilityLabel(name == "chevron.left" ? String(localized: "上个月") : String(localized: "下个月"))

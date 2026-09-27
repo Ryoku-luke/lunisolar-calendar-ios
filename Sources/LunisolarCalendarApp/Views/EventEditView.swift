@@ -92,15 +92,15 @@ struct EventEditView: View {
             Section("时间") {
                 if type != .note {
                     Toggle("全天", isOn: $isAllDay)
+                    // 只固定 calendar，不固定 locale：写死 zh_Hans_CN 会让英文/日文界面的
+                    // 月份与星期冒中文。日期文案一律跟随界面语言。
                     DatePicker("开始", selection: $startDate, in: supportedDateRange,
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute])
                         .environment(\.calendar, gregorian)
-                        .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
                         .datePickerStyle(.compact)
                     DatePicker("结束", selection: $endDate, in: supportedDateRange,
                                displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute])
                         .environment(\.calendar, gregorian)
-                        .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
                         .datePickerStyle(.compact)
                         .onChange(of: startDate, initial: false) { _, newVal in
                             if endDate < newVal { endDate = newVal }
@@ -108,7 +108,6 @@ struct EventEditView: View {
                 } else {
                     DatePicker("日期", selection: $startDate, in: supportedDateRange, displayedComponents: [.date])
                         .environment(\.calendar, gregorian)
-                        .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
                         .datePickerStyle(.compact)
                 }
                 if type != .note {

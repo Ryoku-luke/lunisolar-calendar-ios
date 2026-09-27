@@ -109,11 +109,10 @@ extension CalendarMonthView {
         withAnimation(AppTheme.Motion.pressInOut) { selectedDate = date }
     }
 
-    /// 复制选中日期的中文长格式到剪贴板（上下文菜单动作）
+    /// 复制选中日期的长格式到剪贴板（上下文菜单动作）；格式跟随界面语言
     func copyDateText(_ date: Date) {
         #if canImport(UIKit)
-        UIPasteboard.general.string = date.formatted(
-            Date.FormatStyle(date: .long, time: .omitted, locale: Locale(identifier: "zh_Hans_CN")))
+        UIPasteboard.general.string = date.formatted(Date.FormatStyle(date: .long, time: .omitted))
         #endif
     }
 

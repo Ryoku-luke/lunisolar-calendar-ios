@@ -124,7 +124,7 @@ public enum AICommandValidator {
 
         if normalized.repeatRule == .never, normalized.startDate < now {
             let stamp = normalized.startDate.formatted(
-                Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "zh_Hans_CN"))
+                Date.FormatStyle(date: .abbreviated, time: .shortened)
             )
             return .failure(AICommandError(
                 kind: .inThePast,

@@ -104,8 +104,8 @@ private struct CountdownRow: View {
                 Text(event.title)
                     .font(AppTheme.Font.bodyBold)
                     .foregroundStyle(Color.label)
-                // 修复：Date.formatted(date:time:) 无 locale 参数，需用 Date.FormatStyle 显式构造
-                Text(event.date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, locale: Locale(identifier: "zh_Hans_CN"))))
+                // 不固定 locale：日期格式跟随界面语言（写死 zh_Hans_CN 会在英/日界面冒中文）
+                Text(event.date.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted)))
                     .font(AppTheme.Font.caption)
                     .foregroundStyle(Color.secondaryLabel)
             }
@@ -254,7 +254,6 @@ struct CountdownEditor: View {
                         }
                     }
                     DatePicker("日期", selection: $date, in: allowedDateRange, displayedComponents: .date)
-                        .environment(\.locale, Locale(identifier: "zh_Hans_CN"))
                 }
                 Section {
                     Label(String(format: NSLocalizedString("支持范围：%d 年 1 月 — %d 年 12 月", comment: ""), ChineseCalendar.minYear, ChineseCalendar.maxYear),

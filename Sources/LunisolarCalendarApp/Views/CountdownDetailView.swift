@@ -57,8 +57,7 @@ struct CountdownDetailView: View {
                         .font(AppTheme.Font.numeralXL)
                         .foregroundStyle(Color.appTint)
                         .contentTransition(.numericText())
-                    Text(event.date.formatted(Date.FormatStyle(date: .long, time: .omitted,
-                                                              locale: Locale(identifier: "zh_Hans_CN"))))
+                    Text(event.date.formatted(Date.FormatStyle(date: .long, time: .omitted)))
                         .font(AppTheme.Font.subheadline)
                         .foregroundStyle(Color.secondaryLabel)
                 }
