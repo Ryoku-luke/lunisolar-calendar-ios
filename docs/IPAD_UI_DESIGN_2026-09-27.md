@@ -195,21 +195,23 @@ Flow 4 只走「日历 ↔ 倒数日」，两者都是 `.all`，从未覆盖无 
   但有一个已知取舍：**宽屏下手动收起侧栏后，切换节会把三栏恢复**（本方法无条件重算）——
   要保留手动态就得引入「这个值是不是我写的」标记，收益不大，本批未做，已写进代码注释。
 
-### P1-2 指针与键盘支持（iPad 专业用户预期）
+### ~~P1-2 指针与键盘支持~~ **已完成（2026-09-27）**
 
 **问题**：全程无 pointer/键盘适配——鼠标悬停日历格无高亮、无悬停光标，
 无键盘快捷键；对" iPad 当电脑用"的用户是明显短板。
 
-**建议方案**（低成本批次）：
+**落地（2026-09-27）**：
+- 悬停高亮：日期格（`DayCellView`）/ 事件行（`EventRow`）/ 倒数日行（`CountdownRow`）
+  加 `.hoverEffect(.highlight)`（`#if canImport(UIKit)` 守卫，macOS 宿主构建不受影响）。
+- 键盘快捷键：⌘T 回到今天、⌘N 新建日程（挂在既有工具栏按钮上）；
+  ⌘[ / ⌘] 翻月（挂在月份 Chevron 按钮上）；← / → 移动选中日期
+  （`onKeyPress` 挂在月历 ScrollView 上，`selectDay` 自带跨月联动）。
+- **与原建议的两点偏差**：① 自定义光标形状（`NSCursor`）**没做**——它是 AppKit API、
+  iPadOS 无公开替代，系统指针 + `.hoverEffect` 已是标准做法；② 上/下方向键没做
+  （文档只点到 ← →；±7 天可用翻月替代，需要时再加）。
 
-- 日历格 / 列表行加 `.hoverEffect(.highlight)`（iPad pointer 系统组件）；
-- 可点格加 `.onHover { NSCursor.pointingHand.set() }`（或 SwiftUI 光标 API）；
-- 键盘快捷键（`.keyboardShortcut`）：⌘N 新建日程、⌘T 回到今天、
-  ⌘[ / ⌘] 翻月、← / → 选中日移动；`@FocusState` 配合侧栏；
-- 与 Reduce Motion 已有集中降级天然兼容（无新动画）。
-
-**验收**：接妙控板/鼠标悬停日历格有系统高亮；快捷键在月历节生效；
-不影响 iPhone 构建（全部 API iOS 17 可用，`#if canImport(UIKit)` 不需要）。
+**验收口径**：妙控板悬停日历格有系统高亮；快捷键在月历节生效；
+不影响 iPhone 与 macOS 构建（四通道验证绿）。
 
 ### ~~P1-3 `CountdownDetailView` 硬编码中文 locale~~ **已完成（2026-09-27，批次 0）**
 
@@ -229,21 +231,19 @@ Flow 4 只走「日历 ↔ 倒数日」，两者都是 `.all`，从未覆盖无 
 与 `AICommandValidator.swift`（详见 `UI_DESIGN_REVIEW_2026-09-27.md` 的 P1-3 落地记录）。
 ⚠️ **英/日界面截图验收未做**，并入截图批次。
 
-### P1-4 分屏 / Slide Over 回退路径回归
+### ~~P1-4 分屏 / Slide Over 回退路径回归~~ **清单已落地（2026-09-27）；分屏本体只能真机**
 
 **问题**：compact 尺寸回退 `PhoneTabRootView`（4 Tab），此路径**无 UI 测试覆盖**；
 分屏 50/50 下 TabBar + 月视图 + 选中卡的 96pt 底部留白在矮高度下表现未知。
 
-**建议方案**：
-
-1. XCTest 增加 iPad 分屏用例（或至少手动清单项进 `DEVICE_TEST_CHECKLIST.md`）：
-   50/50 分屏、Slide Over、竖屏三栏；
-2. 检查 `PhoneTabRootView` 在 iPad compact 下的「黄历」Tab 与月历并存是否合理
-   （信息重复在窄屏可接受，但确认无布局崩溃）；
-3. 中栏 min 340 在分屏 compact 时是否生效过宽——确认无。
-
-**验收**：`DEVICE_TEST_CHECKLIST.md` 新增 iPad 窗口形态小节；
-50/50 分屏截图无重叠/裁切。
+**落地（2026-09-27）**：
+1. `docs/DEVICE_TEST_CHECKLIST.md` 新增 **§11.1 iPad 窗口形态**（50/50 分屏、Slide Over、
+   底部留白、指针悬停与快捷键一并入清单）；§11 主清单按上下文 Inspector 新语义重述；
+2. compact 回退路径代码核对：`AdaptiveRootView` 按 `horizontalSizeClass` 分流，
+   分屏下走 `PhoneTabRootView` 属**既有设计**（黄历 Tab 与月历并存 = 可接受的信息重复），
+   无需改动；中栏 min 340 只在 regular 生效，compact 走整宽，无过宽问题。
+3. **不能自动化的部分**：XCUITest 造不出分屏/Slide Over 窗口形态（需多 App 编排），
+   回归只能靠真机清单 §11.1。
 
 ---
 
@@ -269,18 +269,19 @@ Flow 4 只走「日历 ↔ 倒数日」，两者都是 `.all`，从未覆盖无 
 > 但若 P0-1 的裁决选方案 C（年视图移出侧栏、入口落到菜单），这里会立刻多出一项。
 > 因此**保留 Menu 容器**，不退回单个按钮；是否彻底删掉菜单，等 P0-1 定案后一并决定。
 
-### P2-2 编辑器在 iPad 的呈现形态
+### ~~P2-2 编辑器在 iPad 的呈现形态~~ **已完成（2026-09-27）**
 
-`CountdownEditor`、`EventEditView`（sheet 场景）在 iPad 默认从屏幕底缘升起的大 sheet，
-对短表单偏重。建议 iPad 改 `.popover`（居中气泡，自动避让）或
-`.presentationDetents([.medium, .large])`；注意 popover 在 iPhone 自动降级为 sheet，
-一套代码两平台。低优先级，表单本身已很原生。
+`CountdownEditor` 的两处 sheet（倒数日列表页 `CountdownView`、iPad 右栏
+`CountdownDetailView`）补 `.presentationDetents([.medium, .large])` + 拖拽指示器，
+与事件编辑器（`MonthSheets` 的 P1-8a 口径）一致——iPad 不再默认从底缘升起全屏大 sheet。
+未采用 `.popover`：popOver 在 iPhone 降级为 sheet 虽一套代码，但表单高度不固定时
+popover 自动避让行为不如 detent 可控，detents 两平台一致更稳。
 
-### P2-3 侧栏视觉微调
+### ~~P2-3 侧栏视觉微调~~ **已完成（2026-09-27）**
 
-侧栏标题「清和日历」+ 5 节纯文字 List 略素。建议：给侧栏节加 appTint 选中态
-（系统默认已有），头部插入品牌区（图标 + 版本，复用 `AboutSectionView` 元素），
-与设置页 Hero 卡同源。纯装饰项，最后做。
+侧栏 List 顶部插入品牌区（App 图标 40×40 + 名称 + 版本号，元素与设置页 Hero 卡同源），
+纯装饰、不参与 List 选择；节选中态沿用系统默认（appTint）。
+「清和日历」导航大标题保留，与品牌区形成「标题 + 徽标」的常规 iPad 侧栏形态。
 
 ---
 
@@ -294,8 +295,8 @@ Flow 4 只走「日历 ↔ 倒数日」，两者都是 `.all`，从未覆盖无 
 | ~~4~~ | ~~P0-2 月卡弹性行高~~ → **已完成（批次 3）** | 1 天 | 已实现 56~96pt；但**横滑手势需肉眼回归**（本批风险最高） |
 | ~~5~~ | ~~P0-4 右栏加宽 + 更多黄历 2 列~~ → **已完成（批次 3）** | 1 天 | 右栏 380→480 / 460→560；**三档设备截图未做** |
 | ~~6~~ | ~~P1-1 竖屏自动收侧栏~~ → **已完成（批次 3）** | 0.5 天 | 改按窗口宽度判断；**顺带修掉一个真 bug**（见该节） |
-| 7 | P1-2 指针/键盘批次 | 1 天 | 纯增量，可拆分 |
-| 8 | P1-4 分屏回归 + P2-2/3 | 1 天 | 清单与呈现形态；与 P1-1 的竖屏结论一起看 |
+| ~~7~~ | ~~P1-2 指针/键盘批次~~ → **已完成（2026-09-27）** | 1 天 | 悬停高亮 3 处 + 快捷键 ⌘T/⌘N/⌘[]/←→；自定义光标因 iPadOS 无公开 API 未做（记录在案） |
+| ~~8~~ | ~~P1-4 分屏回归 + P2-2/3~~ → **已完成（2026-09-27）** | 1 天 | 清单 §11.1 + P2-2 detents + P2-3 品牌区；分屏本体只能真机（XCUITest 造不出窗口形态） |
 
 ## iPad 专项验收清单
 

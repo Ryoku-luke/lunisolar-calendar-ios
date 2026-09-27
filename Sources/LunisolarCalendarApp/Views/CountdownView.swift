@@ -71,6 +71,10 @@ struct CountdownView: View {
         }
         .sheet(item: $editorTarget) { target in
             CountdownEditor(event: target.event)
+                // P2-2：短表单不用从底缘升起的大 sheet——iPad 给中/大两档 detent
+                // （与事件编辑器的 P1-8a 口径一致；iPhone 同样受益）
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         // 结果反馈不再用模态 alert（UI_DESIGN_REVIEW P0-3）：行内 toast。
         // 需要行动的场景（灵动岛未开启）在 toast 上带「去设置」按钮——不能退化成纯文案，
@@ -192,6 +196,10 @@ private struct CountdownRow: View {
             }
         }
         .padding(.vertical, AppTheme.Spacing.xs)
+        #if canImport(UIKit)
+        // P1-2：指针悬停系统高亮（iPad 鼠标/妙控板）
+        .hoverEffect(.highlight)
+        #endif
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(event.title) \(event.displayText(today: today))")
         .onAppear { refreshIslandState() }

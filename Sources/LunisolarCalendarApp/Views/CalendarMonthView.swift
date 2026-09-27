@@ -95,6 +95,16 @@ struct CalendarMonthView: View {
             ScrollView(showsIndicators: false) {
                 monthColumn(accent: dayAccent)
             }
+            // P1-2：方向键移动选中日期（iPad 外接键盘）。
+            // selectDay 本身处理跨月联动，越界日期（1900 前/2100 后）由 LunarDate 层兜底。
+            .onKeyPress(.leftArrow) {
+                selectDay(selectedDate.addingDays(-1))
+                return .handled
+            }
+            .onKeyPress(.rightArrow) {
+                selectDay(selectedDate.addingDays(1))
+                return .handled
+            }
             .background {
                 if isIPadSplit {
                     GeometryReader { geo in
@@ -129,6 +139,8 @@ struct CalendarMonthView: View {
                 }
                     .tint(controlTint)
                     .pressableFeedback()
+                    // P1-2：⌘T 回到今天（iPad 键盘/妙控板用户）
+                    .keyboardShortcut("t", modifiers: .command)
             }
             ToolbarItem(placement: .platformTopBarTrailing) {
                 // 原生 iOS 风格：系统「+」进入新建日程（替代原自定义渐变 FAB）
@@ -141,6 +153,8 @@ struct CalendarMonthView: View {
                 }
                 .accessibilityLabel("新建日程")
                 .accessibilityIdentifier(AccessibilityID.monthNewEvent)
+                // P1-2：⌘N 新建日程（iPad 键盘/妙控板用户）
+                .keyboardShortcut("n", modifiers: .command)
             }
             ToolbarItem(placement: .platformTopBarTrailing) {
                 Menu {
@@ -351,10 +365,14 @@ struct CalendarMonthView: View {
                     changeMonth(by: -1)
                 } label: { chevronButton("chevron.left", accent: controlTint) }
                     .pressableFeedback()
+                    // P1-2：⌘[ 上一月
+                    .keyboardShortcut("[", modifiers: .command)
                 Button {
                     changeMonth(by: 1)
                 } label: { chevronButton("chevron.right", accent: controlTint) }
                     .pressableFeedback()
+                    // P1-2：⌘] 下一月
+                    .keyboardShortcut("]", modifiers: .command)
             }
         }
     }

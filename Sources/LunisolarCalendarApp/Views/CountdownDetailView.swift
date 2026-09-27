@@ -28,6 +28,9 @@ struct CountdownDetailView: View {
         .accessibilityIdentifier(AccessibilityID.iPadInspectorCountdown)
         .sheet(item: $editingEvent) { event in
             CountdownEditor(event: event)
+                // P2-2：与列表页同一口径——中/大两档 detent，iPad 不再默认大 sheet
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 

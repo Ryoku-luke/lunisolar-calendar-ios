@@ -74,6 +74,10 @@ struct EventRow: View {
         .softChipBackground(radius: AppTheme.Radius.lg,
                              fill: Color.secondarySystemGroupedBackground)
         .contentShape(Rectangle())
+        #if canImport(UIKit)
+        // P1-2：指针悬停系统高亮（iPad 鼠标/妙控板）
+        .hoverEffect(.highlight)
+        #endif
         // 注意：此处**不能**用 onLongPressGesture 做按压反馈 —— 它会在触摸按下的瞬间
         // 抢走手势，导致外层 Button / onTapGesture / contextMenu 全部失效
         // （真机表现：全部日程点不开编辑、多选点不动）。

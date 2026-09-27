@@ -202,6 +202,10 @@ struct DayCellView: View {
         .animation(.spring(response: 0.34, dampingFraction: 0.52, blendDuration: 0.12),
                    value: isSelected)
         .contentShape(Rectangle())
+        #if canImport(UIKit)
+        // P1-2：指针悬停系统高亮（iPad 鼠标/妙控板；无指针环境自动无效果）
+        .hoverEffect(.highlight)
+        #endif
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)

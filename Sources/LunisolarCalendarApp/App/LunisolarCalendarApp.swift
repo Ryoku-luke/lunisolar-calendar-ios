@@ -199,6 +199,26 @@ struct iPadRootView: View {
     private var sidebar: some View {
         @Bindable var nav = nav
         List(selection: $nav.iPadSection) {
+            // P2-3 侧栏品牌区：图标 + 名称 + 版本（与设置页 Hero 卡同源的纯装饰区，不参与选择）
+            Section {
+                HStack(spacing: AppTheme.Spacing.md) {
+                    Image("AppIcon")
+                        .resizable().aspectRatio(contentMode: .fit)
+                        .frame(width: 40, height: 40)
+                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(NSLocalizedString("清和日历", comment: "App名"))
+                            .font(AppTheme.Font.bodyBold)
+                            .foregroundStyle(Color.label)
+                        Text("Version \(sidebarVersionString)")
+                            .font(AppTheme.Font.caption2)
+                            .foregroundStyle(Color.secondaryLabel)
+                    }
+                    Spacer()
+                }
+                .accessibilityElement(children: .combine)
+                .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+            }
             ForEach([NavigationCoordinator.iPadSection.calendar, .ai, .agenda, .countdown, .settings], id: \.self) { s in
                 sidebarRow(s)
             }
@@ -207,6 +227,11 @@ struct iPadRootView: View {
         #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+    }
+
+    /// 侧栏品牌区的版本号（与 `SettingsView.appVersionString` 同口径：只显示 CFBundleShortVersionString）
+    private var sidebarVersionString: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
     }
 
     /// 中栏：随侧栏节切换。
