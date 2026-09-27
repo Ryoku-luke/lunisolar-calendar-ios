@@ -74,9 +74,10 @@ struct DayDetailView: View {
     }
 
     private var headerCard: some View {
-        let lunar = date.lunar
-        let festivals = FestivalManager.festivals(on: date, lunar: lunar)
-        let huangli = HuangliGenerator.generate(for: date)
+        let summary = CalendarDaySummary(date: date)
+        let lunar = summary.lunar
+        let festivals = summary.festivals
+        let huangli = summary.huangli
         let accent = self.accent
         return VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
             HStack(alignment: .top, spacing: AppTheme.Spacing.xl) {
@@ -158,18 +159,20 @@ struct DayDetailView: View {
                     .foregroundStyle(Color.secondaryLabel)
             }
             .tint(Color.appTint)
-            // 节假日 / 调休 / 节气标记
-            let holidayInfo = HolidayProvider.info(for: date)
-            let termName = SolarTermProvider.termOn(date)
-            if holidayInfo.type != .normal || termName != nil {
+            // 节假日 / 调休 / 节气标记（类型与节气名取自 summary）
+            let holidayType = summary.holidayType
+            let termName = summary.solarTermName
+            // `HolidayType` 不带假期名，标签文案（"休 春节"）仍需这一次 name 查询
+            let holidayName = HolidayProvider.info(for: date).name
+            if holidayType != .normal || termName != nil {
                 HStack(spacing: AppTheme.Spacing.xs) {
-                    if holidayInfo.type == .holiday {
+                    if holidayType == .holiday {
                         ChipLabel(title: String(format: NSLocalizedString("休 %@", comment: ""),
-                                                NSLocalizedString(holidayInfo.name, comment: "")), systemImage: "sun.max.fill",
+                                                NSLocalizedString(holidayName, comment: "")), systemImage: "sun.max.fill",
                                   tint: Color.systemGreen, font: AppTheme.Font.caption)
-                    } else if holidayInfo.type == .workday {
+                    } else if holidayType == .workday {
                         ChipLabel(title: String(format: NSLocalizedString("班 %@", comment: ""),
-                                                NSLocalizedString(holidayInfo.name, comment: "")), systemImage: "briefcase.fill",
+                                                NSLocalizedString(holidayName, comment: "")), systemImage: "briefcase.fill",
                                   tint: Color.systemOrange, font: AppTheme.Font.caption)
                     }
                     if let term = termName {
@@ -189,7 +192,7 @@ struct DayDetailView: View {
     }
 
     private var almanacCard: some View {
-        let huangli = HuangliGenerator.generate(for: date)
+        let huangli = CalendarDaySummary(date: date).huangli
         return VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
             HStack {
                 Label("黄历宜忌", systemImage: "book.and.wrench.fill")

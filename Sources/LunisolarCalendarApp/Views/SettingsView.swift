@@ -40,12 +40,8 @@ struct SettingsView: View {
     /// 头部卡的「AI 日历助手」入口（此前误接到「帮助与说明」文档，点了等于没反应）
     @State private var showAIAssistant = false
 
-    /// 节日自适应强调色（与月/日视图同规则）
-    private var accent: Color {
-        let today = Date()
-        let fs = FestivalManager.festivals(on: today, lunar: today.lunar)
-        return fs.first.map { Color(hex: $0.accentHex) } ?? Color.appTint
-    }
+    /// 节日自适应强调色（与月/日视图同规则）：装饰层取节日原色，口径收口在 DayAccent
+    private var accent: Color { DayAccent(date: Date()).decorative }
     private var controlTint: Color { DayAccent(date: Date()).controlTint }
 
     var body: some View {

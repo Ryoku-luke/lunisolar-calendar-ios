@@ -41,11 +41,8 @@ struct EventEditView: View {
         return start...end
     }
     private var reminderOptions: [Int] { [0, 5, 10, 15, 30, 60, 1440] }
-    /// 节日自适应强调色（与月/日/设置页一致）
-    private var accent: Color {
-        let fs = FestivalManager.festivals(on: defaultDate, lunar: defaultDate.lunar)
-        return fs.first.map { Color(hex: $0.accentHex) } ?? Color.appTint
-    }
+    /// 节日自适应强调色（与月/日/设置页一致）：装饰层取节日原色，口径收口在 DayAccent
+    private var accent: Color { DayAccent(date: defaultDate).decorative }
     private var controlTint: Color { DayAccent(date: defaultDate).controlTint }
 
     init(editing: CalendarEvent?, defaultDate: Date = Date()) {

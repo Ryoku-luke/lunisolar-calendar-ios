@@ -11,10 +11,11 @@ struct SelectedDayCardView: View {
     @State private var weatherSnapshot: WeatherSnapshot?
 
     var body: some View {
-        let huangli = HuangliGenerator.generate(for: selectedDate)
-        let selLunar = selectedDate.lunar
-        let todayFestivals = FestivalManager.festivals(on: selectedDate, lunar: selLunar)
-        let todaysEvents = store.events(on: selectedDate)
+        let summary = CalendarDaySummary(date: selectedDate, events: store.events(on: selectedDate))
+        let huangli = summary.huangli
+        let selLunar = summary.lunar
+        let todayFestivals = summary.festivals
+        let todaysEvents = summary.events
 
         return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: AppTheme.Spacing.lg) {

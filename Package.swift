@@ -28,6 +28,7 @@ let package = Package(
             exclude: [
                 "App",
                 "Models/CalendarDayKey.swift",
+                "Models/CalendarDaySummary.swift",
                 "Models/CalendarEvent.swift",
                 "Models/CountdownEvent.swift",
                 "Resources",
