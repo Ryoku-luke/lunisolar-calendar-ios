@@ -107,8 +107,8 @@ Sources/LunisolarCalendarApp/
 ├── Views/                       # 月视图 / 年视图 / 日详情 / 编辑 / 倒数日 / 设置 / 天气卡
 └── Resources/                   # lunar_calendar.json、huangli_db.json、4 套 lproj 本地化
 Tools/                           # 黄历库生成工具 + 图标生成脚本
-Tests/LunisolarCalendarTests/    # 310 个单元测试（36 个套件，走 SwiftPM）
-LunisolarCalendarUITests/        # 5 条 UI 测试（XCUITest，走 Xcode 工程）
+Tests/LunisolarCalendarTests/    # 单元测试（走 SwiftPM；数量以 swift test 输出为准，README 不写死）
+LunisolarCalendarUITests/        # UI 测试（XCUITest，走 Xcode 工程）
 docs/                            # 上架 / 签名 / 构建 / 真机复测清单 / 进度分析与待做方案
 ```
 
@@ -116,12 +116,15 @@ docs/                            # 上架 / 签名 / 构建 / 真机复测清单
 
 ```bash
 swift build        # 编译所有 Target
-swift test         # 运行 310 个单元测试
+swift test         # 运行全部单元测试
 ```
 
 > Linux 环境仅验证模型层（农历/黄历/事件 CRUD/导入导出/同步 Mock），SwiftUI 视图编译需 iOS/macOS SDK；本仓库**未配置 CI**（无 `.github/workflows`，推送不会触发构建）。本地自检：`swift build` / `swift test`（macOS 宿主，2026-09-24 起可用）+ `swift build --triple arm64-apple-ios17.0-simulator --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"`（iOS 视图层与宿主编译），详见 `docs/XCODE_BUILD_GUIDE.md` §4。行为级验证：UI 测试见下方「UI 测试」一节，真机复测见 [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md)。
 
-## 测试覆盖（310 条 / 36 个套件）
+## 测试覆盖（单元测试）
+
+> 按总方案 §49 的约定，数量不再手工写死：下表是某个时间点的快照，
+> 权威数字以 `swift test` 实际输出为准。
 
 | 套件 | 数量 | 覆盖内容 |
 |---|---|---|
@@ -180,7 +183,7 @@ swift test         # 运行 310 个单元测试
 - 4 套 `lproj`（zh-Hans / zh-Hant / ja / en）已注册进主 App 与 Widget 两个 target 的 Resources phase
 - 新增语言：复制任一 `lproj` 并翻译键值即可，无需改代码
 
-### UI 测试（已接入，5 条真实用户路径）
+### UI 测试（已接入，真实用户路径）
 
 target `LunisolarCalendarUITests` 已在 Xcode 工程里，测试文件是
 `LunisolarCalendarUITests/LunisolarCalendarUITests.swift`。
@@ -188,7 +191,10 @@ target `LunisolarCalendarUITests` 已在 Xcode 工程里，测试文件是
 已删除——它断言了不存在的文案「保存修改」与不存在的标识「月历网格」，
 第三条更是只断言 `staticTexts.count > 5` 的空断言。）
 
-覆盖内容按《UI 整体界面打磨总报告》§55 的 5 条真实用户路径：
+所有用例带 `-uitest-empty-store` 启动参数：store 落临时目录，跑在干净空库上，
+「空态 / 首次使用」类断言与真实容器数据无关（详见 `docs/UI_POLISH_REVIEW_2026-09-25.md` §7.1）。
+
+覆盖内容按《UI 整体界面打磨总报告》§55 的真实用户路径：
 
 | 用例 | 覆盖 |
 |---|---|
@@ -196,13 +202,15 @@ target `LunisolarCalendarUITests` 已在 Xcode 工程里，测试文件是
 | Flow 2 | 新建日程 → 保存 → 回日历能看到该事件 |
 | Flow 3 | AI 助手：输入 → 解析 → 必须给出预览或明确错误（不能毫无反应） |
 | Flow 3b | AI 助手：点输入框保持焦点；点导航栏「完成」收起；收起后能重新点开 |
-| Flow 4 | iPad：侧栏切节 → 中栏跟随 → 日期格可点（iPhone 上跳过） |
+| Flow 4 | iPad：侧栏切节 → 中栏跟随 → 倒数日节右栏 Inspector 断言（iPhone 上跳过） |
 | Flow 5 | 设置页 iCloud 区块给出明确状态 |
+| Flow 6 | 全部日程搜索可用 + 空态是统一组件且可行动（「搜不了」的回归保护） |
+| Flow 7 | 倒数日空态四要素 + 行动按钮点开编辑器（依赖数据隔离的空库） |
 
 跑法（两种都行）：
 
 ```bash
-# iPhone：5 通过 + 1 跳过（Flow 4 是 iPad 专用）
+# iPhone（Flow 4 为 iPad 专用会跳过，其余全执行）
 xcodebuild test -project LunisolarCalendar.xcodeproj -scheme LunisolarCalendar \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
   -only-testing:LunisolarCalendarUITests
