@@ -237,6 +237,22 @@ CalendarEnvironment / QingheCalendarContext
 
 所有日期边界测试都必须考虑时区。
 
+### 现状补充（2026-09-28 实测，接 CI 时踩出来的）
+
+- **「哪一天」目前统一按设备本地日历日**（`Calendar(identifier: .gregorian)`）：
+  黄历取数（`HuangliDBProvider.resolve`）、节气归属（`SolarTermProvider.termOn`）、
+  农历换算（`ChineseCalendar.lunarDate`）都是这个口径。`HuangliDBProvider.dayKey` 里
+  留着一条修复记录——曾用 `Asia/Shanghai` 去格式化"设备本地午夜"这一时刻，导致
+  UTC+13 设备把本地 02-04 映射成 02-03、取到前一天的宜忌。**不要再退回用上海时区
+  解释设备本地时刻**；真要做"业务时区锚"，得按本节设想整体立项，而不是就地把某处改掉。
+- **`Calendar.gregorian` 是进程启动时就冻结时区的 `static let`**（性能考虑，见
+  `Models/LunarDate.swift` 注释），所以测试里 `NSTimeZone.default` 的覆写对它无效：
+  农历 / 干支的跨时区验证只能**换时区跑整个测试进程**（CI 已按 4 个时区各跑一遍；
+  本机可 `TZ=America/New_York swift test`）。
+- 连带记一次教训：`Tests/LunisolarCalendarTests/TimeZoneGoldenTests.swift` 原有两条用例
+  按「上海锚」写断言，本机时区恰好是上海所以全绿，CI（runner 为 UTC）与
+  America/New_York 下当场失败。**日期边界的用例必须跨时区自证**，写法见该文件类注释。
+
 ---
 
 # 8. EventStore

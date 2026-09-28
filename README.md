@@ -30,6 +30,10 @@
 
 - iOS / iPadOS 17.0+（iOS 26+ 自动启用 Liquid Glass；iOS 27 / iPadOS 27 已验证兼容）
 - Swift 6.0 / Xcode 16.0+（建议 Xcode 27；2027 Q1 起 App Store 提交要求 Xcode 27 构建）
+  - 工具链口径（2026-09-28 实测）：日常开发与 CI 走 **Xcode 26/27**；
+    SwiftPM 侧（`swift build` + `swift test`）在 **Xcode 16.4 / Swift 6.1** 上也可编译，
+    由 CI 的历史记录与提交 `4a1330b` 佐证（`UserNotifications` 两处 `@preconcurrency import`
+    就是为它加的；Xcode 26+ 下这两处放宽不需要，但无害）
 
 ## 运行方式
 

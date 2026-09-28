@@ -7,9 +7,12 @@ on:
   pull_request:
 
 jobs:
-  # 门禁：与本地开发工具链对齐。首次 CI（2026-09-27，8233ca8）用的是 macos-15，
-  # 而该镜像默认 Xcode 只有 16.4（Swift 6.1），远低于本项目开发用的 Xcode 27；
-  # 同一个 commit 在本机干净克隆下三通道全过，所以失败点是工具链不是代码内容。
+  # 门禁：与本地开发工具链对齐。首次 CI（2026-09-27，8233ca8）用 macos-15，该镜像默认
+  # Xcode 只有 16.4（Swift 6.1），在那个工具链上 `swift build` 就失败（两处
+  # UserNotifications 的 "non-sendable result type ... cannot be sent"，见提交 4a1330b）。
+  # 当时本机是 Xcode 27，看不到这个报错——所以 CI 与开发工具链必须对齐，改用 macos-26。
+  # （旧工具链是否仍可编译：2026-09-28 用一次性探针 job 在 macos-15 上验过一次，
+  #  加 @preconcurrency 后通过；探针已删除，结论记在 README 的系统要求一节。）
   build-and-test:
     runs-on: macos-26
     steps:
@@ -45,21 +48,3 @@ jobs:
             swift build \
               --triple arm64-apple-ios17.0-simulator \
               --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
-
-  # 工具链探针：README 目前声明「Swift 6.0 / Xcode 16.0+」，但首次 CI 在 Xcode 16.4 上
-  # swift build 就失败了。这个 job 固定跑旧工具链，用注解把真实报错暴露出来，
-  # 好判定 README 的兼容声明是否成立。continue-on-error 让它不拖垮整轮结果。
-  # 结论落地（改 README 或改代码）后即可删除本 job。
-  toolchain-probe:
-    runs-on: macos-15
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: 打印工具链版本
-        run: |
-          xcodebuild -version
-          swift --version
-
-      - name: swift build（旧工具链探针）
-        run: Tools/ci_run_channel.sh probe-macos15 swift build
