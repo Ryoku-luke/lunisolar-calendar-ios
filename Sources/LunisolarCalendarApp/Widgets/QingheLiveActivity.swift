@@ -81,7 +81,7 @@ struct QingheLiveActivityLockScreenView: View {
                 .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 40, height: 40)
-                .background(Color.black.opacity(0.9))
+                .background(Color.black)
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
@@ -141,7 +141,7 @@ public struct QingheLiveActivityWidget: Widget {
                         .padding(7)
                         .background(
                             RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
-                                .fill(Color.black.opacity(0.9))
+                                .fill(Color.black)
                         )
                 }
                 DynamicIslandExpandedRegion(.center) {
@@ -208,7 +208,7 @@ public struct QingheLiveActivityWidget: Widget {
                     .padding(4)
                     .background(
                         RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous)
-                            .fill(Color.black.opacity(0.9))
+                            .fill(Color.black)
                     )
             } compactTrailing: {
                 // 紧凑态（右侧）：只放"剩余时间"（docs #26），统一走 LiveActivityRemainingText
@@ -231,7 +231,7 @@ public struct QingheLiveActivityWidget: Widget {
                     .padding(3)
                     .background(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(Color.black.opacity(0.9))
+                            .fill(Color.black)
                     )
             }
             .keylineTint(Color(red: 0.30, green: 0.55, blue: 0.52))

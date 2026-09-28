@@ -508,4 +508,3 @@ struct CalendarMonthView: View {
 #Preview("iPad Split") { iPadRootView().environment(EventStore.shared) }
 
 #endif
-extension Date: @retroactive Identifiable { public var id: TimeInterval { timeIntervalSinceReferenceDate } }

@@ -15,7 +15,7 @@ struct AboutSectionView: View {
                 Text(NSLocalizedString("清和日历", comment: "App名"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.label)
-                Text("Version \(appVersionString) (\(buildNumber))")
+                Text("Version \(appVersionString)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -48,9 +48,5 @@ struct AboutSectionView: View {
 
     private var appVersionString: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
-    }
-
-    private var buildNumber: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
     }
 }

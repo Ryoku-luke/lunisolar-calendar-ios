@@ -202,13 +202,6 @@ extension View {
             .background(Capsule().fill(fill))
             .overlay(Capsule().stroke(border, lineWidth: AppTheme.Stroke.hair))
     }
-    public func hideListBackground() -> some View {
-        #if canImport(UIKit)
-        self.scrollContentBackground(.hidden)
-        #else
-        self
-        #endif
-    }
     /// 跨平台大标题：iOS 使用 navigationBarTitleDisplayMode(.large)，macOS 无此概念（空操作）。
     public func largeTitleBar() -> some View {
         #if canImport(UIKit)

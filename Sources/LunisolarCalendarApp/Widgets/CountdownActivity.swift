@@ -103,7 +103,7 @@ public struct CountdownLiveActivityWidget: Widget {
                         .padding(7)
                         .background(
                             RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
-                                .fill(Color.black.opacity(0.9))
+                                .fill(Color.black)
                         )
                         .widgetURL(URL(string: "qinghe://countdown/\(context.attributes.eventID.uuidString)"))
                 }
@@ -131,7 +131,7 @@ public struct CountdownLiveActivityWidget: Widget {
                     .padding(4)
                     .background(
                         RoundedRectangle(cornerRadius: AppTheme.Radius.sm, style: .continuous)
-                            .fill(Color.black.opacity(0.9))
+                            .fill(Color.black)
                     )
             } compactTrailing: {
                 // 紧凑态（右侧）：仅剩余时间（灵动岛紧凑区建议"一元素一数字"）。
@@ -146,7 +146,7 @@ public struct CountdownLiveActivityWidget: Widget {
                     .padding(3)
                     .background(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(Color.black.opacity(0.9))
+                            .fill(Color.black)
                     )
             }
             // 视觉区分：倒数日用暖绿 keyline，时间胶囊用青绿（两者此前同色，滑动切换时难以分辨）

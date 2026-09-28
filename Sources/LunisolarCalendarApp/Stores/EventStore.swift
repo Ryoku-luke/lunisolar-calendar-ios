@@ -283,6 +283,8 @@ public final class EventStore {
     public func batchAdd(_ incoming: [CalendarEvent], skipSync: Bool = false) {
         guard !incoming.isEmpty else { return }
         for ev in incoming {
+            // 与 update 语义一致：重复 id 跳过，避免双写与 idToIndex 只指向末条
+            guard indexOfEvent(id: ev.id) == nil else { continue }
             let at = sortedInsertionIndex(for: ev.startDate)
             events.insert(ev, at: at)
             shiftIndices(from: at, by: 1)
@@ -685,7 +687,8 @@ public final class EventStore {
     /// 合并内路径：直接给定 oldIndex，根据 startDate 是否变化决定原地写 or 删+二分插。
     private func updateInPlaceFast(oldIndex idx: Int, with new: CalendarEvent) {
         var applied = new
-        applied.updatedAt = Date()
+        // 保留传入事件的 updatedAt：合并已按 keepLatest/overwrite 裁决，覆写为本地 now
+        // 会使远端时间戳失真、造成版本膨胀（与 applyRemote 保留语义保持一致）。
         let oldStart = events[idx].startDate
         if oldStart == applied.startDate {
             events[idx] = applied
