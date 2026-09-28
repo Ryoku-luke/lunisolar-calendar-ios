@@ -227,11 +227,28 @@ struct iPadRootView: View {
         #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .navigationSplitViewColumnWidth(min: splitColumnWidths.sidebar.0,
+                                        ideal: splitColumnWidths.sidebar.1,
+                                        max: splitColumnWidths.sidebar.2)
     }
 
     /// 侧栏品牌区的版本号（与 `SettingsView.appVersionString` 同口径：只显示 CFBundleShortVersionString）
     private var sidebarVersionString: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+    }
+
+    /// iPad 三栏列宽，按设备尺寸分档（UI 报告 §37：11" → 220/520/320；13" → 240/640/380）。
+    /// 用 `windowWidth` 判档：横屏 11"（Air 1180 / Pro 1194pt）≤ 1194，13"（Pro 12.9" 1366 / M4 1376）≥ 1290，
+    /// 阈值取 1200 可无歧义分开；竖屏 / 分屏时窗口更窄，取小档后仍能容纳。
+    /// 元组顺序 = (min, ideal, max)。max 略宽于报告值，给系统拖拽留余量。
+    private var splitColumnWidths: (sidebar: (CGFloat, CGFloat, CGFloat),
+                                    content: (CGFloat, CGFloat, CGFloat),
+                                    detail: (CGFloat, CGFloat, CGFloat)) {
+        if windowWidth >= 1200 {
+            return ((200, 240, 260), (480, 640, 680), (300, 380, 410))
+        } else {
+            return ((180, 220, 240), (460, 520, 560), (280, 320, 340))
+        }
     }
 
     /// 中栏：随侧栏节切换。
@@ -245,7 +262,9 @@ struct iPadRootView: View {
         switch nav.iPadSection ?? .calendar {
         case .calendar:
             CalendarMonthView(selectedDate: $nav.selectedDate, embedsInNavigationStack: false)
-                .navigationSplitViewColumnWidth(min: 340, ideal: 390, max: 480)
+                .navigationSplitViewColumnWidth(min: splitColumnWidths.content.0,
+                                                ideal: splitColumnWidths.content.1,
+                                                max: splitColumnWidths.content.2)
         case .ai:
             // 注意：AIAssistantView 自身已含 NavigationStack（body 就是
             // `NavigationStack { List { ... } }`），这里**不要再包一层**，否则是套娃。
@@ -275,10 +294,14 @@ struct iPadRootView: View {
         switch nav.iPadSection ?? .calendar {
         case .calendar:
             DayDetailView(date: nav.selectedDate, embedsInNavigationStack: false)
-                .navigationSplitViewColumnWidth(min: 320, ideal: 480, max: 560)
+                .navigationSplitViewColumnWidth(min: splitColumnWidths.detail.0,
+                                                ideal: splitColumnWidths.detail.1,
+                                                max: splitColumnWidths.detail.2)
         case .countdown:
             CountdownDetailView(selection: $nav.iPadCountdownSelection)
-                .navigationSplitViewColumnWidth(min: 320, ideal: 480, max: 560)
+                .navigationSplitViewColumnWidth(min: splitColumnWidths.detail.0,
+                                                ideal: splitColumnWidths.detail.1,
+                                                max: splitColumnWidths.detail.2)
         case .agenda, .settings, .ai:
             EmptyView()
         }
