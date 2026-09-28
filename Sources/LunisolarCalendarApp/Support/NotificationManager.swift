@@ -9,7 +9,12 @@ import os
 #endif
 
 #if canImport(UserNotifications)
-import UserNotifications
+// @preconcurrency：Swift 6.1（Xcode 16.4）下，UNUserNotificationCenter 的
+// notificationSettings() / pendingNotificationRequests() 返回非 Sendable 的系统类型，
+// 从非隔离上下文调用会报 "non-sendable result type ... cannot be sent" 而**编译失败**
+// （Swift 6.2+/Xcode 26 起不再报）。与 CountdownActivity.swift 对 ActivityKit 的处理同源：
+// 系统框架类型由系统托管生命周期，@preconcurrency import 是 Swift 6 迁移的标准放宽手段。
+@preconcurrency import UserNotifications
 #endif
 
 // MARK: - 本地通知管理器
