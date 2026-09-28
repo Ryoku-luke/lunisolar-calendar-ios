@@ -1,5 +1,4 @@
 import Foundation
-import LunarCore
 
 // MARK: - AI 助手：自然语言 → 结构化命令（docs #35 / #36）
 //

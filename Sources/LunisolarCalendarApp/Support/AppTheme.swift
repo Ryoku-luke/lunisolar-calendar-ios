@@ -450,62 +450,6 @@ public struct SecondaryActionButtonStyle: ButtonStyle {
     }
 }
 
-/// 危险/删除操作按钮：红色软填充 + 红色 stroke + 按压缩放
-/// 替代 EventEditView 内联的删除按钮（fill+stroke+顶部高光 overlay 三层叠加）
-public struct DestructiveActionButtonStyle: ButtonStyle {
-    public var cornerRadius: CGFloat = AppTheme.Radius.lg
-    public init(cornerRadius: CGFloat = AppTheme.Radius.lg) {
-        self.cornerRadius = cornerRadius
-    }
-    public func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(AppTheme.Font.subheadline.weight(.semibold))
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: AppTheme.Touch.minTarget)
-            .foregroundStyle(Color.systemRed)
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.systemRed.opacity(0.10))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.systemRed.opacity(0.30), lineWidth: AppTheme.Stroke.hair)
-            )
-            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
-            .animation(AppTheme.Motion.pressInOut, value: configuration.isPressed)
-            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-    }
-}
-
-/// 选项 Chip 选择器（pill 形态）：选中态填充 + 未选中态软背景
-/// 替代 EventEditView 内 4 处 type/repeat/priority chip 选择的重复 pill + fill + stroke 写法
-public struct SelectChipStyle: ButtonStyle {
-    public var isSelected: Bool
-    public var tint: Color
-    public init(isSelected: Bool, tint: Color) {
-        self.isSelected = isSelected; self.tint = tint
-    }
-    public func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(AppTheme.Font.subheadline.weight(.semibold))
-            .foregroundStyle(isSelected ? .white : Color.label)
-            .padding(.horizontal, AppTheme.Spacing.md)
-            .frame(minHeight: AppTheme.Touch.chipHeight)
-            .background(
-                RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                    .fill(isSelected ? tint : Color.quaternarySystemFill)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous)
-                    .stroke(isSelected ? tint.opacity(0.45) : .clear,
-                            lineWidth: AppTheme.Stroke.hair)
-            )
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .animation(AppTheme.Motion.pressInOut, value: configuration.isPressed)
-            .contentShape(RoundedRectangle(cornerRadius: AppTheme.Radius.pill, style: .continuous))
-    }
-}
-
 #if canImport(UIKit)
 private extension SwiftUI.Font.Weight {
     var uiWeight: UIFont.Weight {

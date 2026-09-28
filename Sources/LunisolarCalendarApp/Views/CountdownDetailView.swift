@@ -1,6 +1,5 @@
 #if canImport(SwiftUI)
 import SwiftUI
-import LunarCore
 
 /// iPad 上下文 Inspector 的倒数日详情列（§33/§36 裁决 2026-09-26：右栏随选中倒数日切换）。
 /// 只读摘要 + 「编辑」入口（编辑器复用 CountdownEditor，sheet 呈现，与列表页一致）；

@@ -60,7 +60,4 @@ public struct CalendarDaySummary: Equatable, Sendable {
     public var primaryFestival: Festival? { festivals.first }
 
     public var accentHex: String? { primaryFestival?.accentHex }
-
-    /// 农历越界（1900 前 / 2100 后）：UI 应隐藏农历与干支/生肖，而不是展示占位内容。
-    public var isLunarUnsupported: Bool { lunar.isUnsupported }
 }
