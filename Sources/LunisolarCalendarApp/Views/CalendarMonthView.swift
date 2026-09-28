@@ -12,7 +12,6 @@ struct CalendarMonthView: View {
     /// 彻底规避"点击日期无反应"（此前 @Binding←局部引用/投影接线的运行时失效问题）。
     @State var selectedDate: Date = Date()
     @State private var isPanelExpanded: Bool = false
-    @State var showDateJump = false
     /// 月份卡片滑动的进入方向：.trailing=下月从右侧滑入，.leading=上月从左侧滑入
     @State var monthSlideEdge: Edge = .trailing
     #if canImport(UIKit)
@@ -163,7 +162,7 @@ struct CalendarMonthView: View {
                     // - iPad 的「倒数日 / 设置」由侧栏承担（本页在 iPad 只是月历节）。
                     // 保留 iPhone 的「倒数日」：它是 iPhone 上**唯一**的入口（没有对应 Tab，
                     // 只有卡片深链能绕开菜单），删掉等于让这个功能消失。
-                    Button { showDateJump = true } label: { Label("跳转到日期", systemImage: "calendar.badge.clock") }
+                    Button { auxiliaryPage = .dateJump } label: { Label("跳转到日期", systemImage: "calendar.badge.clock") }
                     if !isIPadSplit {
                         Divider()
                         // 全部日程：统一管理页（搜索 / 筛选 / 批量查看）
@@ -186,10 +185,8 @@ struct CalendarMonthView: View {
         }
         #endif
         // sheet 分工与本体已收口到 CalendarMonthSheets.swift：
-        // 5 个布尔/可选状态收敛为 auxiliaryPage / eventEditSheet 两个枚举驱动的 .sheet(item:)
-        .tint(controlTint)
+        // 5 个布尔/可选状态收敛为 auxiliaryPage / eventEditSheet 两个枚举驱动的 .sheet(item:)        .tint(controlTint)
         .modifier(MonthSheetsModifier(
-            showDateJump: $showDateJump,
             auxiliaryPage: $auxiliaryPage,
             eventEditSheet: $eventEditSheet,
             selectedDate: $selectedDate,
@@ -334,7 +331,7 @@ struct CalendarMonthView: View {
         HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.md) {
             // 月份标题可点击 → 弹出日期跳转（主流日历交互：点标题选月份/年份）
             Button {
-                showDateJump = true
+                auxiliaryPage = .dateJump
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
                     // verbatim：避免 LocalizedStringKey 对 Int 插值按系统 locale 加千位分隔
