@@ -686,7 +686,7 @@ public final class EventStore {
 
     /// 合并内路径：直接给定 oldIndex，根据 startDate 是否变化决定原地写 or 删+二分插。
     private func updateInPlaceFast(oldIndex idx: Int, with new: CalendarEvent) {
-        var applied = new
+        let applied = new
         // 保留传入事件的 updatedAt：合并已按 keepLatest/overwrite 裁决，覆写为本地 now
         // 会使远端时间戳失真、造成版本膨胀（与 applyRemote 保留语义保持一致）。
         let oldStart = events[idx].startDate
