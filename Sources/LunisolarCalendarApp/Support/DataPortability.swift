@@ -449,20 +449,6 @@ public enum DataPortability {
         return LegacyImportNoteCleanup(cleanedNotes: rest)
     }
 
-    // MARK: - 文件保存
-
-    /// 将导出内容写入临时文件，返回文件 URL
-    public static func writeToTempFile(content: String, filename: String) -> URL? {
-        let tmpURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(filename)
-        do {
-            try content.write(to: tmpURL, atomically: true, encoding: .utf8)
-            return tmpURL
-        } catch {
-            AppLogger.app.error("导出文件写入失败: \(error)")
-            return nil
-        }
-    }
-
     // MARK: - ICS 转义
 
     private static func escapeICS(_ text: String) -> String {

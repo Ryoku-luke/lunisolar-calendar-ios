@@ -289,6 +289,7 @@ extension DayCellView: Equatable {
             && lhs.eventCount == rhs.eventCount
             && lhs.festivalTint == rhs.festivalTint
             && lhs.cellAccent == rhs.cellAccent
+            && lhs.solarTermTint == rhs.solarTermTint
             && lhs.holidayType == rhs.holidayType
     }
 }

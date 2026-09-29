@@ -1,9 +1,6 @@
 import Foundation
 #if canImport(SwiftUI)
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
 #endif

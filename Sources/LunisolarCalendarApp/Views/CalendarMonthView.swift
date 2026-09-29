@@ -1,9 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
 import LunarCore
-#if canImport(UIKit)
-import UIKit
-#endif
 
 // MARK: - N-3 月卡 chrome 高度上报
 

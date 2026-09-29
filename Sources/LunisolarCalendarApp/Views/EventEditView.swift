@@ -1,8 +1,5 @@
 #if canImport(SwiftUI)
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 import LunarCore
 
 // MARK: - 新建 / 编辑日程（iOS 27 原生化改造）
