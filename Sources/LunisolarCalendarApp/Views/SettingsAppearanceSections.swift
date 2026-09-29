@@ -25,31 +25,6 @@ extension SettingsView {
         }
     }
 
-    // MARK: - 1.5 App 图标（P2-9：手动切换主图标/春节限定）
-    // UIKit only：UIApplication.setAlternateIconName 为 iOS API，macOS 无替代图标能力
-
-    #if canImport(UIKit)
-    var iconSection: some View {
-        Section {
-            Picker(NSLocalizedString("App 图标", comment: ""), selection: .init(
-                get: { AlternateIconManager.shared.current },
-                set: { icon in
-                    Task { await AlternateIconManager.shared.setIcon(icon) }
-                }
-            )) {
-                ForEach(AlternateIconManager.Icon.allCases, id: \.self) { icon in
-                    Label(icon.uiLabel, systemImage: icon == .springFestival ? "gift" : "app")
-                        .tag(icon)
-                }
-            }
-            .pickerStyle(.navigationLink)
-        } header: {
-            QingheSectionHeader(NSLocalizedString("图标", comment: ""),
-                                subtitle: NSLocalizedString("主图标 / 春节限定自动切换", comment: ""))
-        }
-    }
-    #endif
-
     // MARK: - 2.5 日历显示（二级入口，设计稿 04）
 
     var calendarLinkSection: some View {

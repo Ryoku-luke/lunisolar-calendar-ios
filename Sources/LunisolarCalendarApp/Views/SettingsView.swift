@@ -61,9 +61,6 @@ struct SettingsView: View {
             }
 
             appearanceSection
-            #if canImport(UIKit)
-            iconSection
-            #endif
             notificationSection
             calendarLinkSection
             dataSection

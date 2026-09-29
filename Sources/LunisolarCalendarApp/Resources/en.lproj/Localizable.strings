@@ -25,7 +25,6 @@
 "5 分钟前" = "5 minutes before";
 "AI 助手" = "AI Assistant";
 "AI 日历助手" = "AI Calendar Assistant";
-"App 图标" = "App Icon";
 "iCloud 不可用" = "iCloud Unavailable";
 "iCloud 不可用：请在系统设置登录 iCloud 后重试" = "iCloud Unavailable: Sign in to iCloud in Settings and try again";
 "iCloud 同步" = "iCloud Sync";
@@ -39,7 +38,6 @@
 "「时间胶囊」已关闭。请在 App 内「我的 → 提醒与时间胶囊」中开启后重试。" = "Live Activities is off. Turn it on in the app under Me → Reminders & Live Activities, then try again.";
 "一年后" = "In 1 Year";
 "七夕节" = "Qixi Festival";
-"七夕限定（鹊桥 + 星河）" = "Qixi (magpie bridge + starry river)";
 "万圣节" = "Halloween";
 "上个月" = "Last Month";
 "上岛" = "Show on Dynamic Island";
@@ -51,8 +49,6 @@
 "中" = "Medium";
 "中元节" = "Ghost Festival";
 "中秋节" = "Mid-Autumn Festival";
-"中秋限定（满月 + 玉兔）" = "Mid-Autumn (full moon + jade rabbit)";
-"主图标 / 春节限定自动切换" = "Main icon / auto-switches during Spring Festival";
 "主题与日历显示方式" = "Theme & Calendar Display";
 "五行" = "Five Elements";
 "产品需求评审会" = "Product Requirements Review";
@@ -81,7 +77,6 @@
 "倒计时 · %@" = "Countdown · %@";
 "儿童节" = "Children's Day";
 "元宵节" = "Lantern Festival";
-"元宵限定（汤圆 + 花灯）" = "Lantern Festival (tangyuan + lanterns)";
 "元旦" = "New Year's Day";
 "全天" = "All Day";
 "全选" = "Select All";
@@ -103,7 +98,6 @@
 "农历每年 重复（公历锚点：%@）" = "Repeats yearly on the lunar calendar (Gregorian anchor: %@)";
 "农历生日 · 每年" = "Lunar Birthday · Yearly";
 "冬至" = "Winter Solstice";
-"冬至限定（饺子 + 梅花）" = "Winter Solstice (dumplings + plum blossoms)";
 "冲煞" = "Clash";
 "冲突" = "Conflict";
 "冲突处理" = "Conflict Handling";
@@ -263,7 +257,6 @@
 "时间胶囊已开启，添加倒数日后自动上岛" = "Live Activity is on — countdowns appear on the Dynamic Island automatically";
 "春分" = "Spring Equinox";
 "春节" = "Spring Festival";
-"春节限定（金福 + 红灯笼）" = "Spring Festival (golden fu + red lanterns)";
 "是" = "Yes";
 "显示农历" = "Show Lunar Date";
 "显示已完成" = "Show Completed";
@@ -327,7 +320,6 @@
 "清和日历支持的日期范围为 %d 年 1 月至 %d 年 12 月。" = "Qinghe Calendar supports dates from Jan %d through Dec %d.";
 "清明" = "Pure Brightness";
 "清明节" = "Qingming Festival";
-"清明限定（新柳 + 青团）" = "Qingming (new willow + qingtuan)";
 "清空全部 %d 条" = "Clear All %d Items";
 "清空全部事件" = "Clear All Events";
 "清空后无法恢复，请谨慎操作" = "Cannot be undone. Please proceed with caution.";
@@ -360,13 +352,11 @@
 "立春" = "Beginning of Spring";
 "立秋" = "Beginning of Autumn";
 "端午节" = "Dragon Boat Festival";
-"端午限定（粽子 + 龙舟）" = "Dragon Boat (zongzi + dragon boats)";
 "类型" = "Type";
 "系统日历" = "System Calendar";
 "紧急" = "Urgent";
 "纪念日" = "Anniversary";
 "纳音" = "Nayin";
-"经典（撕历 + 四季）" = "Classic (tear-off calendar + four seasons)";
 "结束" = "End";
 "给妈妈打电话" = "Call Mom";
 "编辑" = "Edit";
@@ -425,7 +415,6 @@
 "重试" = "Retry";
 "清除筛选" = "Clear Filters";
 "重阳节" = "Double Ninth Festival";
-"重阳限定（菊花 + 枫叶）" = "Chongyang (chrysanthemum + maple leaves)";
 "长按小组件可切换尺寸样式" = "Long-press the widget to switch sizes";
 "问候身体情况" = "Ask about their health";
 "阅读《平凡的世界》30分钟" = "Read \"The Ordinary World\" for 30 minutes";

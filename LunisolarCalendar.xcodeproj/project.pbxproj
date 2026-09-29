@@ -28,27 +28,6 @@
 		0000000000000000000000C6 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B6 /* InfoPlist.strings */; };
 		0000000000000000000000C7 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B7 /* Localizable.strings */; };
 		0000000000000000000000C8 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B8 /* InfoPlist.strings */; };
-		0E8D657D8D9B42E0BE47EEE7 /* AppIconDuanWu.png in Resources */ = {isa = PBXBuildFile; fileRef = 879A74E425AE49A0AE4E842D /* AppIconDuanWu.png */; };
-		28700C1E11AB41A7A83FD0E4 /* AppIconDuanWu@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = FA998844E28746BE998EECB3 /* AppIconDuanWu@2x.png */; };
-		392D18837B93410DA8C492FE /* AppIconSpringFestival@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 6C4060A4F4214D07A21523DA /* AppIconSpringFestival@2x.png */; };
-		3AD69244D8624952857AEC13 /* AppIconQingMing.png in Resources */ = {isa = PBXBuildFile; fileRef = 62AC91BA866E4D978E0F764E /* AppIconQingMing.png */; };
-		50856DECD172429DAE03619C /* AppIconChongYang@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 26CD601A66484FC5A1036D2F /* AppIconChongYang@3x.png */; };
-		57C436AD80104A088F6E2321 /* AppIconDuanWu@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 49BE41A1E6F64617923E3F72 /* AppIconDuanWu@3x.png */; };
-		595EC70CE83049ABA16D284C /* AppIconQixi@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 0F1D2588FE914758AC05A266 /* AppIconQixi@3x.png */; };
-		5B108CD3ABD14F369A5BDD72 /* AppIconLantern@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 40007C772B534DA188055BFA /* AppIconLantern@3x.png */; };
-		61A8B09867AC473B8786E257 /* AppIconQingMing@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 31AC235ED0644943B447F1FA /* AppIconQingMing@3x.png */; };
-		7B1723451C2D49E3B06E86EF /* AppIconMidAutumn.png in Resources */ = {isa = PBXBuildFile; fileRef = B36CF522D05A4982888769F2 /* AppIconMidAutumn.png */; };
-		7B71A361F30C45D285BC13BD /* AppIconQingMing@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 1030717FED0C4FD09493EF54 /* AppIconQingMing@2x.png */; };
-		7CB6C02E0B0B41CD99D02182 /* AppIconChongYang.png in Resources */ = {isa = PBXBuildFile; fileRef = 73708F6E417C4DCE84E4F320 /* AppIconChongYang.png */; };
-		9334199958E74DFF9A584288 /* AppIconWinterSolstice.png in Resources */ = {isa = PBXBuildFile; fileRef = D15198C76A3744158781DBF5 /* AppIconWinterSolstice.png */; };
-		9573D230D0AB43D8959FDD66 /* AppIconWinterSolstice@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 003A7E19ED0D445AA3E71F72 /* AppIconWinterSolstice@3x.png */; };
-		9A0B2B8AB67F41EBAB34481A /* AppIconSpringFestival.png in Resources */ = {isa = PBXBuildFile; fileRef = E353E8EE080A40F9864CA123 /* AppIconSpringFestival.png */; };
-		A194A9D891AA45CDA28E2821 /* AppIconMidAutumn@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 841500DC845F4FD199EFB9B6 /* AppIconMidAutumn@3x.png */; };
-		A5866F1A5CD5442B81C82B34 /* AppIconLantern.png in Resources */ = {isa = PBXBuildFile; fileRef = 2F379D140BBD488391F68EAC /* AppIconLantern.png */; };
-		AB658B091E70491088853DF7 /* AppIconChongYang@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = F764337476874916B0750977 /* AppIconChongYang@2x.png */; };
-		B0C9D3C501854D6DB7C771F1 /* AppIconSpringFestival@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 3BDF27FA56404D5CB0EF1881 /* AppIconSpringFestival@3x.png */; };
-		C3743D9D179C46959A60078B /* AppIconQixi.png in Resources */ = {isa = PBXBuildFile; fileRef = 44F9A6B782EE42ACB563373E /* AppIconQixi.png */; };
-		C771871C7B7941E3AFADE463 /* AppIconQixi@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = F8C1DDEB946F4BD887148B30 /* AppIconQixi@2x.png */; };
 		CDC5FAD630638CB500255C00 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B1 /* Localizable.strings */; };
 		CDC5FAD730638CB500255C00 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B2 /* InfoPlist.strings */; };
 		CDC5FAD830638CB500255C00 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B3 /* Localizable.strings */; };
@@ -57,9 +36,6 @@
 		CDC5FADB30638CB500255C00 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B6 /* InfoPlist.strings */; };
 		CDC5FADC30638CB500255C00 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B7 /* Localizable.strings */; };
 		CDC5FADD30638CB500255C00 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000B8 /* InfoPlist.strings */; };
-		DCA90C51D4924EF58F770303 /* AppIconWinterSolstice@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 183D262105514F9889A28521 /* AppIconWinterSolstice@2x.png */; };
-		EE0158D1F71A47F487C71E1C /* AppIconLantern@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 9646D9194025444DB7C8D626 /* AppIconLantern@2x.png */; };
-		FCF154672D9A434CA0B155FF /* AppIconMidAutumn@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = D0CF234C2CD8488881801E54 /* AppIconMidAutumn@2x.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -121,31 +97,7 @@
 		0000000000000000000000B6 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "Sources/LunisolarCalendarApp/Resources/zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		0000000000000000000000B7 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "Sources/LunisolarCalendarApp/Resources/zh-Hant.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		0000000000000000000000B8 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "Sources/LunisolarCalendarApp/Resources/zh-Hant.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
-		003A7E19ED0D445AA3E71F72 /* AppIconWinterSolstice@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconWinterSolstice@3x.png"; path = "AppIconAlternates/AppIconWinterSolstice@3x.png"; sourceTree = "<group>"; };
-		0F1D2588FE914758AC05A266 /* AppIconQixi@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconQixi@3x.png"; path = "AppIconAlternates/AppIconQixi@3x.png"; sourceTree = "<group>"; };
-		1030717FED0C4FD09493EF54 /* AppIconQingMing@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconQingMing@2x.png"; path = "AppIconAlternates/AppIconQingMing@2x.png"; sourceTree = "<group>"; };
-		183D262105514F9889A28521 /* AppIconWinterSolstice@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconWinterSolstice@2x.png"; path = "AppIconAlternates/AppIconWinterSolstice@2x.png"; sourceTree = "<group>"; };
-		26CD601A66484FC5A1036D2F /* AppIconChongYang@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconChongYang@3x.png"; path = "AppIconAlternates/AppIconChongYang@3x.png"; sourceTree = "<group>"; };
-		2F379D140BBD488391F68EAC /* AppIconLantern.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = AppIconLantern.png; path = AppIconAlternates/AppIconLantern.png; sourceTree = "<group>"; };
-		31AC235ED0644943B447F1FA /* AppIconQingMing@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconQingMing@3x.png"; path = "AppIconAlternates/AppIconQingMing@3x.png"; sourceTree = "<group>"; };
-		3BDF27FA56404D5CB0EF1881 /* AppIconSpringFestival@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconSpringFestival@3x.png"; path = "AppIconAlternates/AppIconSpringFestival@3x.png"; sourceTree = "<group>"; };
-		40007C772B534DA188055BFA /* AppIconLantern@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconLantern@3x.png"; path = "AppIconAlternates/AppIconLantern@3x.png"; sourceTree = "<group>"; };
-		44F9A6B782EE42ACB563373E /* AppIconQixi.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = AppIconQixi.png; path = AppIconAlternates/AppIconQixi.png; sourceTree = "<group>"; };
-		49BE41A1E6F64617923E3F72 /* AppIconDuanWu@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconDuanWu@3x.png"; path = "AppIconAlternates/AppIconDuanWu@3x.png"; sourceTree = "<group>"; };
-		62AC91BA866E4D978E0F764E /* AppIconQingMing.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = AppIconQingMing.png; path = AppIconAlternates/AppIconQingMing.png; sourceTree = "<group>"; };
-		6C4060A4F4214D07A21523DA /* AppIconSpringFestival@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconSpringFestival@2x.png"; path = "AppIconAlternates/AppIconSpringFestival@2x.png"; sourceTree = "<group>"; };
-		73708F6E417C4DCE84E4F320 /* AppIconChongYang.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = AppIconChongYang.png; path = AppIconAlternates/AppIconChongYang.png; sourceTree = "<group>"; };
-		841500DC845F4FD199EFB9B6 /* AppIconMidAutumn@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconMidAutumn@3x.png"; path = "AppIconAlternates/AppIconMidAutumn@3x.png"; sourceTree = "<group>"; };
-		879A74E425AE49A0AE4E842D /* AppIconDuanWu.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = AppIconDuanWu.png; path = AppIconAlternates/AppIconDuanWu.png; sourceTree = "<group>"; };
-		9646D9194025444DB7C8D626 /* AppIconLantern@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconLantern@2x.png"; path = "AppIconAlternates/AppIconLantern@2x.png"; sourceTree = "<group>"; };
-		B36CF522D05A4982888769F2 /* AppIconMidAutumn.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = AppIconMidAutumn.png; path = AppIconAlternates/AppIconMidAutumn.png; sourceTree = "<group>"; };
 		CD1A46A73066516200D30756 /* LunisolarCalendarUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LunisolarCalendarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		D0CF234C2CD8488881801E54 /* AppIconMidAutumn@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconMidAutumn@2x.png"; path = "AppIconAlternates/AppIconMidAutumn@2x.png"; sourceTree = "<group>"; };
-		D15198C76A3744158781DBF5 /* AppIconWinterSolstice.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = AppIconWinterSolstice.png; path = AppIconAlternates/AppIconWinterSolstice.png; sourceTree = "<group>"; };
-		E353E8EE080A40F9864CA123 /* AppIconSpringFestival.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = AppIconSpringFestival.png; path = AppIconAlternates/AppIconSpringFestival.png; sourceTree = "<group>"; };
-		F764337476874916B0750977 /* AppIconChongYang@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconChongYang@2x.png"; path = "AppIconAlternates/AppIconChongYang@2x.png"; sourceTree = "<group>"; };
-		F8C1DDEB946F4BD887148B30 /* AppIconQixi@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconQixi@2x.png"; path = "AppIconAlternates/AppIconQixi@2x.png"; sourceTree = "<group>"; };
-		FA998844E28746BE998EECB3 /* AppIconDuanWu@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "AppIconDuanWu@2x.png"; path = "AppIconAlternates/AppIconDuanWu@2x.png"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -231,30 +183,6 @@
 				0000000000000000000000B6 /* InfoPlist.strings */,
 				0000000000000000000000B7 /* Localizable.strings */,
 				0000000000000000000000B8 /* InfoPlist.strings */,
-				E353E8EE080A40F9864CA123 /* AppIconSpringFestival.png */,
-				2F379D140BBD488391F68EAC /* AppIconLantern.png */,
-				62AC91BA866E4D978E0F764E /* AppIconQingMing.png */,
-				879A74E425AE49A0AE4E842D /* AppIconDuanWu.png */,
-				44F9A6B782EE42ACB563373E /* AppIconQixi.png */,
-				B36CF522D05A4982888769F2 /* AppIconMidAutumn.png */,
-				73708F6E417C4DCE84E4F320 /* AppIconChongYang.png */,
-				D15198C76A3744158781DBF5 /* AppIconWinterSolstice.png */,
-				6C4060A4F4214D07A21523DA /* AppIconSpringFestival@2x.png */,
-				3BDF27FA56404D5CB0EF1881 /* AppIconSpringFestival@3x.png */,
-				9646D9194025444DB7C8D626 /* AppIconLantern@2x.png */,
-				40007C772B534DA188055BFA /* AppIconLantern@3x.png */,
-				1030717FED0C4FD09493EF54 /* AppIconQingMing@2x.png */,
-				31AC235ED0644943B447F1FA /* AppIconQingMing@3x.png */,
-				FA998844E28746BE998EECB3 /* AppIconDuanWu@2x.png */,
-				49BE41A1E6F64617923E3F72 /* AppIconDuanWu@3x.png */,
-				F8C1DDEB946F4BD887148B30 /* AppIconQixi@2x.png */,
-				0F1D2588FE914758AC05A266 /* AppIconQixi@3x.png */,
-				D0CF234C2CD8488881801E54 /* AppIconMidAutumn@2x.png */,
-				841500DC845F4FD199EFB9B6 /* AppIconMidAutumn@3x.png */,
-				F764337476874916B0750977 /* AppIconChongYang@2x.png */,
-				26CD601A66484FC5A1036D2F /* AppIconChongYang@3x.png */,
-				183D262105514F9889A28521 /* AppIconWinterSolstice@2x.png */,
-				003A7E19ED0D445AA3E71F72 /* AppIconWinterSolstice@3x.png */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -393,30 +321,6 @@
 				CDC5FADB30638CB500255C00 /* InfoPlist.strings in Resources */,
 				CDC5FADC30638CB500255C00 /* Localizable.strings in Resources */,
 				CDC5FADD30638CB500255C00 /* InfoPlist.strings in Resources */,
-				9A0B2B8AB67F41EBAB34481A /* AppIconSpringFestival.png in Resources */,
-				A5866F1A5CD5442B81C82B34 /* AppIconLantern.png in Resources */,
-				3AD69244D8624952857AEC13 /* AppIconQingMing.png in Resources */,
-				0E8D657D8D9B42E0BE47EEE7 /* AppIconDuanWu.png in Resources */,
-				C3743D9D179C46959A60078B /* AppIconQixi.png in Resources */,
-				7B1723451C2D49E3B06E86EF /* AppIconMidAutumn.png in Resources */,
-				7CB6C02E0B0B41CD99D02182 /* AppIconChongYang.png in Resources */,
-				9334199958E74DFF9A584288 /* AppIconWinterSolstice.png in Resources */,
-				392D18837B93410DA8C492FE /* AppIconSpringFestival@2x.png in Resources */,
-				B0C9D3C501854D6DB7C771F1 /* AppIconSpringFestival@3x.png in Resources */,
-				EE0158D1F71A47F487C71E1C /* AppIconLantern@2x.png in Resources */,
-				5B108CD3ABD14F369A5BDD72 /* AppIconLantern@3x.png in Resources */,
-				7B71A361F30C45D285BC13BD /* AppIconQingMing@2x.png in Resources */,
-				61A8B09867AC473B8786E257 /* AppIconQingMing@3x.png in Resources */,
-				28700C1E11AB41A7A83FD0E4 /* AppIconDuanWu@2x.png in Resources */,
-				57C436AD80104A088F6E2321 /* AppIconDuanWu@3x.png in Resources */,
-				C771871C7B7941E3AFADE463 /* AppIconQixi@2x.png in Resources */,
-				595EC70CE83049ABA16D284C /* AppIconQixi@3x.png in Resources */,
-				FCF154672D9A434CA0B155FF /* AppIconMidAutumn@2x.png in Resources */,
-				A194A9D891AA45CDA28E2821 /* AppIconMidAutumn@3x.png in Resources */,
-				AB658B091E70491088853DF7 /* AppIconChongYang@2x.png in Resources */,
-				50856DECD172429DAE03619C /* AppIconChongYang@3x.png in Resources */,
-				DCA90C51D4924EF58F770303 /* AppIconWinterSolstice@2x.png in Resources */,
-				9573D230D0AB43D8959FDD66 /* AppIconWinterSolstice@3x.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

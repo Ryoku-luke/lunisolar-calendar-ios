@@ -98,12 +98,6 @@ public struct AdaptiveRootView: View {
                 PhoneTabRootView()
             }
         }
-        .onAppear {
-            // 启动时根据日期自动切换主/春节图标（仅在窗口内切换，否则回主图标）
-            #if canImport(UIKit)
-            AlternateIconManager.shared.applyTodayIfNeeded()
-            #endif
-        }
     }
 }
 
