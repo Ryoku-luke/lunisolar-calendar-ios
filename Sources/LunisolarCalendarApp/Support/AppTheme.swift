@@ -113,6 +113,17 @@ public enum AppTheme {
         public static var numeralL: SwiftUI.Font { scaled(20, weight: .semibold, textStyle: .headline) }
         public static var numeralM: SwiftUI.Font { scaled(16, weight: .semibold, textStyle: .body) }
         public static var numeralXL: SwiftUI.Font { scaled(56, weight: .bold, textStyle: .largeTitle) }
+        // N-9：视图层残留的「大数字/大号特殊字号」收编为 token（随 Dynamic Type 缩放）。
+        // 命名沿用途：倒计时大数字、空态大数字、品牌大字、天气图标字号。
+        public static var countdownNumber: SwiftUI.Font { scaled(30, weight: .semibold, textStyle: .title1) }
+        public static var countdownLarge: SwiftUI.Font { scaled(40, weight: .semibold, textStyle: .largeTitle) }
+        public static var brandWordmark: SwiftUI.Font { scaled(40, weight: .light, textStyle: .largeTitle) }
+        public static var emptyStateNumber: SwiftUI.Font { scaled(36, weight: .regular, textStyle: .largeTitle) }
+        public static var weatherIcon: SwiftUI.Font { scaled(32, weight: .medium, textStyle: .title1) }
+        public static var eventBadgeNumber: SwiftUI.Font { scaled(24, weight: .semibold, textStyle: .title3) }
+        public static var compactNumber: SwiftUI.Font { scaled(28, weight: .semibold, textStyle: .title2) }
+        public static var chipTiny: SwiftUI.Font { scaled(10, weight: .medium, textStyle: .caption2) }
+        public static var checkboxSymbol: SwiftUI.Font { scaled(18, weight: .semibold, textStyle: .body) }
     }
     public enum Motion {
         /// 卡片按压弹簧（轻触 → 下沉 → 弹回）

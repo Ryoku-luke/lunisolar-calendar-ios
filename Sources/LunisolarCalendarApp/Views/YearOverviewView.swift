@@ -108,7 +108,7 @@ struct YearOverviewView: View {
         let m = marks[month] ?? MonthMarks()
         return VStack(spacing: 5) {
             Text(monthName(month))
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: 13, weight: .semibold, design: .rounded)) // N-9-exempt: 迷你月卡固定字号
                 .foregroundStyle(Color.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 2)
@@ -119,7 +119,7 @@ struct YearOverviewView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 2) {
                 ForEach(0..<7, id: \.self) { i in
                     Text(shortWeekday(weekday: MiniMonthGrid.weekday(atColumn: i, weekStart: weekStart)))
-                        .font(.system(size: 8, weight: .medium))
+                        .font(.system(size: 8, weight: .medium)) // N-9-exempt: 迷你月卡固定字号
                         .foregroundStyle(Color.secondary)
                 }
             }
@@ -162,10 +162,10 @@ struct YearOverviewView: View {
             VStack(spacing: 1) {
                 ZStack {
                     if isToday {
-                        Circle().fill(Color.accentColor)
+                        Circle().fill(Color.appTint)
                     }
                     Text("\(day)")
-                        .font(.system(size: isToday ? 9.5 : 8.5, weight: isToday ? .bold : .regular, design: .rounded))
+                        .font(.system(size: isToday ? 9.5 : 8.5, weight: isToday ? .bold : .regular, design: .rounded)) // N-9-exempt: 迷你月卡固定字号
                         .foregroundStyle(isToday ? Color.white : Color.primary)
                 }
                 .frame(width: 16, height: 16)
@@ -173,13 +173,13 @@ struct YearOverviewView: View {
 
                 if let label {
                     Text(label)
-                        .font(.system(size: 6.5, weight: .medium))
+                        .font(.system(size: 6.5, weight: .medium)) // N-9-exempt: 迷你月卡固定字号
                         .foregroundStyle(labelColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .frame(height: 9)
                 } else if hasEvent {
-                    Circle().fill(Color.accentColor.opacity(0.85)).frame(width: 3, height: 3)
+                    Circle().fill(Color.appTint.opacity(0.85)).frame(width: 3, height: 3)
                 } else {
                     Color.clear.frame(height: 9)
                 }

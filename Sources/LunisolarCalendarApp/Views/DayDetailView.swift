@@ -253,7 +253,7 @@ struct DayDetailView: View {
                                                  startPoint: .top, endPoint: .bottom))
                             .frame(width: 52, height: 52)
                         Image(systemName: "sparkles")
-                            .font(.system(size: 24, weight: .semibold))
+                            .font(AppTheme.Font.eventBadgeNumber)
                             .foregroundStyle(controlTint)
                     }
                     VStack(alignment: .leading, spacing: 2) {

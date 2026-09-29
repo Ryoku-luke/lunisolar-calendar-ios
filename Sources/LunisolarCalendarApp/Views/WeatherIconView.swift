@@ -24,7 +24,7 @@ struct WeatherIconView: View {
             case .some(.success(let snapshot)):
                 if let day = Self.daily(for: selectedDate, in: snapshot.days ?? []) {
                     Image(systemName: WMOWeather.describe(day.weatherCode).symbol)
-                        .font(.system(size: 32, weight: .medium))
+                        .font(AppTheme.Font.weatherIcon)
                         .foregroundStyle(Self.symbolColor(day.weatherCode))
                         .frame(width: 52, height: 52)
                         .background {
@@ -50,7 +50,7 @@ struct WeatherIconView: View {
     /// 加载中/失败/越界：中性占位
     private var placeholder: some View {
         Image(systemName: "cloud.fill")
-            .font(.system(size: 32, weight: .medium))
+            .font(AppTheme.Font.weatherIcon)
             .foregroundStyle(Color.quaternaryLabel)
             .frame(width: 52, height: 52)
             .background {

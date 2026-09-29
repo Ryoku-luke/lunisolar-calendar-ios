@@ -52,7 +52,7 @@ struct EventRow: View {
                         EventService.shared.setCompleted(event)
                     } label: {
                         Image(systemName: event.isCompleted ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: compact ? 18 : AppTheme.Touch.checkboxSize, weight: .semibold))
+                            .font(compact ? AppTheme.Font.checkboxSymbol : AppTheme.Font.numeralM)
                             .foregroundStyle(
                                 event.isCompleted ? Color.systemGreen : Color.tertiaryLabel.opacity(0.7))
                             .symbolRenderingMode(.hierarchical)

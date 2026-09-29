@@ -5,13 +5,28 @@ import LunarCore
 import UIKit
 #endif
 
+// MARK: - N-3 月卡 chrome 高度上报
+
+/// 月卡固定 chrome（月份标题 + 节气条 + 星期表头 + 卡片内外边距）的累加上报。
+/// 各段用 `.background(GeometryReader)` 写入自身高度，reduce 求和后由
+/// `CalendarMonthView` 读取，替换 `elasticCellHeight` 里的 170 魔数。
+/// 节气条显隐两态天然正确：不存在时该段不上报，高度按 0 参与求和。
+struct MonthChromeHeightKey: PreferenceKey {
+    // N-3 修复：Swift 6 严格并发下 `static var` 是非隔离的全局共享可变状态，不并发安全。
+    // PreferenceKey 协议只要求 get-only，`static let` 满足协议且为 Sendable 不可变状态
+    // （Xcode 建议方案①，也是 SwiftUI 官方在 Swift 6 下的标准写法）。
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value += nextValue()
+    }
+}
+
 struct CalendarMonthView: View {
     @State var currentMonth: Date = Date().firstDayOfMonth
     /// 本地选中日期（唯一真相，@State 保证点击后必然重绘）。
     /// 外部传入 binding 时（iPad 双栏）通过 onChange 双向同步，不在 init 里手动接线，
     /// 彻底规避"点击日期无反应"（此前 @Binding←局部引用/投影接线的运行时失效问题）。
     @State var selectedDate: Date = Date()
-    @State private var isPanelExpanded: Bool = false
     /// 月份卡片滑动的进入方向：.trailing=下月从右侧滑入，.leading=上月从左侧滑入
     @State var monthSlideEdge: Edge = .trailing
     #if canImport(UIKit)
@@ -28,6 +43,11 @@ struct CalendarMonthView: View {
     /// 中栏可视高度（仅 iPad 用）：弹性行高的计算依据，由背景 GeometryReader 注入。
     /// 0 = 尚未测量，此时行高退回 `minHeight: 56` 的旧行为（多一次布局即可修正）。
     @State private var columnHeight: CGFloat = 0
+    /// N-3：月卡「chrome」真实高度（月份标题 + 节气条 + 星期表头 + 卡片内外边距），
+    /// 由 `MonthChromeHeightKey` PreferenceKey 上报求和替换旧的 170 魔数。
+    /// 节气条显隐两态都会上报真实值（不存在时不上报，天然为 0 参与求和）。
+    /// 0 = 尚未测量，此时回退旧估算值（多一次布局即可修正，行为不劣化）。
+    @State private var chromeHeight: CGFloat = 0
     /// 月网格派生数据缓存：仅当月份或事件版本变化时重建。
     /// 横滑期间 dragOffsetX 每帧令 body 重算，但命中此缓存后 42 格的
     /// 农历转换/黄历生成/节日遍历/事件统计全部 O(1) 复用，不再每帧重算。
@@ -52,6 +72,10 @@ struct CalendarMonthView: View {
     @State var auxiliaryPage: MonthAuxiliaryPage?
     /// 事件编辑模态的两种目标（长按日期格新建 / 深链打开已有事件）
     @State var eventEditSheet: MonthEventEditSheet?
+    /// N-4：DayAccent 缓存。`DayAccent(date:)` 内部做农历转换 + 节日遍历 + 颜色对比度解析，
+    /// 横滑期间 body 每帧重算会重复这串 O(节日表) 工作。改为：选中日变化时才重建，
+    /// body 每帧直接读缓存（滑动月份不变选中日 → 命中缓存零重算）。
+    @State private var cachedDayAccent: DayAccent = DayAccent(date: Date())
 
     init(selectedDate: Binding<Date>? = nil, embedsInNavigationStack: Bool = true) {
         self.embedsInNavigationStack = embedsInNavigationStack
@@ -93,6 +117,10 @@ struct CalendarMonthView: View {
             ScrollView(showsIndicators: false) {
                 monthColumn(accent: dayAccent)
             }
+            // N-3：读取月卡 chrome 真实高度（月份标题 + 节气条 + 星期表头）
+            .onPreferenceChange(MonthChromeHeightKey.self) { value in
+                chromeHeight = value
+            }
             // P1-2：方向键移动选中日期（iPad 外接键盘）。
             // selectDay 本身处理跨月联动，越界日期（1900 前/2100 后）由 LunarDate 层兜底。
             .onKeyPress(.leftArrow) {
@@ -103,13 +131,15 @@ struct CalendarMonthView: View {
                 selectDay(selectedDate.addingDays(1))
                 return .handled
             }
+            // 2026-09-29：取消折叠后 iPhone 不再按可视区弹性分配行高——
+            // 恢复内容自适应高度（格子高度由内容决定，避免大屏上格子过高、
+            // 日期数字与农历/节气文字之间的上下留白过大）。
+            // 可视高度测量仅保留给 iPad 分栏（elasticCellHeight 的 guard 已恢复 isIPadSplit）。
             .background {
-                if isIPadSplit {
-                    GeometryReader { geo in
-                        Color.clear
-                            .onAppear { columnHeight = geo.size.height }
-                            .onChange(of: geo.size.height) { _, h in columnHeight = h }
-                    }
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { columnHeight = geo.size.height }
+                        .onChange(of: geo.size.height) { _, h in columnHeight = h }
                 }
             }
         }
@@ -146,7 +176,7 @@ struct CalendarMonthView: View {
                     EventEditView(editing: nil, defaultDate: selectedDate).environment(store)
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(AppTheme.Font.title3)
                         .touchTarget(min: AppTheme.Touch.minTarget)
                 }
                 .accessibilityLabel("新建日程")
@@ -211,9 +241,13 @@ struct CalendarMonthView: View {
             auxiliaryPage = .countdown(focusID: id)
             NavigationCoordinator.shared.pendingOpenCountdownID = nil
         }
-        // 本地选中 → 同步外部（iPad 双栏联动 DayDetailView）
-        .onChange(of: selectedDate) { _, newValue in
+        // 本地选中 → 同步外部（iPad 双栏联动 DayDetailView）。
+        // initial: true —— 外部 binding 提供的初始选中日也要走一次缓存重建，
+        // 避免 @State 默认 Date() 与真实初始日不一致。
+        .onChange(of: selectedDate, initial: true) { _, newValue in
             externalSelectedDate?.wrappedValue = newValue
+            // N-4：选中日变化 → 重建 DayAccent 缓存（横滑翻月时选中日不变，跳过此处）
+            cachedDayAccent = DayAccent(date: newValue)
         }
         // 外部选中变化（DateJumpView / 双栏联动）→ 同步本地
         .onChange(of: externalSelectedDate?.wrappedValue) { _, newValue in
@@ -250,12 +284,21 @@ struct CalendarMonthView: View {
     /// 预构建某月网格模型写入缓存（滑动切换零卡顿的关键）
     private func monthColumn(accent: DayAccent) -> some View {
         VStack(spacing: 0) {
-            monthHeader(accent: accent.decorative, controlTint: accent.controlTint)
-                .padding(.horizontal, AppTheme.Spacing.xl)
-                .padding(.top, 8).padding(.bottom, AppTheme.Spacing.sm)
-            solarTermBar(accent: accent.decorative, controlTint: accent.controlTint)
-                .padding(.horizontal, AppTheme.Spacing.xl)
-                .padding(.bottom, AppTheme.Spacing.xs)
+            // N-3：月份标题 + 节气条合包上报真实高度（含各自外层 padding）。
+            // 节气条显隐两态自然正确——solarTermBar 为 @ViewBuilder，不存在时不渲染。
+            VStack(spacing: 0) {
+                monthHeader(accent: accent.decorative, controlTint: accent.controlTint)
+                    .padding(.horizontal, AppTheme.Spacing.xl)
+                    .padding(.top, 8).padding(.bottom, AppTheme.Spacing.sm)
+                solarTermBar(accent: accent.decorative, controlTint: accent.controlTint)
+                    .padding(.horizontal, AppTheme.Spacing.xl)
+                    .padding(.bottom, AppTheme.Spacing.xs)
+            }
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(key: MonthChromeHeightKey.self, value: geo.size.height)
+                }
+            )
             // 卡片式月份滑动（完全跟手）：
             // 拖动中当前月卡片 1:1 跟随手指位移，相邻月网格预渲染在另一侧同速移动；
             // 松手后按位移/速度决定翻页（transition 接管收尾动画）或回弹。
@@ -295,13 +338,13 @@ struct CalendarMonthView: View {
                 .padding(.horizontal, AppTheme.Spacing.md)
             #endif
             if !isIPadSplit {
+                // 2026-09-29 用户裁决：日期卡片与今日安排不再收起折叠，始终完整展开。
+                // 底部保留固定呼吸空间，避免「宜做/勿做」卡片被 TabBar 遮挡。
                 SelectedDayCardView(selectedDate: selectedDate,
-                                    isPanelExpanded: $isPanelExpanded,
                                     accent: accent)
                     .padding(.horizontal, AppTheme.Spacing.md)
                     .padding(.top, AppTheme.Spacing.md)
-                    // 系统 TabBar(~83pt) + home indicator + 呼吸空间，
-                    // 避免「宜做/勿做」卡片被 TabBar 遮挡
+                    // 系统 TabBar(~83pt) + home indicator + 呼吸空间
                     .padding(.bottom, 96)
             }
         }
@@ -312,8 +355,10 @@ struct CalendarMonthView: View {
 
     /// 当天节日强调色，按 P0-4 分两层（见 `DayAccent`）。
     /// 注意：这里被 `calendarContent` 每次 body 取一次后逐层透传，避免重复做节日遍历。
-    private var dayAccentForToday: DayAccent { DayAccent(date: selectedDate) }
-    private var accentColorForToday: Color { dayAccentForToday.decorative }
+    /// N-4：DayAccent 缓存读取。真正的重建在 `onChange(of: selectedDate)` 里做，
+    /// 滑动翻月（选中日不变）时 body 每帧直接命中缓存，零重复计算。
+    private var dayAccentForToday: DayAccent { cachedDayAccent }
+    private var accentColorForToday: Color { cachedDayAccent.decorative }
 
     /// 原生风格背景：系统分组背景 + 极淡节日染色（去掉 iOS 26 模糊色斑壁纸特效）
     @ViewBuilder
@@ -387,8 +432,12 @@ struct CalendarMonthView: View {
                     .font(.caption)
                     .foregroundStyle(Color.tertiaryLabel)
                 Text(next.name)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(controlTint)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, AppTheme.Spacing.xs)
+                    .padding(.vertical, 2)
+                    // N-8② 折中：节气名用装饰原色保留节日氛围，淡底衬保证浅色模式下可读
+                    .background(Capsule().fill(accent.opacity(0.14)))
                 if next.daysRemaining > 0 {
                     Text(String(format: NSLocalizedString("还有 %d 天", comment: ""), next.daysRemaining))
                         .font(.caption)
@@ -412,15 +461,24 @@ struct CalendarMonthView: View {
             .accessibilityLabel(name == "chevron.left" ? String(localized: "上个月") : String(localized: "下个月"))
     }
 
-    /// iPad 中栏的弹性行高：把可视高度扣掉「月份标题 + 节气条 + 星期表头 + 内边距」后
+    /// 弹性行高：把可视高度扣掉「月份标题 + 节气条 + 星期表头 + 内边距」后
     /// 按行均分，夹在 56（可点下限）~96（大屏上限）之间。
-    /// 返回 nil 表示不限高 —— iPhone 走原来的 `minHeight` 行为，完全不受影响。
+    /// 2026-09-29：恢复 `isIPadSplit` 守卫——仅 iPad 分栏启用；
+    /// iPhone 取消折叠后恢复内容自适应高度（格子过高会拉开数字与农历的上下留白）。
+    /// 返回 nil 表示不限高 —— 仅在可视高度尚未测量时回退 `minHeight` 行为。
     ///
-    /// ⚠️ `chrome` 是估算值：偏小只会让内容轻微可滚（有 ScrollView 兜底），偏大则月卡下方
-    /// 仍有留白（96pt 上限本身就意味着 13" 屏上不可能完全铺满）。两种都不会裁切内容。
+    /// N-3：chrome 不再用 170 魔数，改用 `MonthChromeHeightKey` 上报的真实高度
+    /// （月份标题 + 节气条 + 星期表头）加上固定的卡片内外边距与网格行距。
+    /// 上报未就绪（=0）时回退旧估算值 170——行为不劣化，多一次布局即修正。
     private func elasticCellHeight(rows: Int) -> CGFloat? {
         guard isIPadSplit, columnHeight > 0, rows > 0 else { return nil }
-        let chrome: CGFloat = 170
+        // 卡片内外固定边距：月卡 .padding(.top, sm=8) + .padding(.bottom, lg=16)
+        // 网格行距：LazyVGrid spacing（iPad 6pt / iPhone 3pt）× 行间缝隙（rows-1）
+        let cardPadding: CGFloat = AppTheme.Spacing.sm + AppTheme.Spacing.lg
+        let gridSpacing: CGFloat = CGFloat(rows - 1) * (isIPadSplit ? 6 : 3)
+        let chrome = chromeHeight > 0
+            ? chromeHeight + cardPadding + gridSpacing
+            : 170 // 回退：首次布局前偏好未上报
         return min(96, max(AppTheme.Touch.minCellHeight, (columnHeight - chrome) / CGFloat(rows)))
     }
 
@@ -431,6 +489,12 @@ struct CalendarMonthView: View {
         let columns = [GridItem](repeating: GridItem(.flexible(), spacing: 0), count: 7)
         return VStack(alignment: .leading, spacing: 0) {
             WeekHeaderView(weekStart: weekStart)
+                // N-3：星期表头高度上报（弹性行高 chrome 的组成部分）
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(key: MonthChromeHeightKey.self, value: geo.size.height)
+                    }
+                )
             LazyVGrid(columns: columns, spacing: isIPadSplit ? 6 : 3) {
                 ForEach(grid.cells) { cell in
                     let d = cell.date

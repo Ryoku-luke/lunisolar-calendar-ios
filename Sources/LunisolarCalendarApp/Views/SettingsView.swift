@@ -56,7 +56,7 @@ struct SettingsView: View {
                     // 用户感受为「点了没什么反应」）
                     onAI: { showAIAssistant = true }
                 )
-                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 10, trailing: 16))
+                .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 6, trailing: 16))
                 .listRowBackground(Color.clear)
             }
 

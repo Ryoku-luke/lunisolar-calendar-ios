@@ -99,7 +99,11 @@ struct DateJumpView: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .sheet(isPresented: $showYearOverview) {
+        // N-7：全年视图不再用 sheet（会与 DateJumpView 自身的 sheet 叠成
+        // 「sheet 叠 sheet」——iPad 上两级模态堆叠观感差、交互绕）。
+        // 改用 popover：iPad 上是悬浮窗（不叠模态），iPhone/紧凑宽度下
+        // 系统自动退化为全屏 sheet，两种设备行为都自然。
+        .popover(isPresented: $showYearOverview, arrowEdge: .top) {
             YearOverviewView(targetDate: $targetDate) { date in
                 targetDate = date
                 showYearOverview = false

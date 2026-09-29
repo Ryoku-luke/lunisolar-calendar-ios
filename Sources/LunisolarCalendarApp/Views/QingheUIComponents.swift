@@ -19,9 +19,9 @@ struct QingheSettingsHeroCard: View {
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 44, height: 44)
+                        .frame(width: 40, height: 40)
                     Image(systemName: "calendar.badge.clock")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold)) // N-9-exempt: SF Symbol 图标固定方框（豁免①）
                         .foregroundStyle(.white)
                 }
 
@@ -49,13 +49,13 @@ struct QingheSettingsHeroCard: View {
                         .foregroundStyle(Color.tertiaryLabel)
                 }
                 .foregroundStyle(Color.appTint)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 44)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 40)
                 .background(Color.appTint.opacity(0.08), in: RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous))
             }
             .buttonStyle(.plain)
         }
-        .padding(16)
+        .padding(AppTheme.Spacing.md)
         .background {
             AdaptiveMaterialFill(material: .regularMaterial,
                                  shape: RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous))
@@ -65,7 +65,7 @@ struct QingheSettingsHeroCard: View {
                 }
         }
         .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 }
 
@@ -85,7 +85,7 @@ struct QingheSectionHeader: View {
                 .foregroundStyle(Color.secondaryLabel)
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(AppTheme.Font.chipTiny)
                     .foregroundStyle(Color.tertiaryLabel)
             }
             Spacer()
@@ -129,7 +129,7 @@ private struct EventQuickActionsModifier: ViewModifier {
                 NavigationStack {
                     EventEditView(editing: target, defaultDate: target.startDate)
                 }
-                .presentationDetents([.medium, .large])
+                .eventEditorDetents()
                 .presentationDragIndicator(.visible)
             }
     }
@@ -139,6 +139,22 @@ extension View {
     /// 事件行快速操作（长按：标记完成 / 删除）
     func eventQuickActions(_ event: CalendarEvent) -> some View {
         modifier(EventQuickActionsModifier(event: event))
+    }
+
+    /// 事件编辑器 sheet detents（N-8③）：
+    /// 事件编辑表单 5 个 Section 较长，iPad medium 档（半屏）装不下，
+    /// 默认落点用 `.large`；iPhone 保持 medium+large 可拉缩。
+    /// 倒数日编辑器表单较短，维持 `.medium, .large` 不动。
+    func eventEditorDetents() -> some View {
+        #if os(iOS)
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            return presentationDetents([.large])
+        } else {
+            return presentationDetents([.medium, .large])
+        }
+        #else
+        return presentationDetents([.medium, .large])
+        #endif
     }
 }
 #endif

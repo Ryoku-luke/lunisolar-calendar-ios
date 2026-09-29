@@ -175,22 +175,28 @@ struct iPadRootView: View {
             Label("日历", systemImage: "calendar").tag(NavigationCoordinator.iPadSection.calendar)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier(AccessibilityID.iPadSidebarCalendar)
+                // N-6：外接键盘 ⌘1..⌘5 直达各节（配合 List selection 生效）
+                .keyboardShortcut("1", modifiers: .command)
         case .ai:
             Label("AI 助手", systemImage: "sparkles").tag(NavigationCoordinator.iPadSection.ai)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier(AccessibilityID.iPadSidebarAI)
+                .keyboardShortcut("2", modifiers: .command)
         case .agenda:
             Label("全部日程", systemImage: "list.bullet.rectangle").tag(NavigationCoordinator.iPadSection.agenda)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier(AccessibilityID.iPadSidebarAgenda)
+                .keyboardShortcut("3", modifiers: .command)
         case .countdown:
             Label("倒数日", systemImage: "hourglass").tag(NavigationCoordinator.iPadSection.countdown)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier(AccessibilityID.iPadSidebarCountdown)
+                .keyboardShortcut("4", modifiers: .command)
         case .settings:
             Label("设置", systemImage: "gearshape").tag(NavigationCoordinator.iPadSection.settings)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier(AccessibilityID.iPadSidebarSettings)
+                .keyboardShortcut("5", modifiers: .command)
         }
     }
 
@@ -223,10 +229,10 @@ struct iPadRootView: View {
                 sidebarRow(s)
             }
         }
-        .navigationTitle("清和日历")
-        #if canImport(UIKit)
+        // N-5：去掉 .navigationTitle("清和日历")——品牌 Section 已显示
+        // 图标 + 名称 + 版本，List 顶部再渲染 inline 标题会造成应用名出现两次。
+        // 推荐方案①：品牌区顶到顶，侧栏更干净；VoiceOver 也不再重复朗读。
         .navigationBarTitleDisplayMode(.inline)
-        #endif
         .navigationSplitViewColumnWidth(min: splitColumnWidths.sidebar.0,
                                         ideal: splitColumnWidths.sidebar.1,
                                         max: splitColumnWidths.sidebar.2)
@@ -303,7 +309,60 @@ struct iPadRootView: View {
                                                 ideal: splitColumnWidths.detail.1,
                                                 max: splitColumnWidths.detail.2)
         case .agenda, .settings, .ai:
-            EmptyView()
+            // N-2：宽屏 .all 下右栏不能留一列空白——统一空态占位。
+            // 各节定制副文案，带 App 图标水印，保持三栏视觉完整。
+            rightColumnPlaceholder(for: nav.iPadSection ?? .agenda)
+        }
+    }
+
+    /// N-2：无 Inspector 节的右栏空态占位（13" 宽屏三栏下避免一列空白）。
+    /// 布局：居中图标 + 节名 + 一句说明；不参与导航选择。
+    @ViewBuilder
+    private func rightColumnPlaceholder(for section: NavigationCoordinator.iPadSection) -> some View {
+        VStack(spacing: AppTheme.Spacing.md) {
+            Image(systemName: placeholderIcon(for: section))
+                .font(AppTheme.Font.brandWordmark)
+                .foregroundStyle(Color.tertiaryLabel)
+            Text(placeholderTitle(for: section))
+                .font(AppTheme.Font.title3.weight(.semibold))
+                .foregroundStyle(Color.label)
+            Text(placeholderSubtitle(for: section))
+                .font(AppTheme.Font.caption)
+                .foregroundStyle(Color.secondaryLabel)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, AppTheme.Spacing.lg)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationSplitViewColumnWidth(min: splitColumnWidths.detail.0,
+                                        ideal: splitColumnWidths.detail.1,
+                                        max: splitColumnWidths.detail.2)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func placeholderIcon(for section: NavigationCoordinator.iPadSection) -> String {
+        switch section {
+        case .ai: return "sparkles"
+        case .agenda: return "list.bullet.rectangle"
+        case .settings: return "gearshape"
+        default: return "app.gift"
+        }
+    }
+
+    private func placeholderTitle(for section: NavigationCoordinator.iPadSection) -> String {
+        switch section {
+        case .ai: return NSLocalizedString("AI 日历助手", comment: "")
+        case .agenda: return NSLocalizedString("全部日程", comment: "")
+        case .settings: return NSLocalizedString("设置", comment: "")
+        default: return ""
+        }
+    }
+
+    private func placeholderSubtitle(for section: NavigationCoordinator.iPadSection) -> String {
+        switch section {
+        case .ai: return NSLocalizedString("在此与 AI 对话，安排日程与倒数日", comment: "")
+        case .agenda: return NSLocalizedString("所有事件按时间线汇集于此", comment: "")
+        case .settings: return NSLocalizedString("外观、同步、数据与关于信息", comment: "")
+        default: return ""
         }
     }
 

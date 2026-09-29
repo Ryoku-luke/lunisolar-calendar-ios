@@ -50,11 +50,14 @@ public final class NavigationCoordinator {
     }
 
     /// 打开 AI 助手（深链 `qinghe://ai`）。
-    /// iPad 侧栏目前没有 AI 节，故改动只对 iPhone 的 Tab 生效。
+    /// N-1 修复：iPad 侧栏已有 AI 节（2026-09-27 批次 3 新增 `.ai`），
+    /// 旧实现只切 iPhone Tab、注释也停留在"iPad 没有 AI 节"的过时状态，
+    /// 导致 iPad 上点 AI 深链无任何反应。现在双端同步切换。
     public func openAIAssistant() {
         #if os(iOS)
         phoneTab = .ai
         #endif
+        self.iPadSection = .ai
     }
 
     /// 切换到日历 Tab 并显示指定事件日期

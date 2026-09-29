@@ -215,7 +215,7 @@ struct AIAssistantView: View {
                                     inputFocused = true
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 20))
+                                        .font(.system(size: 20)) // N-9-exempt: SF Symbol 图标固定方框（豁免①）
                                         .foregroundStyle(Color.tertiaryLabel)
                                         .frame(width: 32, height: 32)
                                         .contentShape(Rectangle())
@@ -352,6 +352,16 @@ struct AIAssistantView: View {
                 }
             }
             .navigationTitle(NSLocalizedString("AI 日历助手", comment: ""))
+            // N-6：外接键盘 ⌘+Return = 解析提交（与键盘「解析」等价）。
+            // 普通 Return 已由 AutoFocusTextView 的 shouldChangeTextIn 提交，
+            // ⌘+Return 在此兜底（焦点不在输入框时也可用）。
+            .onKeyPress { press in
+                if press.modifiers.contains(.command), press.key == .return {
+                    parse()
+                    return .handled
+                }
+                return .ignored
+            }
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     inputFocused = true

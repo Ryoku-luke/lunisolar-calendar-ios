@@ -81,9 +81,8 @@ struct MonthSheetsModifier: ViewModifier {
                         EventEditView(editing: event, defaultDate: event.startDate).environment(store)
                     }
                 }
-                // P1-8a：iPad regular 下用中 detent，避免全屏 sheet 遮挡主日历
-                // （iOS 17 无 .inspector，这是最接近 Inspector 的体验）
-                .presentationDetents([.medium, .large])
+                // N-8③：事件编辑表单较长，iPad 默认 .large（iPhone 保持 medium+large）
+                .eventEditorDetents()
                 .presentationDragIndicator(.visible)
             }
     }

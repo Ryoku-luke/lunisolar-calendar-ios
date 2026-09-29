@@ -82,7 +82,7 @@ public struct QingheEmptyView: View {
     public var body: some View {
         VStack(spacing: AppTheme.Spacing.md) {
             Image(systemName: icon)
-                .font(.system(size: 38, weight: .regular))
+                .font(AppTheme.Font.emptyStateNumber)
                 .foregroundStyle(Color.tertiaryLabel)
 
             Text(title)
@@ -165,7 +165,7 @@ public struct QingheErrorView: View {
     private var cardBody: some View {
         VStack(spacing: AppTheme.Spacing.md) {
             Image(systemName: icon)
-                .font(.system(size: 34, weight: .regular))
+                .font(AppTheme.Font.emptyStateNumber)
                 .foregroundStyle(Color.systemOrange)
 
             Text(title)

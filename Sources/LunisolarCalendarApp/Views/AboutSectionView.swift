@@ -6,12 +6,12 @@ struct AboutSectionView: View {
 
     var body: some View {
         Section {
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Image("AppIcon")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 96, height: 96)
-                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous))
+                    .frame(width: 80, height: 80)
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))
                 Text(NSLocalizedString("清和日历", comment: "App名"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.label)
@@ -20,7 +20,7 @@ struct AboutSectionView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
-            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 20, trailing: 0))
+            .listRowInsets(EdgeInsets(top: 14, leading: 0, bottom: 14, trailing: 0))
             .listRowBackground(Color.clear)
         } header: {
             Text(NSLocalizedString("关于", comment: ""))

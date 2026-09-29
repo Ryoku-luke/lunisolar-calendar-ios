@@ -65,7 +65,7 @@ struct ToastBannerView: View {
                 Circle()
                     .fill(bgAccent.opacity(0.18))
                 Image(systemName: iconName)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTheme.Font.bodyBold)
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(bgAccent)
             }

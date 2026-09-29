@@ -2,9 +2,9 @@ import SwiftUI
 import LunarCore
 
 /// 选中日期详情卡片：公历大数字 + 农历干支 + 节日 + 天气 + 宜忌 + 今日安排 + CTA
+/// （2026-09-29 用户裁决：日期卡片与今日安排不再收起折叠，始终完整展开）
 struct SelectedDayCardView: View {
     let selectedDate: Date
-    @Binding var isPanelExpanded: Bool
     let accent: DayAccent
     @Environment(EventStore.self) private var store
     /// 天气结果（由天气文字块上报）：与并排的大图标共享，避免两者各拉一份、状态不一致
@@ -119,7 +119,7 @@ struct SelectedDayCardView: View {
                                 .fill(accent.decorative.opacity(0.10))
                                 .frame(width: 48, height: 48)
                             Image(systemName: "sparkles")
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(.system(size: 22, weight: .semibold)) // N-9-exempt: SF Symbol 图标固定方框（豁免①）
                                 .foregroundStyle(accent.controlTint)
                                 // 装饰图标：旁边的空态文字已是完整语义
                                 .accessibilityHidden(true)
@@ -134,35 +134,17 @@ struct SelectedDayCardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .softChipBackground(material: .ultraThinMaterial)
                 } else {
-                    let slice = isPanelExpanded ? todaysEvents : Array(todaysEvents.prefix(3))
+                    // 2026-09-29：不再折叠——始终完整列出当天全部事件
                     VStack(spacing: AppTheme.Spacing.sm) {
-                        ForEach(slice) { ev in
+                        ForEach(todaysEvents) { ev in
                             NavigationLink {
                                 EventEditView(editing: ev, defaultDate: selectedDate).environment(store)
                             } label: {
-                                EventRow(event: ev, compact: !isPanelExpanded).environment(store)
+                                EventRow(event: ev, compact: false).environment(store)
                             }.buttonStyle(.plain)
                                 .pressableFeedback()
                                 .eventQuickActions(ev)   // 长按：完成 / 删除
                         }
-                    }
-                    if todaysEvents.count > 3 {
-                        Button {
-                            withAnimation(AppTheme.Motion.screen) {
-                                isPanelExpanded.toggle()
-                            }
-                        } label: {
-                            HStack {
-                                Spacer()
-                                Text(isPanelExpanded ? String(localized: "收起") : String(format: NSLocalizedString("查看全部 %d 项 →", comment: ""), todaysEvents.count))
-                                    .font(AppTheme.Font.caption.weight(.bold)).foregroundStyle(accent.controlTint)
-                                Spacer()
-                            }
-                            .frame(minHeight: AppTheme.Touch.chipHeight)
-                            .background(Capsule().fill(accent.decorative.opacity(0.10)))
-                            .contentShape(Capsule())
-                        }.buttonStyle(.plain)
-                            .pressableFeedback()
                     }
                 }
             }

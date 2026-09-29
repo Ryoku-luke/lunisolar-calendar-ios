@@ -16,6 +16,11 @@ struct AllEventsView: View {
     @Environment(EventStore.self) private var store
 
     @State private var query = ""
+    /// N-6 修复（2026-09-29）：`searchable(isPresented:)` 需要 `Binding<Bool>`，
+    /// 而 `@FocusState` 投影出的 `FocusState<Bool>.Binding` 类型不兼容，编译报错。
+    /// 改用普通 `@State` 作为搜索界面的呈现绑定；iOS 17+ 呈现搜索框后系统自动聚焦输入框，
+    /// ⌘F 只需把该绑定置 true 即可「显示并聚焦」。
+    @State private var isSearchPresented = false
     @State private var typeFilter: TypeFilter = .all
     @State private var showCompleted = false
     @State private var showPast = false
@@ -128,11 +133,21 @@ struct AllEventsView: View {
         // 该 placement 是 iOS 专有（macOS 无 navigationBarDrawer），故按平台分支。
         #if canImport(UIKit)
         .searchable(text: $query,
+                    isPresented: $isSearchPresented,
                     placement: .navigationBarDrawer(displayMode: .always),
                     prompt: Text(NSLocalizedString("搜索标题 / 地点 / 备注", comment: "")))
         #else
-        .searchable(text: $query, prompt: Text(NSLocalizedString("搜索标题 / 地点 / 备注", comment: "")))
+        .searchable(text: $query, isPresented: $isSearchPresented,
+                    prompt: Text(NSLocalizedString("搜索标题 / 地点 / 备注", comment: "")))
         #endif
+        // N-6：外接键盘 ⌘F 唤起搜索（仅 iPad/外接键盘场景有意义）
+        .onKeyPress { press in
+            if press.modifiers.contains(.command), press.key == "f" {
+                isSearchPresented = true
+                return .handled
+            }
+            return .ignored
+        }
         .toolbar {
             ToolbarItemGroup(placement: .platformTopBarTrailing) {
                 if isSelecting {
@@ -224,7 +239,7 @@ struct AllEventsView: View {
                 } label: {
                     HStack(spacing: AppTheme.Spacing.sm) {
                         Image(systemName: selection.contains(event.id) ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 20))
+                            .font(.system(size: 20)) // N-9-exempt: SF Symbol 图标固定方框（豁免①）
                             .foregroundStyle(selection.contains(event.id) ? Color.appTint : Color.tertiaryLabel)
                         EventRow(event: event, showsCompleteToggle: false)
                     }

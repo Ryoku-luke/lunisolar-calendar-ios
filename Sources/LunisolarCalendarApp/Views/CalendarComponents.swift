@@ -62,7 +62,7 @@ struct HolidayBadge: View {
 
     var body: some View {
         Text(type == .holiday ? String(localized: "休") : String(localized: "班"))
-            .font(.system(size: isRegular ? 9 : 8, weight: .bold))
+            .font(.system(size: 9, weight: .bold)) // N-9-exempt: 「休/班」徽章固定密度（14×14 圆内，跟随动态字号会溢出）
             .foregroundStyle(.white)
             .frame(width: isRegular ? 14 : 12, height: isRegular ? 14 : 12)
             .background(

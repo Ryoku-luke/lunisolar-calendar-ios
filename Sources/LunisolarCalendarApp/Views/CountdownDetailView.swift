@@ -39,7 +39,7 @@ struct CountdownDetailView: View {
             VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
                 HStack(spacing: AppTheme.Spacing.md) {
                     Text(event.emoji)
-                        .font(.system(size: 40, weight: .semibold, design: .rounded))
+                        .font(AppTheme.Font.countdownLarge)
                         .frame(width: 64, height: 64)
                         .background(Color.themeQuaternaryFill)
                         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous))

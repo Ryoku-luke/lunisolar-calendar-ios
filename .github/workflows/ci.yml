@@ -48,3 +48,33 @@ jobs:
             swift build \
               --triple arm64-apple-ios17.0-simulator \
               --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
+
+  # N-9：硬编码字号红线。动态字号是 iOS 无障碍基础——新代码不得再直接写
+  # `font(.system(size:))`。允许三处例外（均显式豁免，收编意义低）：
+  #   1. AppTheme.swift 本身（token 的唯一合法出处）；
+  #   2. Widgets/ 目录（小组件画布像素固定，Dynamic Type 不生效）；
+  #   3. 同行带 `N-9-exempt:` 注释（网格密度固定的迷你图等）。
+  # 触碰红线的 PR 在 CI 直接失败，开发者需改为 AppTheme token 或补豁免注释。
+  hardcoded-font-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: 检测未豁免的硬编码字号
+        run: |
+          set -euo pipefail
+          # 排除 AppTheme.swift 与 Widgets/ 目录，再剔除带豁免注释的行；
+          # 剩余命中即违规（-n 输出文件名:行号，::error:: 标注到 CI 日志）。
+          mapfile -t hits < <(
+            grep -rn --include='*.swift' '\.system(size:' Sources/ \
+              | grep -v 'Support/AppTheme.swift' \
+              | grep -v 'Widgets/' \
+              | grep -v 'N-9-exempt:' || true
+          )
+          if [ "${#hits[@]}" -gt 0 ]; then
+            for h in "${hits[@]}"; do
+              echo "::error file=${h%%:*},line=${h#*:}::未豁免的硬编码字号（改用 AppTheme.Font 或加 N-9-exempt: 注释）"
+              echo "$h"
+            done
+            exit 1
+          fi
+          echo "硬编码字号红线通过"

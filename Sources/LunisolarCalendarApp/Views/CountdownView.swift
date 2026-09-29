@@ -145,7 +145,7 @@ private struct CountdownRow: View {
             Text(event.emoji)
                 // emoji 字形按 48×48 方框定尺寸，不是文字排版，故不走 AppTheme.Font 阶梯
                 // （numeralXL 是 56，塞进这个方框会溢出）。UI_DESIGN_REVIEW P2-1 把它列为豁免。
-                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                .font(AppTheme.Font.countdownNumber)
                 .frame(width: 48, height: 48)
                 .background(Color.themeQuaternaryFill)
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous))
@@ -298,9 +298,9 @@ struct CountdownEditor: View {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {
                         ForEach(emojis, id: \.self) { e in
                             Text(e)
-                                .font(.system(size: 28))
+                                .font(AppTheme.Font.compactNumber)
                                 .frame(width: 44, height: 44)
-                                .background(emoji == e ? Color.accentColor.opacity(0.2) : Color.clear)
+                                .background(emoji == e ? Color.appTint.opacity(0.2) : Color.clear)
                                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.sm))
                                 .onTapGesture { emoji = e }
                         }
