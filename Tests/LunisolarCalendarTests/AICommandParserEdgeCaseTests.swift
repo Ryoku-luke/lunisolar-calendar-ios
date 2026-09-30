@@ -208,4 +208,69 @@ final class AICommandParserEdgeCaseTests: XCTestCase {
         }
         XCTAssertEqual(d.criteria.keyword, "会议")
     }
+
+    // MARK: 3. 静默建到**错误日期**的两类写法（2026-09-30 真机排查中发现）
+    //
+    // 背景：用户报告「AI 创建的日程不立刻出现在今日安排」。埋点排查后确认**不是刷新问题**，
+    // 而是解析器把日期算错/算到别的日子，而提示只说「已加入日历」——用户以为没生效。
+    // 这两条是其中**静默成功但日期错**的写法：比"解析失败"危险得多，因为看不出错。
+    //
+    // 基准日：2026-09-24（见 `now`）。
+
+    private func startDate(_ input: String) throws -> Date {
+        guard case .createEvent(let d)? = command(input) else {
+            throw XCTSkip("「\(input)」不是创建意图")
+        }
+        return d.startDate
+    }
+
+    /// 「明早 / 明晚」等缩写：旧实现识别不出「明天」，于是
+    /// `明早10点开会` → 今天 10:00 + 标题「**明**开会」（日期错且标题被啃字）。
+    func testTomorrowMorningAbbreviationIsRecognised() throws {
+        let d = try startDate("明早10点开会")
+        XCTAssertEqual(dayOffset(d), 1, "「明早」必须算作明天")
+        XCTAssertEqual(cal.component(.hour, from: d), 10)
+        guard case .createEvent(let draft)? = command("明早10点开会") else { return XCTFail() }
+        XCTAssertEqual(draft.title, "开会", "标题不应残留「明」字")
+
+        let evening = try startDate("明晚8点提醒我吃饭")
+        XCTAssertEqual(dayOffset(evening), 1, "「明晚」必须算作明天")
+        XCTAssertEqual(cal.component(.hour, from: evening), 20)
+    }
+
+    /// 「下个月N号」：旧实现只命中**裸号**分支，对错取决于今天几号——
+    /// 「下个月1号」在 9/30 会"碰巧"顺延成 10-01，而「下个月15号」会错成 09-15；
+    /// 且标题里残留「下个月」。
+    func testNextMonthOrdinalIsExplicitNotAccidental() throws {
+        // 今天 9/24 → 下个月 = 10 月
+        let first = try startDate("下个月1号10点开会")
+        XCTAssertEqual(cal.component(.month, from: first), 10)
+        XCTAssertEqual(cal.component(.day, from: first), 1)
+        guard case .createEvent(let d1)? = command("下个月1号10点开会") else { return XCTFail() }
+        XCTAssertEqual(d1.title, "开会", "标题不应残留「下个月1号」")
+
+        // 关键区分点：15 号 > 今天 24 号？不，15 < 24，旧逻辑会错算成本月 15 号
+        let mid = try startDate("下个月15号10点开会")
+        XCTAssertEqual(cal.component(.month, from: mid), 10, "「下个月15号」必须是 10 月，不能因 15<24 就当作本月")
+        XCTAssertEqual(cal.component(.day, from: mid), 15)
+    }
+
+    /// 「这个月 / 本月」：用文中月份（不偏移），同样要把整段从标题里剔除
+    func testThisMonthOrdinalIsHonoured() throws {
+        let d = try startDate("这个月20号10点开会")
+        XCTAssertEqual(cal.component(.month, from: d), 9)
+        XCTAssertEqual(cal.component(.day, from: d), 20)
+        guard case .createEvent(let draft)? = command("这个月20号10点开会") else { return XCTFail() }
+        XCTAssertEqual(draft.title, "开会")
+    }
+
+    /// 回归守卫：显式年份不能被新分支吞掉。
+    /// 加「下个月N号」分支后曾出现 `2027年10月1日 出国` → 年份丢失、标题残留「2027年」。
+    func testExplicitYearSurvivesOrdinalBranch() throws {
+        guard case .createEvent(let d)? = command("2027年10月1日 出国") else { return XCTFail() }
+        XCTAssertEqual(cal.component(.year, from: d.startDate), 2027, "显式年份必须生效")
+        XCTAssertEqual(cal.component(.month, from: d.startDate), 10)
+        XCTAssertEqual(cal.component(.day, from: d.startDate), 1)
+        XCTAssertEqual(d.title, "出国", "标题不应残留「2027年10月1日」")
+    }
 }

@@ -160,6 +160,38 @@ public enum AICommandParser {
             consumedDate = "明天"
         } else if s.contains("今天") {
             consumedDate = "今天"
+        } else if let r = s.range(of: #"((?:[0-9]{4}\s*年)?\s*(?:[下本这]\s*个?\s*月|[0-9]{1,2}\s*月)\s*([0-9]{1,2})\s*[日号])"#, options: .regularExpression) {
+            // 「下个月1号 / 下月15号 / 这个月20号 / 本月3号 / 9月25号」。
+            //
+            // ⚠️ 旧实现没有这条分支，「下个月1号10点」只命中**裸号**分支：
+            //    day=1 被算成"本月1号已过 → 顺延下月"，于是**碰巧**得到 10-01。
+            //    换成「下个月15号」（今天 30 号）语义就错成"本月15号"——
+            //    对错取决于今天几号，是典型的偶发错日期。
+            //    更要命的是标题里残留「下个月」，预览显示「下个月1号开会」自相矛盾。
+            // 现在整段一次吃下（含月份词），按前导词做月份偏移，标题剔除也干净。
+            //
+            // 写法说明：必须用 `(?:[下本这]\s*个?\s*月|…)` 这种**字符类 + 可选「个」**，
+            // 不能写成 `(下|本|这)\s*个?\s*月`（探针实测吃不下完整的「这个月」）；
+            // 也不要加 `(?!\d)` 前瞻——ICU 下会让「下个月1号**1**0点」整体不匹配
+            // （「号」后紧跟数字即失配）。裸号分支有独立正则，这里不需要前瞻兜底。
+            let seg = String(s[r])
+            let nums = seg.components(separatedBy: CharacterSet.decimalDigits.inverted).compactMap(Int.init)
+            if let day = nums.last, day >= 1, day <= 31 {
+                var c = cal.dateComponents([.year, .month, .day], from: base)
+                // 显式年份（「2027年10月1日」）：本分支排在年-月-日分支之前，必须自己认年份，
+                // 否则会用 base 的年份把 2027 覆盖成今年（探针实测过的回归）。
+                if seg.contains("年"), nums.count >= 3 { c.year = nums[0] }
+                if seg.contains("下") {
+                    // 显式「下个月」：月份 +1（DateComponents 自动进位跨年，12→次年1）
+                    c.month = (c.month ?? 1) + 1
+                } else if nums.count >= 2 {
+                    // 显式「N月」：用文中月份（有年份时 nums[1] 才是月）
+                    c.month = seg.contains("年") ? nums[1] : nums[nums.count - 2]
+                }
+                // day 最后赋值，避免 9/31 这类非法组合
+                c.day = day
+                if let d = cal.date(from: c) { base = d; consumedDate = seg }
+            }
         } else if let r = s.range(of: #"(\d{4}\s*年)?\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]"#, options: .regularExpression) {
             // ⚠️ 年份捕获组此前不存在：「2027年10月1日 出国」只取月日、年份沿用 base，
             // 于是建成 2026-10-01（差一年），且标题里还留着「2027年」——预览自相矛盾；
@@ -506,6 +538,17 @@ public enum AICommandParser {
              .replacingOccurrences(of: " PM", with: " 下午", options: .caseInsensitive)
              .replacingOccurrences(of: "am", with: "上午")
              .replacingOccurrences(of: "pm", with: "下午")
+
+        // 「明早 / 明晚」等**时间词变体**：口语里高频，但不含完整的「明天」二字，
+        // 旧实现识别不出，于是「明早10点开会」变成"今天 10:00 + 标题『明开会』"
+        // ——日期错、标题被啃字，且**静默成功**（比拒绝更坏）。归一成
+        // 「明天早上 / 明天晚上」，日期分支与时段词都能正常命中。
+        // ⚠️ 必须放在「明天」相关替换之前/之后都安全：这里用「明早」整体匹配，
+        //    不会与已经归一成的「明天」冲突。
+        s = s.replacingOccurrences(of: "明早", with: "明天早上")
+             .replacingOccurrences(of: "明晚", with: "明天晚上")
+             .replacingOccurrences(of: "明儿早", with: "明天早上")
+             .replacingOccurrences(of: "明儿晚", with: "明天晚上")
 
         // 中文数字 → 阿拉伯数字（只处理紧邻时间/日期单位的数字词：
         // 「两点」→「2点」、「九月二十五号」→「9月25号」；
