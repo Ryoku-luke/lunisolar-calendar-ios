@@ -226,7 +226,7 @@ struct iPadRootView: View {
         // N-5：去掉 .navigationTitle("清和日历")——品牌 Section 已显示
         // 图标 + 名称 + 版本，List 顶部再渲染 inline 标题会造成应用名出现两次。
         // 推荐方案①：品牌区顶到顶，侧栏更干净；VoiceOver 也不再重复朗读。
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitleBar()
         .navigationSplitViewColumnWidth(min: splitColumnWidths.sidebar.0,
                                         ideal: splitColumnWidths.sidebar.1,
                                         max: splitColumnWidths.sidebar.2)

@@ -40,6 +40,11 @@ struct YearOverviewView: View {
     /// 选中月份后的回调（调用方负责关闭本视图及上级弹窗）
     let onSelect: (Date) -> Void
     @Environment(\.dismiss) private var dismiss
+    /// 事件来源：**必须用环境注入的 store，不要读 `EventStore.shared`**。
+    /// UI 测试用 `-uitest-empty-store` 注入一个临时目录的空库
+    /// （`LunisolarHostApp/HostApp.swift:23-31`）；读单例会让年视图显示真实库的事件点，
+    /// 而全 App 其余部分为空，隔离失效。
+    @Environment(EventStore.self) private var store
 
     /// 每周起始日，与月视图 / 设置页共用同一键（1=周日 / 2=周一）
     @AppStorage("Lunisolar.weekStart") private var weekStart: Int = 1
@@ -86,7 +91,7 @@ struct YearOverviewView: View {
             .background(Color.systemGroupedBackground)
             .navigationTitle(String(format: NSLocalizedString("%d 年总览", comment: ""), year))
             #if canImport(UIKit)
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitleBar()
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -219,7 +224,7 @@ struct YearOverviewView: View {
             result[month] = m
         }
         // 事件：一次性取全年所有事件，按日分桶
-        let events = EventStore.shared.events.filter { cal.component(.year, from: $0.startDate) == year }
+        let events = store.events.filter { cal.component(.year, from: $0.startDate) == year }
         var eventBuckets: [Int: Set<Int>] = [:]
         let fmt = DateFormatter()
         fmt.locale = Locale(identifier: "en_US_POSIX")

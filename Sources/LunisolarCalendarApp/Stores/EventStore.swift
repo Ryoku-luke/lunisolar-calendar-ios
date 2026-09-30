@@ -364,7 +364,7 @@ public final class EventStore {
         if !wasNotCompleted && !events[idx].isCompleted {
             let restored = events[idx]
             Task { @MainActor in
-                await NotificationManager.shared.scheduleNotification(for: restored)
+                await NotificationManager.shared.scheduleNotification(for: restored, in: self)
             }
         }
         if !skipSync {

@@ -101,10 +101,10 @@ final class CalendarDaySummaryTests: XCTestCase {
     func testLunarUnsupportedFlag() {
         let outOfRange = CalendarDaySummary(date: date(1899, 12, 31))
         XCTAssertEqual(outOfRange.lunar, .unsupported)
-        XCTAssertTrue(outOfRange.isLunarUnsupported)
+        XCTAssertTrue(outOfRange.lunar.isUnsupported)
 
         for (label, day) in samples where !label.hasPrefix("1899") {
-            XCTAssertFalse(CalendarDaySummary(date: day).isLunarUnsupported,
+            XCTAssertFalse(CalendarDaySummary(date: day).lunar.isUnsupported,
                            "[\(label)] 区间内日期不应被判为农历越界")
         }
     }

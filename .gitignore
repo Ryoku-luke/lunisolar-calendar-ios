@@ -16,6 +16,13 @@ calendar_events.json
 *.json
 # 资源 JSON 文件（农历数据表 / 黄历离散库）必须纳入版本控制
 !Sources/LunisolarCalendarApp/Resources/*.json
+# ⚠️ asset catalog 的 Contents.json 也必须纳入版本控制。
+#   上面那条全局 `*.json` 曾把它一起忽略，导致远端 AppIcon.appiconset 里
+#   只有 Icon-1024.png、没有 Contents.json —— 干净克隆后 Xcode 没有可用的
+#   AppIcon 资产目录，归档/上架受影响。新增 asset catalog 时不要删这两条反选。
+!**/*.xcassets/**/Contents.json
+# Xcode 工程自身的 json（如 scheme 元数据）同理
+!**/*.xcodeproj/**/*.json
 
 # 编辑器
 .idea/

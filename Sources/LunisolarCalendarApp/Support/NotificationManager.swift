@@ -109,7 +109,12 @@ public final class NotificationManager {
         return event.type == .reminder
     }
 
-    public func scheduleNotification(for event: CalendarEvent) async {
+    /// - Parameter store: 事件库。**必须传入调用方实际使用的那一个**，不要在这里读
+    ///   `EventStore.shared`——UI 测试用 `-uitest-empty-store` 注入一个临时目录的空库
+    ///   （见 `LunisolarHostApp/HostApp.swift:23-31`），直接读单例会把 isNotified
+    ///   写到真实库上，测试隔离失效。
+    @MainActor
+    public func scheduleNotification(for event: CalendarEvent, in store: EventStore) async {
         #if canImport(UserNotifications)
         guard Self.shouldScheduleNotification(for: event) else { return }
 
@@ -154,7 +159,7 @@ public final class NotificationManager {
                 //   未授权时留 isNotified=false，授权后 reschedule 会重新调度。
                 let status = await authorizationStatusAsync()
                 if status == .granted {
-                    EventStore.shared.markNotified(event)
+                    store.markNotified(event)
                 }
             }
             // 有重复规则的事件永远不 markNotified —— 它们依赖 UNCalendarNotificationTrigger
@@ -229,11 +234,14 @@ public final class NotificationManager {
     /// 灵动岛「稍后提醒」：为指定事件挂一条 `after` 秒后触发的一次性通知。
     /// **不修改事件本身的时间**（避免"稍后提醒"把用户日程挪走）。
     /// - Returns: true 表示已挂载；事件不存在 / 测试环境无通知中心 / 无权限时为 false。
+    /// - Parameter store: 事件库；理由同 `scheduleNotification`——不要在扩展/单例里读 `EventStore.shared`。
     @discardableResult
-    public func snoozeReminder(eventID: String, after seconds: TimeInterval = 10 * 60) async -> Bool {
+    @MainActor
+    public func snoozeReminder(eventID: String, in store: EventStore,
+                               after seconds: TimeInterval = 10 * 60) async -> Bool {
         #if canImport(UserNotifications)
         guard let uuid = UUID(uuidString: eventID),
-              let event = EventStore.shared.eventBy(idString: uuid.uuidString),
+              let event = store.eventBy(idString: uuid.uuidString),
               let center = currentCenterIfAvailable else { return false }
 
         let content = buildContent(for: event)
@@ -278,7 +286,7 @@ public final class NotificationManager {
         for event in store.events
             where Self.shouldScheduleNotification(for: event) && !event.isCompleted {
             if event.repeatRule == .never && event.isNotified { continue }
-            await scheduleNotification(for: event)
+            await scheduleNotification(for: event, in: store)
         }
 
         // 原样放回「稍后提醒」（内容与触发时刻都不变）

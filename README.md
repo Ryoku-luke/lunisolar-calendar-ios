@@ -6,6 +6,15 @@
 
 一款 iOS / iPadOS 日历应用：内置公历↔农历转换、黄历宜忌、日程/记事/提醒、天气、倒数日灵动岛、本地通知、iCloud 同步。界面遵循 iOS 26/27 设计规范（Liquid Glass 液态玻璃 + 节日自适应主题色 + 按压反馈），支持 iPhone / iPad 自适应布局，兼容 iOS 27 / iPadOS 27。
 
+> **接手开发请先读这两份**：
+> - [`docs/HANDOFF_REVIEW_2026-09-30.md`](docs/HANDOFF_REVIEW_2026-09-30.md) —— 现状是什么、哪里有坑：
+>   逐条核对到代码与行号的接手审查报告，含已修复的阻断性缺陷、必读陷阱、
+>   未决高危项（CloudKit 版本校验、喜神/财神用柱）与有确定到期日的数据悬崖。
+>   它同时更正了本仓库多份旧文档里与代码不符的结论。
+> - [`docs/EXECUTION_PLAN_2026-09-30.md`](docs/EXECUTION_PLAN_2026-09-30.md) —— 按什么顺序做、如何验收：
+>   分阶段执行计划（P0 安全底座 → P1 数据正确性 → P2 数据安全 → P3 界面无障碍 → P4 维护性），
+>   含需裁决事项与里程碑验收标准。
+
 ## 功能
 
 | 模块 | 说明 |
@@ -114,6 +123,7 @@ Tools/                           # 一键验证脚本（run_tests.sh）/ 截图�
 Tests/LunisolarCalendarTests/    # 单元测试（走 SwiftPM；数量以 swift test 输出为准，README 不写死）
 LunisolarCalendarUITests/        # UI 测试（XCUITest，走 Xcode 工程）
 docs/                            # 上架 / 签名 / 构建 / 真机复测清单 / 进度分析与待做方案
+                                 # ⚠️ 接手先读 HANDOFF_REVIEW_2026-09-30.md（现状）+ EXECUTION_PLAN_2026-09-30.md（排期）
 ```
 
 ## 构建与测试

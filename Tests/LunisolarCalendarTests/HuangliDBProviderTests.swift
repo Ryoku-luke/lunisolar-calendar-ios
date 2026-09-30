@@ -18,7 +18,8 @@ final class HuangliDBProviderTests: XCTestCase {
         let h = try! XCTUnwrap(r.huangliDay)
         XCTAssertFalse(h.yi.isEmpty, "宜列表不应空")
         XCTAssertFalse(h.ji.isEmpty, "忌列表不应空")
-        // 2024-01-01 干支=甲戌(gan=0 zhi=10) -> 冲=辰6(狗冲龙？) zhi=10(戌), 冲6+10=16%12=4, zodiacs[4]=龙
+        // 2024-01-01 干支=甲子（gan=0 zhi=0）→ 冲=午6(鼠冲马), zodiacs[6]=马
+        // 注：旧注释误写为「甲戌(gan=0 zhi=10)」，本行原先的推导与日期对不上，已更正。
         XCTAssertTrue(h.chong.hasPrefix("冲"), "冲必须带前缀")
         XCTAssertTrue(h.sha.hasPrefix("煞"), "煞必须带前缀")
         XCTAssertFalse(h.wuXing.isEmpty, "五行纳音应存在")
@@ -77,20 +78,23 @@ final class HuangliDBProviderTests: XCTestCase {
         XCTAssertEqual(r2.source, .algorithm)
     }
 
-    // MARK: DB 与算法生成一致性（随机 30 天在 2024-2028 区间内）
+    // MARK: DB 与算法生成一致性（**1827 天全量**，不再抽样）
+    //
+    // 2026-09-30：原实现每 65 天取 1 个样本（只覆盖 29/1827 天）。既然库已由提交内的
+    // 工具生成且改动可复现，这里改为逐日全量比对——抽样一旦漏掉被改坏的那几天，
+    // 「离散库 == 算法」这条断言就会给出虚假的安全感。
 
     func testDBConsistentWithAlgorithmForRange() {
         let cal = Calendar(identifier: .gregorian)
         var dc = DateComponents()
         dc.year = 2024; dc.month = 1; dc.day = 1
         let rangeStart = cal.date(from: dc)!
-        dc.year = 2028; dc.month = 12; dc.day = 31
-        let rangeEnd = cal.date(from: dc)!
+        dc.year = 2029; dc.month = 1; dc.day = 1
+        let rangeEnd = cal.date(from: dc)!   // 含 2024-01-01 … 2028-12-31
 
         var cursor = rangeStart
         var checked = 0
-        repeat {
-            if cursor > rangeEnd { break }
+        while cursor < rangeEnd {
             let r = HuangliDBProvider.resolve(date: cursor)
             guard let dbDay = r.huangliDay else {
                 XCTFail("2024-2028 区间内不应为 nil: \(cursor)")
@@ -106,9 +110,9 @@ final class HuangliDBProviderTests: XCTestCase {
             XCTAssertEqual(dbDay.wuXing, algo.wuXing, "wuxing 不一致: \(cursor)")
             XCTAssertEqual(dbDay.shenWei, algo.shenWei, "shenwei 不一致: \(cursor)")
             checked += 1
-            // 每 65 天取 1 个样本（5 年 1827 天 → 抽 29 个）
-            cursor = cal.date(byAdding: .day, value: 65, to: cursor)!
-        } while checked < 30
+            cursor = cal.date(byAdding: .day, value: 1, to: cursor)!
+        }
+        XCTAssertEqual(checked, 1827, "应恰好覆盖 2024-01-01…2028-12-31 共 1827 天")
     }
 
     // MARK: coverageDescription 不为空

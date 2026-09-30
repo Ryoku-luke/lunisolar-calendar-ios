@@ -77,7 +77,7 @@ struct SettingsView: View {
         .festiveWallpaper(accent: accent)
         .navigationTitle(NSLocalizedString("设置", comment: ""))
         #if canImport(UIKit)
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitleBar()
         .toolbarBackground(.navBar, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         #endif

@@ -115,7 +115,7 @@ struct DocSheetView: View {
             }
             .navigationTitle(kind.title)
             #if canImport(UIKit)
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitleBar()
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

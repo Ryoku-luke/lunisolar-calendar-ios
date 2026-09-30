@@ -48,7 +48,7 @@ struct DayDetailView: View {
             .festiveWallpaper(accent: accent)
             .navigationTitle(date.weekdaySymbol)
             #if canImport(UIKit)
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitleBar()
             .toolbarBackground(.navBar, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {

@@ -203,8 +203,10 @@ public enum HuangliGenerator {
             wuXing = wuXingMap[yearGanZhi] ?? "未知"
         }
 
-        // 神位 (喜神/财神方位，简化)
-        let shenWei = shenWeiDirection(zhiIndex)
+        // 神位（喜神 / 财神方位）——按**日干**取，不是日支。
+        // 历史 bug：此处曾传 `zhiIndex`（日支），导致同一日干出现 6 种不同方位，
+        // 与通行的日干规则不符。详见下方 shenWeiDirection 的出处说明。
+        let shenWei = shenWeiDirection(dayGanZhi.gan)
 
         return HuangliDay(
             date: date,
@@ -295,10 +297,29 @@ public enum HuangliGenerator {
         return (0..<n).map { values[(start + $0) % count] }
     }
 
-    private static func shenWeiDirection(_ zhiIndex: Int) -> String {
-        // 简化喜神/财神方位映射
-        let xiShen = ["东北","西北","西南","东南","东北","西北","西南","东南","东北","西北","西南","东南"][zhiIndex]
-        let caiShen = ["西南","正西","正北","正南","正东","东南","东北","西南","正西","正北","正南","正东"][zhiIndex]
+    /// 喜神 / 财神方位：**按日干取**（`ganIndex` 0…9 = 甲…癸）。
+    ///
+    /// 传统规则与出处（两套口诀都是「纯日干函数」，与日支无关）：
+    ///
+    /// - **喜神**《喜神方位歌》「甲己在艮乙庚乾，丙辛坤位喜神安。丁壬只在离宫坐，戊癸原在巽间」
+    ///   → 甲己东北 / 乙庚西北 / 丙辛西南 / 丁壬正南 / 戊癸东南，即 `ganIndex % 5`。
+    ///   另见《协纪辨方书·喜神》「甲己日艮方…戊癸日巽方」与《考原》「喜神者，见丙也」的论证。
+    /// - **财神**《财神方位歌》「甲乙东北是财神，丙丁向在西南寻，戊己正北坐方位，
+    ///   庚辛正东去安身，壬癸原来正南坐」→ 即 `ganIndex / 2`。
+    ///
+    /// 实现口径与 tyme 历法库一致（`HeavenStem.getJoyDirection` = `[7,5,1,8,3][index % 5]`、
+    /// `getWealthDirection` = `[7,1,0,2,8][index ~/ 2]`，数组下标为八方向编号
+    /// 0=北 1=东北 2=东 3=东南 4=南 5=西南 6=西 7=西北 8=中）。
+    ///
+    /// ⚠️ 不要改回按日支取：那会让同一个日干在不同日期给出不同方位，
+    /// 且取值域会退化成 喜神 4 个 / 财神 7 个（正确规则各为 5 个）。
+    /// 回归断言见 `Tests/.../HuangliTests.swift` 与 `HuangliDBProviderTests.swift`。
+    private static func shenWeiDirection(_ ganIndex: Int) -> String {
+        let i = ((ganIndex % 10) + 10) % 10
+        // 甲己/乙庚/丙辛/丁壬/戊癸 → 东北/西北/西南/正南/东南
+        let xiShen = ["东北", "西北", "西南", "正南", "东南"][i % 5]
+        // 甲乙/丙丁/戊己/庚辛/壬癸 → 东北/西南/正北/正东/正南
+        let caiShen = ["东北", "西南", "正北", "正东", "正南"][i / 2]
         return "喜神:\(xiShen) 财神:\(caiShen)"
     }
 }

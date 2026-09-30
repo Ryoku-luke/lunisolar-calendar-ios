@@ -57,7 +57,7 @@ public final class EventService {
     public func refreshNotification(for event: CalendarEvent) {
         #if canImport(UserNotifications)
         NotificationManager.shared.cancelNotification(for: event)
-        Task { await NotificationManager.shared.scheduleNotification(for: event) }
+        Task { await NotificationManager.shared.scheduleNotification(for: event, in: store) }
         #endif
     }
 

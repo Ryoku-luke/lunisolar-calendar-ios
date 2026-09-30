@@ -35,7 +35,7 @@ struct CalendarDisplaySettingsView: View {
         #endif
         .navigationTitle("日历")
         #if canImport(UIKit)
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitleBar()
         #endif
     }
 }

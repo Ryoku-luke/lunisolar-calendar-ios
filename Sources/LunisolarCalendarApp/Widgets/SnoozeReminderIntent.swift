@@ -33,7 +33,12 @@ public struct SnoozeReminderIntent: LiveActivityIntent {
     public func perform() async throws -> some IntentResult {
         // 失败（事件已不存在 / 无通知权限）时不抛错——灵动岛按钮失败不应造成系统级报错，
         // 具体原因由 NotificationManager 记入日志。
-        _ = await NotificationManager.shared.snoozeReminder(eventID: eventID)
+        //
+        // 传 `EventStore.shared`：本 intent 的 `perform()` 在**主 App 进程**执行
+        // （见文件头注释），此时 App 侧的共享实例就是真正的事件库。
+        // 注意不要再把 store 参数改回「让 NotificationManager 自己读单例」——
+        // 那样 UI 测试的 `-uitest-empty-store` 隔离会失效（见 scheduleNotification 的注释）。
+        _ = await NotificationManager.shared.snoozeReminder(eventID: eventID, in: .shared)
         return .result()
     }
 }

@@ -144,9 +144,17 @@ public enum WidgetSnapshotStore {
         }
         #endif
         // 2. Documents（SPM iOS 宿主里单机测，Widget 拿不到但至少主 App 能写）
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-        if let docs { return docs.appendingPathComponent(fileName) }
-        // 3. Linux 兜底：/tmp
+        //
+        // ⚠️ 必须**探测可写性**再用。`.documentDirectory` 只负责解析路径，不保证能写：
+        // macOS 上 `swift test` 的进程没有 App 容器、也没有 ~/Documents 的 TCC 授权，
+        // 写进去会抛 EPERM。旧实现直接返回该路径，于是 write() 静默返回 false，
+        // WidgetSnapshotTests 全绿的本机环境一旦换成 macOS CLI 就整组失败
+        // （现象：20 条断言全部拿到 nil）。
+        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+           FileManager.default.isWritableFile(atPath: docs.path) {
+            return docs.appendingPathComponent(fileName)
+        }
+        // 3. 兜底：临时目录（macOS CLI / Linux 测试进程一定可写）
         return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(fileName)
     }
 }

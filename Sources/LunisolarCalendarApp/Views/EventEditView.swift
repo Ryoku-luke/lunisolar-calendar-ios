@@ -203,7 +203,7 @@ struct EventEditView: View {
         }
         .navigationTitle(isEditing ? String(format: NSLocalizedString("编辑%@", comment: ""), type.uiLabel) : String(format: NSLocalizedString("新建%@", comment: ""), type.uiLabel))
         #if canImport(UIKit)
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitleBar()
         #endif
         .toolbar {
             ToolbarItem(placement: .platformTopBarLeading) {

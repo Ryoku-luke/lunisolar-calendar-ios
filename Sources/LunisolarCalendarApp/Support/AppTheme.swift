@@ -69,7 +69,7 @@ public enum AppTheme {
         private typealias TextStyle = UIFont.TextStyle
         #else
         private enum TextStyle: String {
-            case largeTitle, title2, title3, headline, body, subheadline, caption1, caption2
+            case largeTitle, title1, title2, title3, headline, body, subheadline, caption1, caption2
         }
         #endif
 

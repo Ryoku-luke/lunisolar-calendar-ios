@@ -368,7 +368,7 @@ struct AIAssistantView: View {
                 }
             }
             #if canImport(UIKit)
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitleBar()
             #endif
             .toolbar {
                 if isPresented {

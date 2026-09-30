@@ -7,12 +7,16 @@ import XCTest
 final class NotificationManagerTests: XCTestCase {
 
     /// 「稍后提醒」在未知事件 ID / 非 App 宿主（命令行测试进程）下必须安全返回 false：
-    /// - 未知事件：找不到 EventStore 中的事件 → 直接 false；
+    /// - 未知事件：找不到传入 store 中的事件 → 直接 false；
     /// - 非 App 宿主：currentCenterIfAvailable 为 nil（不访问 UNUserNotificationCenter），
     ///   否则会在 swift test 进程里因 bundleProxy 缺失而崩溃。
+    /// 这里用隔离 store（而非 `.shared`）——P1-3 起 store 由调用方显式传入，
+    /// 正是为了让测试不碰真实库。
     func testSnoozeReminderIsSafeForUnknownEvent() async {
+        let store = makeIsolatedEventStore()
         let result = await NotificationManager.shared.snoozeReminder(
             eventID: UUID().uuidString,
+            in: store,
             after: 60
         )
         XCTAssertFalse(result, "未知事件不应挂载成功")
@@ -20,7 +24,9 @@ final class NotificationManagerTests: XCTestCase {
 
     /// 非法 ID 字符串同样安全（解析失败 → false，不抛错、不崩溃）
     func testSnoozeReminderIsSafeForMalformedID() async {
-        let result = await NotificationManager.shared.snoozeReminder(eventID: "not-a-uuid", after: 60)
+        let store = makeIsolatedEventStore()
+        let result = await NotificationManager.shared.snoozeReminder(
+            eventID: "not-a-uuid", in: store, after: 60)
         XCTAssertFalse(result)
     }
 

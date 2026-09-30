@@ -146,7 +146,7 @@ struct CalendarMonthView: View {
         // 无 large↔inline 折叠动画（过渡更稳定）。月视图内容本身是网格+卡片，
         // 不需要 large title 的空间感。
         #if canImport(UIKit)
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitleBar()
         #endif
         .toolbarBackground(.navBar, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
