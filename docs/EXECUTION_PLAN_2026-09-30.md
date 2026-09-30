@@ -17,8 +17,8 @@
 
 | 阶段 | 主题 | 任务 | 出口标准（Exit Criteria） |
 |---|---|---|---|
-| **P0** | 安全底座 | P0-1 Git 基线 · P0-2 四通道跑通 · P0-3 CI 转绿 | 有可回滚的提交历史；`Tools/run_tests.sh` 四通道全绿；CI 在 main 上绿 |
-| **P1** | 数据正确性（高危） | P1-1 CloudKit 版本校验 · ~~P1-2 喜神/财神用柱~~ ✅ · ~~P1-3 单例泄漏清除~~ ✅ | 双设备同步不再分叉；喜神/财神符合日干规则；UI 测试隔离真正成立 |
+| **P0** | 安全底座 | ~~P0-1 Git 基线~~ ✅ · P0-2 四通道跑通 · ~~P0-3 CI 转绿~~ ✅ | 有可回滚的提交历史；`Tools/run_tests.sh` 四通道全绿；CI 在 main 上绿 |
+| **P1** | 数据正确性（高危） | ~~P1-1 CloudKit 版本校验~~ ✅ · ~~P1-2 喜神/财神用柱~~ ✅ · ~~P1-3 单例泄漏清除~~ ✅ | 双设备同步不再分叉；喜神/财神符合日干规则；UI 测试隔离真正成立 |
 | **P2** | 数据安全与悬崖 | P2-1 导出/备份+迁移 · P2-2 同步状态卡死 · P2-3 导入覆盖 · P2-4 数据到期机制 | 用户能造出备份；同步状态可恢复；导入不再静默覆盖；到期前有预警 |
 | **P3** | 界面与无障碍 | P3-1 节日对比度 · P3-2 横屏根视图 · P3-3 漏译 · P3-4 Dynamic Type · P3-5 性能 | 首屏可读性合规；Plus/Max 横屏正确；0 漏译；辅助字号不截断 |
 | **P4** | 维护性（可延后） | P4-1 无障碍覆盖 · P4-2 数据可信度标识 · P4-3 大文件拆分 | 仅在有明确收益时做 |
@@ -31,10 +31,22 @@
 
 > 目标：把「无法验证、无法回滚」变成「可验证、可回滚」。**在 P0 完成前不要动任何功能代码。**
 
-### P0-1 建立 Git 基线
+### P0-1 建立 Git 基线 ✅ 已完成（2026-09-30）
+
+> **结果**：用户已把全部改动同步到远端 `main`，最新提交
+> **`50ab407`**「fix(9/30): 同步用户侧修复（编译阻断/历法/测试隔离/清单）」
+> （其后是 `b3ec5e4` 真机清单闭环）。工作区现已对齐该提交、`git status` 干净、共 128 个提交。
+> 本轮全部改动（§1 四处编译阻断 + P1-2 喜神财神 + P1-3 单例隔离 + `.gitignore`
+> + 两份文档）**均已在 `50ab407` 中**，`Assets/.../Contents.json` 也已纳入版本控制。
+>
+> ⚠️ **一处交接细节**：本会话工作目录 `~/Downloads/lunisolar-calendar-ios-main/` 现已确认
+> 是**完整 Git 仓库**（`origin` → GitHub，`main` 跟踪 `origin/main`，HEAD = `50ab407`）。
+> 若你在别的路径也有克隆，用 `git log -1` 看是否为 `50ab407` 来判断该用哪个。
+
+<details><summary>原计划步骤（已由用户执行完成，保留备查）</summary>
 
 > **前置已裁决（2026-09-30）**：D1 = **对齐远端仓库历史**。
-> 远端 `main` = `1cc0b7f`；本工作区内容与该提交逐文件一致（已核对），
+> 远端 `main` 当时 = `1cc0b7f`；本工作区内容与该提交逐文件一致（已核对），
 > 差异只有本次 4 处修复 + 2 份新文档。**但工作区没有 `.git`，是导出快照而非克隆**，
 > 因此必须重新 `git clone` 后再把改动搬过去——不能在原地 `git init`，
 > 否则会得到一条与远端**没有共同祖先**的独立历史，无法 push / 无法对齐。
@@ -110,6 +122,7 @@
 > （已成功下载 tarball 核对内容），但 git 的 `info/refs` 端点不可达、SSH 21/22 无法鉴权，
 > 因此**无法在此建立带历史的仓库**。第 2 步请在正常终端执行。
 
+</details>
 
 ### P0-2 跑通四通道验证
 
@@ -121,15 +134,51 @@
 - **验收**：脚本输出「✅ 全部通过」，4 条通道全绿。
 - **不做**：不要在此时修 UI 测试的业务断言（那是 P3 的事），只确认通道能跑、能判定。
 
-### P0-3 让 CI 真正转绿
+> **2026-09-30 实测记录：`xcodebuild` 在 DSH 会话沙箱内不可用（环境限制，非项目问题）**
+>
+> 本会话已把三条不需要 Xcode 的通道跑到全绿：
+> `swift build`（macOS）✅ · `swift build --triple arm64-apple-ios17.0-simulator` ✅ ·
+> `swift test` × 4 时区 **332 用例 0 失败** ✅。
+>
+> 但 `xcodebuild` 反复失败于依赖解析，根因已定位清楚，**与项目无关**：
+>
+> ```
+> xcodebuild: error: Could not resolve package dependencies:
+>   cannot open file '~/Library/Caches/org.swift.swiftpm/manifests/ManifestLoading/
+>   lunisolar-calendar-ios-main.dia' for diagnostics emission (Operation not permitted)
+> ```
+>
+> Xcode 内置的 SwiftPM 要写**固定的全局缓存** `~/Library/Caches/org.swift.swiftpm`，
+> 而会话沙箱只允许写工作区内路径。已尝试且**均无效**：
+> 重定向 `TMPDIR` / `CLANG_MODULE_CACHE_PATH` / `-clonedSourcePackagesDirPath`、
+> 覆盖 `HOME`（macOS 经 `pwuid` 解析真实家目录，不认 `$HOME`）、
+> 把该缓存目录换成指向工作区的符号链接（沙箱拒绝 `rm`）。
+>
+> **因此 P0-2 的两条 UI 测试通道仍必须在正常终端做。**
+> 请执行 `Tools/run_tests.sh` 并回传汇总行。
 
-- **做什么**
-  1. 推送 P0-1 的提交，观察 `.github/workflows/ci.yml`：
-     `swift build`（macos-26）· `swift test` × 4 时区 · iOS SDK 构建 · 硬编码字号红线。
-  2. **本次审查已确认前三条在本地可绿**，CI 理应转绿；若仍红，优先怀疑
-     `runs-on: macos-26` runner 镜像的工具链版本（见 `ci.yml:10-15` 的历史踩坑记录）。
-- **验收**：main 分支 CI 全绿；红的情况下能在**无需登录**的 `::error::` 注解里看到编译诊断。
-- **依赖**：P0-1、P0-2。
+> ✅ **补充（2026-09-30，CI 截图证实）**：P0-2 的前三条通道已在 GitHub Actions 上
+> **独立复现并通过**——见下方 P0-3。也就是说「本地绿」不是环境侥幸。
+> 仅剩两条 UI 测试通道（`Tools/run_tests.sh` 的后两条）从未跑过。
+
+### P0-3 让 CI 真正转绿 ✅ 已完成（2026-09-30）
+
+> **结果**：`main` 分支 `50ab407` 的 CI **全绿**（用户截图证实）：
+>
+> | Job | 结果 |
+> |---|---|
+> | `CI / build-and-test (push)` | ✅ Successful in 2m |
+> | `CI / hardcoded-font-gate (push)` | ✅ Successful in 5s |
+>
+> **这个结果的价值**：`build-and-test` 在 `macos-26` 干净 runner 上跑正是
+> `swift build` + `swift test` × 4 时区 + iOS SDK 构建——即**独立复核了本地三通道**，
+> 排除了「本机缓存/环境侥幸通过」。同时证明 §1 修的三处编译阻断是真修复，
+> 而非把 CI 绕过；字号红线也仍健康。
+>
+> ⚠️ 注意 CI **不跑 UI 测试**（设计如此，见 `ci.yml:27-29`：双端模拟器在 runner 上慢且不稳），
+> 所以 `LunisolarCalendarUITests` 的 12 条用例至今**仍未被任何自动化执行过**。
+> 这是目前最大的未验证面 → 见 P0-2 结尾。
+
 
 > **P0 完成后的状态**：项目从「不可编译、不可测试、不可回滚」变为「三通道可验证 + CI 门禁 + 可回滚」。
 > 这是后续所有工作的前提。
@@ -138,7 +187,7 @@
 
 ## 三、P1 · 数据正确性（高危，逐项独立提交）
 
-### P1-1 修复 CloudKit 推送的版本校验缺失
+### P1-1 修复 CloudKit 推送的版本校验缺失 ✅ 已完成（2026-09-30）
 
 > 对应审查报告 §4 B1/B2。**唯一会永久分叉用户数据的缺陷。**
 
@@ -158,6 +207,76 @@
 - **验收**：新增冲突场景测试覆盖「云端更新 → 本地陈旧推送被拒」「等版本双向编辑 → 收敛」；
   现有 `ICloudSyncTests` 全绿。
 - **风险**：这是同步核心，改动必须小步；建议**先补测试再改行为**。
+
+#### P1-1 实施结果（2026-09-30）
+
+**根因**：Mock 与 Real **各自实现**了 last-write-wins，语义还不同——
+Mock 显式比 version 并拒绝陈旧推送，Real 只 fetch change tag 就**无条件覆盖**。
+所有同步测试只跑 Mock，所以真机上的分叉在 CI 里永远看不见。
+
+**改了什么**
+
+| 文件 | 改动 |
+|---|---|
+| **新增** `Sync/SyncConflictResolver.swift` | 把 LWW 收成**纯函数**（`resolve(incoming:existing:)` + pull 侧 `shouldAdoptRemote`），并写明「不得让低版本覆盖高版本」的原因。纯函数化的关键理由：`RealCloudKitProvider` 在测试进程里**无法构造**（entitlement 预检使容器恒为 nil），规则必须可脱离 CloudKit 验证 |
+| `Sync/MockCloudKitProvider.swift` | push 的 LWW 判定 + store `upsert` 都改调共享规则（原先各内联一份），行为逐字不变 |
+| `Sync/RealCloudKitProvider.swift` | **核心修复**：push 在覆盖前比对版本，云端更高时记 per-record `.conflict` 并**跳过写入**；并新增 `isRecordAbsent` —— 只有 `CKError.unknownItem` 才算"云端无此记录"，**其余 fetch 失败（网络/限流/鉴权）必须报错并保留脏标记**，绝不能当成"不存在"去新建（那会绕过 LWW 直接覆盖）；另加 `guard database != nil` 防御空数据库 |
+| `Sync/EventSyncCoordinator.swift` | ① pull 的采纳判定改走 `shouldAdoptRemote`，与 push 侧同源；② **修水位线缺陷**：只允许用「已采纳/已按墓碑删除」的记录推进 `lastSyncMs`，不再用 `remote.map(\.updatedAtMs).max()` 迈过被拒记录 |
+| **新增** `Tests/.../SyncConflictResolverTests.swift` | 10 条：7 条纯规则 + 2 条**契约测试**（用同一组场景锁住 Mock 行为与纯规则一致）+ 1 条 pull 规则 |
+| **新增** `Tests/.../SyncDivergenceConvergenceTests.swift` | 2 条**双设备**端到端：两台独立 store/UserDefaults/provider 共享一个云端，验证等版本分叉**一轮收敛**且不静默丢数据 |
+| **新增** `Tests/.../SyncWatermarkTests.swift` | 2 条：被拒记录必须仍可拉（隔离水位线缺陷）+ 已采纳记录必须推进水位线（防重复拉） |
+
+**测试有效性已证伪**：把规则临时改成"无条件接受"（模拟修复前 Real 的行为），
+**10 条里 9 条失败**，且失败信息直指数据分叉路径——
+
+```
+testRejectsLowerVersionAgainstNewerServer : ("accept") is not equal to ("rejectHigherVersionOnServer")
+    - 陈旧设备（低版本）不得覆盖云端更新记录——这就是 P1-1 的数据分叉路径
+testContract_MockProviderMatchesSharedRule : ("1") is not equal to ("0")
+    - v3 不得覆盖云端 v5——修复前 Real 正是在这里覆盖
+testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal to ("Optional(5)")
+```
+
+**验收（实跑）**：macOS 构建 ✅ · iOS SDK 构建 ✅ ·
+`swift test` **346 用例 × 4 时区 0 失败** ✅（328 → 346）。
+另用「注入语法错误」探针确认 `RealCloudKitProvider` 确实参与 iOS 编译
+（探针使 iOS 构建报 5 条 error → 该文件不是死代码，改动真的被编译）。
+
+#### ⚠️ 收敛测试又挖出第三个缺陷（已修）：增量水位线会迈过「被拒绝」的记录
+
+写等版本分叉的收敛测试时，测试**没通过**，暴露出一个独立的、更隐蔽的缺陷：
+
+`pullAndMerge` 原来用 `remote.map(\.updatedAtMs).max()` 推进增量水位线——
+把**被拒绝**的记录也一起迈过。而下一轮 pull 的谓词是 `updatedAtMs > sinceMs`，
+于是那条记录**再也拉不回来**，永远无法合并 → 正是「永久分叉」本身。
+
+**修复**：只有**真正处理掉**（采纳 / 按墓碑删除）的记录才允许推进水位线
+（`EventSyncCoordinator.pullAndMerge` 改为累加 `mergedMaxMs`）。
+
+**这个修复是经过证伪验证的**：用一个隔离探针（注入等版本但内容不同的云端记录 →
+第一轮 pull 被拒 → 检查该记录是否仍可拉取）：
+
+| 实现 | 结果 |
+|---|---|
+| 旧逻辑（`remote.map(\.updatedAtMs).max()`） | `record-still-pullable = **false**`（永久不可合并）❌ |
+| 新逻辑（只算 `mergedMaxMs`） | `record-still-pullable = **true**` ✅ |
+
+修复后**等版本分叉一轮 sync 即收敛**（收敛测试断言 `cycles == 1`），
+比原先以为的「两轮」更好。同时这也让既有测试 `testIncrementalPull` 暴露出一处
+**固化了错误行为**的断言（它断言「pull 到 0 条时水位线也必须推进」，而这正是 bug 的来源），
+已按真实意图改写为「采纳了 3 条之后水位线才应推进」。
+
+**代价（如实记录）**：未被采纳的「自身回声」每轮会被重拉一次。这不改变内容、
+不影响正确性，但理论上随本地记录数增长。彻底解法是改用 CloudKit 原生
+`CKServerChangeToken` 增量机制（`AI_DEVELOPMENT_CONTEXT.md` §11 已把它列为未来方向）。
+
+**仍未做（诚实记一笔，勿当成已解决）**
+
+1. **`RealCloudKitProvider` 仍无真机/集成测试**（本环境无法构造容器——它做 entitlement
+   预检，容器恒为 nil）。
+   本次修复靠的是「共享纯函数 + 契约测试 + 隔离探针 + iOS 编译验证（注入语法错误确认该文件
+   确实参与 iOS 编译）」，**真机双设备同步仍需人工走查一次**。
+2. **自身回声每轮重拉**（见上，正确性无碍，属性能债）。
 
 ### P1-2 修复喜神/财神用错柱
 
@@ -387,6 +506,86 @@
 
 ---
 
+## 八点五、真机 bug 结案：「AI 创建的日程不立刻出现在今日安排」（2026-09-30）
+
+**用户报告**：AI 日历助手创建的日程不会立刻出现在「今日安排」里，必须再手动创建一条才一起显示。
+
+### 结论：**不是刷新 bug**，而是「日程正确建到了别的日子 + 反馈没说清是哪天」
+
+埋点实测拿到决定性时间线（诊断代码已移除）：
+
+```
+10:37:12.665  write:AI-created | rev=2 total=10 id=40D74C2F start=10-01 10:00
+10:37:12.709  card.body        | rev=2 today=4 selDay=09-30 sameDay=true   ← 今天仍 4 条
+   SelectedDayCardView: \EventStore.revision changed.                        ← SwiftUI 自证被 revision 触发
+10:37:17.171  card.body        | rev=2 today=1 selDay=10-01 sameDay=false  ← 切到 10-01，事件在这里
+   SelectedDayCardView: \EventStore.eventCache changed.
+```
+
+- 观察通知、`month.body`、`card.body` **全部正常触发**，新事件 id 也出现在它所属那天的数组里；
+- `10-01 10:00` 来自输入「**明天**上午10点…」（解析器实测：「明天上午10点提醒我开会」→ `10-01 10:00`）；
+- 用户人在**今天**的日历页，今天列表当然不变 → 看起来"没反应"，切日期/再操作一次才看见。
+
+**排查中排除的三个假设**（都曾是我的主要怀疑）：`@Observable` 观察失效、`eventCache` 私有存储导致依赖登记失败、`selectedDate` 不是今天（`sameDay` 实测为 `true`）。
+
+### 修复（已实施）
+
+| 文件 | 改动 |
+|---|---|
+| `Views/AIAssistantView.swift` | `create()` 判断落点是否今天：非今天时提示改为「**已加入 <日期> 的日程**」，并给「**去看看**」按钮（复用 `NavigationCoordinator.openEventDate`）。`showSuccess` 统一清 `completedOffDay`，避免删除/修改的提示上挂到无关按钮 |
+| `Support/AccessibilityID.swift` | 新增 `aiGoToCreatedDay = "ai.created.goto"` 并登记进 `all`（有命名规范测试把关） |
+| 4 套 `Localizable.strings` | 新增 `已加入 %@ 的日程`、`去看看`（四语言 key 数一致：472） |
+| `LunisolarCalendarUITests` | 新增 **Flow 3d**：用「明天…」创建 → 断言提示含日期 + 有「去看看」→ 点它跳过去并看到该事件 |
+
+**为什么不只是改文案**：笼统的「日程已加入日历。」在落点是别的日子时是**误导性成功**——用户据此以为操作生效了。所以必须同时给日期**和**去路。
+
+### 顺带发现的解析器问题（**已修两条静默错误**，2026-09-30）
+
+扫描常见说法时发现，其中「静默建到错误日期」类比"拒绝"更危险：
+
+| 输入 | 修复前 | 修复后 | 性质 |
+|---|---|---|---|
+| `明早10点开会` | `09-24 10:00`「**明**开会」 | `09-25 10:00`「开会」 | ✅ 已修（日期错 + 标题被啃字） |
+| `下个月15号10点开会` | **`09-24 10:00`**（月=9、日=24，即"今天"！） | `10-15 10:00`「开会」 | ✅ 已修（日期词被当标题） |
+| `这个月20号10点开会` | `09-24 10:00`「这个月20号开会」 | `09-20 10:00`「开会」 | ✅ 已修 |
+| `国庆节上午10点` | `09-30 10:00` | 未改 | 节日名不参与日期推断（**待定**） |
+| `明天上午10点提醒我` | FAIL「没识别到日程标题」 | 未改 | 拒绝型（加个"开会"就过）— **待定** |
+| `10月1号上午10点提醒我` | FAIL | 未改 | 拒绝型 — **待定** |
+
+**改法**（`AICommandParser.swift`）：
+1. `normalize` 补「明早/明晚/明儿早/明儿晚」→「明天早上/明天晚上」（口语高频，旧实现识别不出「明天」）；
+2. 日期分支新增「`(下|本|这)个月 N号`」，**整段一次吃下**并按前导词做月份偏移，
+   标题剔除随之干净。此前只命中**裸号**分支，对错取决于今天几号
+   （「下个月1号」在 9/30 会碰巧顺延成 10-01，而「下个月15号」直接错成今天）。
+
+**两条踩坑记录**（都靠探针/测试才定位）：
+- 正则**不能**写成 `(下|本|这)\s*个?\s*月`——实测吃不下完整的「这个月」，
+  必须用 `(?:[下本这]\s*个?\s*月|…)` 这种字符类写法；
+- **不要用 `(?!\d)` 前瞻**：ICU 下会让「下个月1号**1**0点」整体不匹配
+  （`号`后紧跟数字即失配）。裸号分支有独立正则，无需前瞻兜底。
+- 新分支插在年-月-日分支之前，曾吞掉显式年份（`2027年10月1日` → 年份丢、标题残留），
+  故新正则带可选年前缀并单独认年；已加回归守卫。
+
+**测试有效性已证伪**：把新增的 5 条断言拿到**未修复的 HEAD** 上跑（`git worktree`），
+**11 处失败**，失败信息与上表修复前一致（含 `"24" is not equal to ("15")` 这类"算成今天"）。
+
+### 一处必须记住的教训
+
+`xcscheme` 被 Xcode **反复静默改写**：除了写入诊断参数，还会**删掉
+`parallelizable = "NO"` 及其注释**。本次排查中已被改写两次——一次是 Xcode 手动跑，
+一次是命令行 `xcodebuild test`。
+
+原因推测：scheme 里 `shouldAutocreateTestPlan = "YES"`，Xcode 27 在自动生成/落盘
+test plan 时会重写 `TestableReference`，而 `parallelizable` 在新格式下不再被保留。
+
+**两点结论**：
+1. **提交前必须 `git diff` 检查 xcscheme**，否则会把 `parallelizable = "NO"` 的删除一并带上；
+2. **不要把"UI 测试不并行"这条纪律只寄托在 scheme 上**——它会被 Xcode 悄悄抹掉。
+   真正生效的约束是 `Tools/run_tests.sh` 的**串行**执行与 CI（`ci.yml` 不跑 UI 测试）。
+   scheme 里的属性只是"顺手挡一下"，不是可靠防线。
+
+---
+
 ## 九、里程碑与验收
 
 | 里程碑 | 内容 | 验收标准 |
@@ -412,8 +611,8 @@
 
 | 天 | 事项 |
 |---|---|
-| 第 1 天 | P0-1 Git 基线（已裁决对齐远端；需在正常终端 `clone` 后搬改动 + 修 `.gitignore` 的 `*.json`） |
-| 第 2 天 | P0-2 跑通四通道 + P0-3 CI 转绿 |
+| 第 1 天 | ~~P0-1 Git 基线~~ ✅ 已完成（远端 `50ab407` 已含全部改动） |
+| 第 2 天 | P0-2 剩余部分：跑 `Tools/run_tests.sh` 的两条 **UI 测试**通道（CI 已替他三条） |
 | 第 3–4 天 | P1-1 CloudKit（**先补测试**，再改行为）|
 | 第 5 天 | ~~P1-2 喜神/财神~~ ✅ 已完成 2026-09-30 |
 
