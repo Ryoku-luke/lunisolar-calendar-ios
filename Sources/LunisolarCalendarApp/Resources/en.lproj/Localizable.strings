@@ -251,6 +251,8 @@
 "日期超出支持范围（%d–%d 年）。" = "Date out of range (%d–%d).";
 "日程" = "Schedule";
 "日程已加入日历。" = "Event added to the calendar.";
+"去看看" = "Go there";
+"已加入 %@ 的日程" = "Event added on %@";
 "时间" = "Time";
 "时间格式无法识别。" = "Couldn't recognize the time format.";
 "时间胶囊已关闭" = "Live Activity Is Off";

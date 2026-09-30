@@ -171,6 +171,9 @@ struct AIAssistantView: View {
     @State private var pendingCommand: AIStructuredCommand?
     /// 行内成功提示（创建 / 删除 / 修改完成）：2 秒后自动消失，替代模态 alert
     @State private var completedMessage: String?
+    /// 刚创建的事件落在**非今天**时的那个日期（用于补「去看看」按钮）。
+    /// nil = 当天，或本次操作不是创建。与 `completedMessage` 同生命周期。
+    @State private var completedOffDay: Date?
     /// 行内失败提示（UI_DESIGN_REVIEW P0-3）：原先是「无法解析 → 好」的模态 alert。
     /// 解析失败往往只需改几个字重试，模态要点两次才回到输入框，故与成功提示同区呈现。
     @State private var inlineError: String?
@@ -188,6 +191,20 @@ struct AIAssistantView: View {
                     // 统一行内提示（报告 §42：同一件事不要既 Toast 又 Alert）
                     Section {
                         QingheToast(message: completedMessage)
+                        // 真机反馈（2026-09-30）：说「明天上午10点」时日程建到**明天**，
+                        // 而用户人还在「今天」的日历页 → 今天列表毫无变化，看起来像"没反应"，
+                        // 直到切日期/再操作一次才看见。根因不是刷新（实测 observation 与重绘都正常），
+                        // 而是**反馈没有说明加到了哪一天、也没有去路**。
+                        // 因此：仅当落点不是今天时，补一个「去看看」跳到该日。
+                        if let offDay = completedOffDay {
+                            Button {
+                                NavigationCoordinator.shared.openEventDate(offDay)
+                            } label: {
+                                Label(NSLocalizedString("去看看", comment: "AI助手：日程建在别的日子时跳过去"), systemImage: "arrow.right.circle")
+                            }
+                            .buttonStyle(SecondaryActionButtonStyle(accent: Color.appTint))
+                            .accessibilityIdentifier(AccessibilityID.aiGoToCreatedDay)
+                        }
                     }
                 }
 
@@ -566,24 +583,55 @@ struct AIAssistantView: View {
     /// 确认创建：唯一写入路径是 AIAssistantService → EventService（AI 不直连数据层）
     private func create(_ d: AICreateEventDraft) {
         switch AIAssistantService.shared.execute(.createEvent(d)) {
-        case .success:
-            // 行内提示替代「已创建 → 好」模态；清空输入并把焦点还给输入框，便于连续录入
-            showSuccess(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
+        case .success(.createdEvent(let id)):
+            let created = EventStore.shared.eventBy(idString: id.uuidString)
+            // 落点是今天还是别的日子：决定提示文案，以及要不要给「去看看」跳转。
+            // 真机反馈（2026-09-30）：「明天上午10点…」会正确建到明天，但用户在今天的
+            // 日历页上只看到"没有变化"，误以为没生效。所以这里必须**说出具体哪一天**。
+            let startDate = created?.startDate ?? d.startDate
+            let cal = Calendar(identifier: .gregorian)
+            let isOtherDay = !cal.isDate(startDate, inSameDayAs: Date())
+            if isOtherDay {
+                let dayText = Self.dayFormatter.string(from: startDate)
+                completedOffDay = startDate
+                showSuccess(String(format: NSLocalizedString("已加入 %@ 的日程", comment: "AI助手：日程建在其它日子"), dayText))
+            } else {
+                completedOffDay = nil
+                showSuccess(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
+            }
             input = ""
             draft = nil
             inputFocused = true
+        case .success:
+            break
         case .failure(let error):
             present(error)
         }
     }
 
+    /// 提示里显示的日期（跟随设备区域；如 10月1日 / Oct 1）
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
     /// 行内成功提示：2 秒后自动消失（不打断连续输入，也省掉模态的两次点击）
+    ///
+    /// ⚠️ 这里必须清 `completedOffDay`：删除 / 修改走的也是 `showSuccess`，
+    /// 若不清，上一次创建留下的「去看看」按钮会挂到本次的删除提示上（指向无关日期）。
+    /// 需要「去看看」的只有 `create`，它在调用本方法**之后**才设置该字段。
     private func showSuccess(_ text: String) {
         inlineError = nil
+        completedOffDay = nil
         completedMessage = text
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
-            if completedMessage == text { completedMessage = nil }
+            if completedMessage == text {
+                completedMessage = nil
+                completedOffDay = nil
+            }
         }
     }
 
