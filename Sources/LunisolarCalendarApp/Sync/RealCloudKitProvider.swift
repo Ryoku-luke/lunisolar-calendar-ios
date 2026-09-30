@@ -172,35 +172,84 @@ public final class RealCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
 
     public func push(records: [SyncRecord]) async throws -> (written: Int, errors: [String: SyncError]) {
         try await ensureZoneExists()
+        // entitlement 缺失（个人团队签名）：容器/数据库恒 nil，空写空失败。
+        // 必须在这里提前返回——否则下面 fetch 拿到空结果会被当成"云端无记录"而走新建分支。
+        guard database != nil else { return (0, [:]) }
         guard !records.isEmpty else { return (0, [:]) }
 
         let zoneID = zone.zoneID
         let ids = records.map { CKRecord.ID(recordName: $0.id, zoneID: zoneID) }
 
-        // 1. 批量 fetch 现有记录（取得 change tag，避免 serverRecordChanged 冲突）
+        // 1. 批量 fetch 现有记录（取 change tag _并_ 做 LWW 判定）
         let fetchResults = await fetchRecords(ids: ids)
 
         // 2. 组装 CKRecord：现有的修改字段，不存在的新建
+        //
+        // ⚠️ P1-1（2026-09-30）修复：这里**必须先做 last-write-wins 判定**，不能只拿
+        // change tag 就无条件覆盖。
+        //
+        // 修复前的行为：fetch 只为拿 change tag → `apply()` 覆盖所有字段 →
+        // `saveBatch` 用 `.ifServerRecordUnchanged`，而这个刚取到的 tag 恰好满足该策略。
+        // 于是持有陈旧 `versionMap` 的设备会用自己的**更低版本**覆盖云端更新的记录；
+        // 其他设备再在 `EventSyncCoordinator.pullAndMerge` 的
+        // `remoteRec.version > localVersion` 处丢弃它 → **永久分叉**。
+        //
+        // 现在与 `MockCloudKitProvider` 共用 `SyncConflictResolver`：云端更新时
+        // 记 per-record `.conflict` 并**跳过写入**。上层（`EventStore.flushDirtyAndDeleted`）
+        // 会保留这些记录的脏标记，随后的 pull 追平版本，下一轮 push 即可通过。
         var ckRecords: [CKRecord] = []
+        var errors: [String: SyncError] = [:]
         for r in records {
             let recordID = CKRecord.ID(recordName: r.id, zoneID: zoneID)
-            if case .success(let existing) = fetchResults[recordID] {
+            switch fetchResults[recordID] {
+            case .success(let existing):
+                // 云端已有该记录：先按 LWW 判，输了就不写。
+                guard let serverRec = toSyncRecord(existing) else {
+                    // 云端记录字段不完整（schema 漂移 / 半写）：无法比较版本，
+                    // 保守跳过而非覆盖——否则等于用本地数据抹掉一条读不懂的云端记录。
+                    errors[r.id] = .invalidPayload("cloud record \(r.id) 字段不完整，跳过写入")
+                    continue
+                }
+                guard SyncConflictResolver.resolve(incoming: r, existing: serverRec).isAccepted else {
+                    errors[r.id] = SyncConflictResolver.rejectionError(incoming: r, existing: serverRec)
+                    continue
+                }
                 apply(r, to: existing)
                 ckRecords.append(existing)
-            } else {
+
+            case .failure(let error) where isRecordAbsent(error):
+                // 云端确实没有这条 → 新建
                 let fresh = CKRecord(recordType: recordType, recordID: recordID)
                 apply(r, to: fresh)
                 ckRecords.append(fresh)
+
+            case .failure(let error):
+                // ⚠️ 关键防御：fetch **失败**（网络抖动、限流、鉴权…）绝不能当成
+                // "记录不存在"去新建——那会绕过 LWW 直接覆盖云端更新的记录。
+                // 这里如实报错并保留脏标记，等下一轮重试。
+                errors[r.id] = mapCKError(error)
+
+            case .none:
+                // fetch 整体没返回该 id（操作被取消等）：同样保守处理。
+                errors[r.id] = .unknown("fetch 未返回该记录，跳过写入：\(r.id)")
             }
         }
 
-        // 3. 批量保存
+        // 3. 批量保存（只保存通过 LWW 的记录）
+        guard !ckRecords.isEmpty else { return (0, errors) }
         let (saved, failed) = try await saveBatch(ckRecords)
-        var errors: [String: SyncError] = [:]
         for (recordID, err) in failed {
             errors[recordID.recordName] = mapCKError(err)
         }
         return (saved.count, errors)
+    }
+
+    /// fetch 失败是否表示「该记录在云端不存在」。
+    /// 只有 `.unknownItem` 才是"确实没有"；其余（网络/限流/鉴权）都属于暂时性失败，
+    /// 必须保持"未知"而不是"不存在"，否则会绕过 LWW 覆盖云端。
+    private func isRecordAbsent(_ error: Error) -> Bool {
+        guard let ckError = error as? CKError else { return false }
+        return ckError.code == .unknownItem
     }
 
     public func pull(sinceMs: Int64) async throws -> [SyncRecord] {

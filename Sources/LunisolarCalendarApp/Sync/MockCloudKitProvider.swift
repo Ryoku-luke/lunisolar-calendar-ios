@@ -20,13 +20,13 @@ import Foundation
             records[rec.id] = rec
             return true
         }
-        // last-write-wins: 先比 version，version 相同则比 updatedAtMs
-        if rec.version > existing.version ||
-           (rec.version == existing.version && rec.updatedAtMs >= existing.updatedAtMs) {
-            records[rec.id] = rec
-            return rec != existing
+        // last-write-wins：规则统一取自 `SyncConflictResolver`（先比 version，
+        // version 相同则比 updatedAtMs），不再在此处内联一份，避免两处漂移。
+        guard SyncConflictResolver.resolve(incoming: rec, existing: existing).isAccepted else {
+            return false
         }
-        return false
+        records[rec.id] = rec
+        return rec != existing
     }
 
     /// 取某 ID
@@ -168,13 +168,13 @@ public final class MockCloudKitProvider: ICloudSyncProvider, @unchecked Sendable
             // 不再让 upsert 内部"静默拒绝但返回 written 不计数"吞掉：之前的版本会导致
             // coordinator 以为推送成功（errors 为空）进而把本地 versionMap 提升到
             // 一个比 server 实际还低的值 → 本地/server 版本脱钩直到下次 pull。
+            //
+            // P1-1（2026-09-30）：判定改为走 `SyncConflictResolver` —— 与
+            // `RealCloudKitProvider` **共用同一套规则**，杜绝两个 Provider 各自漂移
+            // （修复前 Real 根本没有版本校验，会让陈旧设备覆盖云端更新的记录）。
             if let existing = await store.get(r.id) {
-                let wins = (r.version > existing.version) ||
-                           (r.version == existing.version && r.updatedAtMs >= existing.updatedAtMs)
-                guard wins else {
-                    errors[r.id] = .conflict(
-                        "LWW: server v=\(existing.version) > incoming v=\(r.version)"
-                    )
+                guard SyncConflictResolver.resolve(incoming: r, existing: existing).isAccepted else {
+                    errors[r.id] = SyncConflictResolver.rejectionError(incoming: r, existing: existing)
                     continue
                 }
             }

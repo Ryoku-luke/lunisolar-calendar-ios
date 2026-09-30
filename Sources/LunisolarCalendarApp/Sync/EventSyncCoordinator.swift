@@ -228,6 +228,15 @@ public final class EventSyncCoordinator: @unchecked Sendable {
 
         let remote = try await provider.pull(sinceMs: lastSyncMs)
         var merged = 0, conflicts = 0, errors: [SyncError] = []
+        /// 本轮**真正处理掉**（采纳/删除）的记录里最大的 updatedAtMs。
+        ///
+        /// ⚠️ 只允许用**处理过**的记录推进水位线，绝不能对 `remote.map(\.updatedAtMs).max()`
+        /// 取最大值——那会把**被拒绝**的记录也一起迈过去。一旦 `lastSyncMs` 越过某条被拒记录，
+        /// 下轮 pull 的谓词 `updatedAtMs > sinceMs` 就**再也查不到它**，这条记录变得
+        /// **永久不可合并** → 设备间永久分叉（P1-1 实测复现：
+        /// 设备 A 推了 v2、自己的 `versionMap` 已是 v2 因此不采纳云端回声，
+        /// 但水位线被推过该记录，此后 A 永远停在旧内容，云端与 B 都是新内容）。
+        var mergedMaxMs: Int64 = 0
 
         for remoteRec in remote {
             // 解码
@@ -244,8 +253,11 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             }
 
             let localVersion = versionMap[remoteRec.id] ?? 0
-            // last-write-wins：云端 version > local → 采纳云端；否则丢弃（本地更新）
-            if remoteRec.version > localVersion {
+            // last-write-wins：云端 version > local → 采纳云端；否则丢弃（本地更新）。
+            // P1-1（2026-09-30）：判定改走 `SyncConflictResolver.shouldAdoptRemote`，
+            // 与 push 侧 LWW 规则同源——避免「推得上、拉不回」这类两侧不对称的死锁。
+            if SyncConflictResolver.shouldAdoptRemote(remoteVersion: remoteRec.version,
+                                                      localVersion: localVersion) {
                 // 冲突：本地版本追踪落后于云端，并且本地已经有这个 ID 的事件
                 // （若本地不存在这个 ID，就是"云端新增"，不算冲突）
                 let localExisting = eventStore.eventBy(idString: remoteRec.id)
@@ -276,11 +288,13 @@ public final class EventSyncCoordinator: @unchecked Sendable {
                 }
                 versionMap[remoteRec.id] = remoteRec.version
                 merged += 1
+                // 只有走到这里（已采纳/已按墓碑删除）才认为这条记录被处理掉，可用于推进水位线
+                mergedMaxMs = max(mergedMaxMs, remoteRec.updatedAtMs)
             }
         }
         persistVersionMap()
 
-        if let max = remote.map(\.updatedAtMs).max(), max > lastSyncMs { lastSyncMs = max }
+        if mergedMaxMs > lastSyncMs { lastSyncMs = mergedMaxMs }
 
         let end = Date()
         let r = SyncResult(direction: .pull, pushed: 0, pulled: merged,

@@ -160,12 +160,17 @@ final class ICloudSyncTests: XCTestCase {
         let r1 = try await coordinator.push(events: batchA)
         XCTAssertEqual(r1.pushed, 2)
 
-        // 必须 pull 一次，让 lastSyncMs 推进到 batchA 的云端记录 max updatedAtMs
-        // （push 不推进水位线，是 P2 修复的核心）
+        // pull 一次：本地已有 batchA 且版本相同，LWW 不应重复合并。
+        // ⚠️ 水位线的语义已修正（P1-1，2026-09-30）：**只有被采纳/删除的记录才能推进水位线**。
+        //   旧实现用 `remote.map(\.updatedAtMs).max()`，会把**被拒绝**的记录也一起迈过——
+        //   而下轮 pull 的谓词是 `updatedAtMs > sinceMs`，于是那条记录永远拉不回来
+        //   → 永久不可合并 → 设备永久分叉。所以这里"本地回声不推进水位线"是**正确行为**，
+        //   代价是这些回声每轮会重拉一次（不改变内容，见 SyncWatermarkTests）。
         let pullA = try await coordinator.pullAndMerge()
         XCTAssertEqual(pullA.pulled, 0, "本地已有 batchA 且版本相同，LWW 不应重复合并")
+        XCTAssertEqual(coordinator.lastSyncMs, 0,
+                       "没有任何记录被采纳 → 水位线不应推进（推进就会迈过被拒记录）")
         let snapshot1LastMs = coordinator.lastSyncMs
-        XCTAssertGreaterThan(snapshot1LastMs, 0, "pull 后水位线必须推进")
 
         // 模拟另一台设备注入第二批（updatedAtMs 更大，且是新 id）
         var batchB = sampleEvents(count: 3, prefix: "第二批-增量")
@@ -184,9 +189,11 @@ final class ICloudSyncTests: XCTestCase {
             await mockProvider.injectServerRecord(forced)
         }
 
-        // 再 pull，返回的应该只包含第二批 3 条（batchA 已被水位线过滤）
+        // 再 pull：batchB 的 3 条必须都能拿到（水位线没被自己推的记录抬高而漏掉它们）
         let pullB = try await coordinator.pullAndMerge()
-        XCTAssertEqual(pullB.pulled, 3, "增量同步应该只返回新增的 3 条")
+        XCTAssertEqual(pullB.pulled, 3, "另一台设备新增的 3 条必须全部拉到")
+        XCTAssertGreaterThan(coordinator.lastSyncMs, snapshot1LastMs,
+                             "采纳了 3 条之后，水位线才应推进")
     }
 
     // MARK: 4b. P2 回归：push 成功后 lastSyncMs 不应被本地时间戳推进
