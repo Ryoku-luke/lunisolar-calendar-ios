@@ -252,6 +252,126 @@ final class LunisolarCalendarUITests: XCTestCase {
         }
     }
 
+    // MARK: - Flow 3c：AI 创建的日程必须**立刻**出现在日历的「今日安排」里
+    //
+    // 真机回归（2026-09-30 用户报告）：
+    //   「AI 日历助手创建的日程不会立刻出现在今日安排里面，必须手动再创建一条新的日程
+    //     才会和新创建的日程一同显示」
+    //
+    // 为什么此前没被发现：Flow 2 断言了「手动创建 → 日历出现」，
+    // 而 Flow 3 只断言 AI「有反应」（预览/错误二选一），**没人断言 AI 创建的事件真的落到日历上**。
+    // 这条用例补的就是那个缺口——它是这个 bug 的回归锚点。
+    //
+    // 数据层已单独验证过是正确的（AI 写入与手动写入在 store 上留下的状态完全一致：
+    // count+1、revision+1、events(on: today) 立刻 +1）。所以本用例失败时，
+    // 问题一定在**视图重新求值/观察**，不要去改数据层。
+    //
+    // ── 2026-09-30 真机诊断的最终结论（重要，别再往刷新方向查）──────────────
+    // 实测（临时埋点已被移除）：写入 → 观察通知 → `month.body` → `card.body`，
+    // SwiftUI 自证 `SelectedDayCardView: \EventStore.revision changed.`，
+    // 新事件 id 确实出现在它所属那天的当日数组里。**刷新链路完全正常。**
+    //
+    // 用户报告的「不立刻出现」真因是：说「明天上午10点…」时日程**正确地建到了明天**，
+    // 而用户人还在今天的日历页 —— 今天列表当然不变，直到切日期才看见。
+    // 也就是说：不是刷新 bug，而是**反馈没说明加到了哪一天、也没有去路**。
+    // 对应修复在 `AIAssistantView.create()`；回归锚点是下面的 Flow 3d。
+
+    func testFlow3c_aiCreatedEventAppearsInTodayScheduleImmediately() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "仅在 iPhone 上运行（iPad 为侧栏布局，AI 入口路径不同）")
+        let app = launchApp()
+
+        // 唯一标题，避免模拟器容器里的历史数据混淆断言
+        let title = "AI日程-\(Int(Date().timeIntervalSince1970))"
+
+        app.tabBars.buttons["AI 助手"].tap()
+
+        let input = element(app, ID.aiInput)
+        XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
+        input.tap()
+        // 显式带上标题与「今天」，让解析结果落在今天
+        input.typeText("今天下午3点提醒我\(title)")
+
+        let parseButton = element(app, ID.aiParse)
+        XCTAssertTrue(parseButton.waitForExistence(timeout: 5), "应有「解析并预览」按钮")
+        parseButton.tap()
+
+        let confirm = element(app, ID.aiConfirm)
+        XCTAssertTrue(confirm.waitForExistence(timeout: 6),
+                      "应出现「确认创建」预览（若这里是解析失败，说明输入未被识别）")
+        confirm.tap()
+
+        // 回到日历 Tab —— 这一步就是用户报告里「不立刻出现」的地方
+        app.tabBars.buttons["日历"].tap()
+
+        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 10),
+                      """
+                      AI 创建后切回日历，「今日安排」里必须立刻出现「\(title)」。
+                      若失败：数据层已证明写入正确，问题在视图未重新求值（观察失效），
+                      而不是事件没存进去。当前界面树：
+                      \(app.debugDescription)
+                      """)
+    }
+
+    // MARK: - Flow 3d：日程建在**非今天**时，必须说清是哪天并给去路
+    //
+    // 真机反馈（2026-09-30）的**真因**，不是刷新问题：
+    //   用户说「明天上午10点提醒我开会」→ AI 正确建到**明天** → 用户人在**今天**的日历页，
+    //   今天列表当然不变 → 看起来"没反应"，直到切日期/再操作一次才看见。
+    //   实测（埋点已移除）证明刷新链路正常：写入 → 观察通知 → month.body → card.body，
+    //   且 SwiftUI 自证 `\EventStore.revision changed.`。
+    //
+    // 修复：`AIAssistantView.create()` 在落点非今天时，提示改为「已加入 <日期> 的日程」
+    //   并给出「去看看」按钮（复用 `NavigationCoordinator.openEventDate`）。
+    // 本用例锁定这两点——否则将来有人把文案改回笼统的"已加入日历"，这个坑会原样复活。
+
+    func testFlow3d_eventOnAnotherDayAnnouncesDateAndOffersJump() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "仅在 iPhone 上运行（iPad 为侧栏布局，AI 入口路径不同）")
+        let app = launchApp()
+
+        let title = "明日日程-\(Int(Date().timeIntervalSince1970))"
+        app.tabBars.buttons["AI 助手"].tap()
+
+        let input = element(app, ID.aiInput)
+        XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
+        input.tap()
+        // 刻意用「明天」：这条用例的全部意义就是落点**不是今天**
+        input.typeText("明天上午10点提醒我\(title)")
+
+        let parseButton = element(app, ID.aiParse)
+        XCTAssertTrue(parseButton.waitForExistence(timeout: 5), "应有「解析并预览」按钮")
+        parseButton.tap()
+
+        let confirm = element(app, ID.aiConfirm)
+        XCTAssertTrue(confirm.waitForExistence(timeout: 6),
+                      "应出现「确认创建」预览（解析失败说明「明天上午10点」没被识别）")
+        confirm.tap()
+
+        // 断言 1：提示必须点出具体日期，而不是笼统的"已加入日历"
+        let announced = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "的日程")
+        ).firstMatch
+        XCTAssertTrue(announced.waitForExistence(timeout: 6),
+                      """
+                      日程建在非今天时，提示必须说明加到了哪一天（形如「已加入 <日期> 的日程」）。
+                      笼统的「日程已加入日历。」会让用户以为操作没生效。当前界面树：
+                      \(app.debugDescription)
+                      """)
+
+        // 断言 2：必须给去路，且点它能跳到那天并看到刚建的事件
+        let goThere = element(app, ID.aiGoToCreatedDay)
+        XCTAssertTrue(goThere.waitForExistence(timeout: 6),
+                      "非今天的日程应提供「去看看」跳转按钮")
+        goThere.tap()
+
+        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 10),
+                      """
+                      点「去看看」后应跳到该日程所在那一天，并在「今日安排」里看到「\(title)」。
+                      若失败：检查 NavigationCoordinator.openEventDate 是否被正确调用。
+                      """)
+    }
+
     // MARK: - Flow 3b：AI 助手的输入焦点行为（点里面保持 / 点外面收起 / 「完成」收起）
 
     /// 回归两条用户反馈：「点输入框没反应」与「键盘无法关闭」。
