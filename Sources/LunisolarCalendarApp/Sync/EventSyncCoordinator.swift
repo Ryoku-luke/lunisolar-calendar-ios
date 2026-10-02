@@ -104,7 +104,6 @@ public final class EventSyncCoordinator: @unchecked Sendable {
     @discardableResult
     public func push(events: [CalendarEvent], deletedIDs: Set<String> = []) async throws -> SyncResult {
         let start = Date()
-        status = .inProgress(.push)
 
         let available = await provider.isAvailable
         guard isEnabled else {
@@ -114,6 +113,10 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             // 重新开启同步后还可能被云端 LWW 覆盖（静默丢数据）。
             // 这里把入参原样标成"未推送"让调用方保留标记；status 保持不动，
             // 设置页读到的是「未启用」而不是假的「已同步」。
+            //
+            // ⚠️ 因此**不能**把 `status = .inProgress` 放在这个 guard 之前：
+            //    那会让"未启用"路径进入 inProgress → 由 defer 兜底复位 →
+            //    反而把设置页的「未启用」覆盖成别的状态。
             let r = SyncResult(direction: .push, pushed: 0, pulled: 0, conflictsResolved: 0,
                                errors: [],
                                failedRecordIDs: Set(events.map(\.id.uuidString)).union(deletedIDs),
@@ -121,9 +124,32 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             lastResult = r
             return r
         }
+
+        status = .inProgress(.push)
+        // B3 修复（2026-09-30）：**任何**退出路径都必须复位 status。
+        //
+        // 旧实现只在正常走到末尾时设置 .succeeded/.failed；
+        // 一旦中途抛出（provider.isAvailable 失败、ensureZone/编码/网络异常），
+        // status 就永远停在 .inProgress(.push)。设置页据此显示「同步中…」并**禁用**
+        // 「立即同步」，而错误又被调用方（EventStore.flushDirtyAndDeleted）吞进日志
+        // → 用户看到的是"一直同步中、按钮点不动"，且没有任何提示，只能重启 App 缓解。
+        // 复现：离线状态 + 任一 CRUD 编辑。
+        //
+        // 用 defer 而不是逐个 do/catch：路径有 5 条以上，逐个补必漏（这正是当初漏掉的原因）。
+        // 只在**抛出**时兜底复位；「未启用」提前返回不抛错，status 保持原样（见上方注释）。
+        var currentError: Error?
+        defer {
+            // 注意：defer 里不能用 `guard ... return`（不允许把控制权移出 defer）
+            if let currentError {
+                // 如实反映错误。注意不能无脑包成 `.unknown(E)`——那会把 `.notAvailable` /
+                // `.networkUnavailable` 这类**已分类**的错误盖成未知错误，设置页与日志都失去可诊断性。
+                status = .failed(currentError as? SyncError ?? mapError(currentError))
+            }
+        }
+
         guard available else {
             let err = SyncError.notAvailable
-            status = .failed(err)
+            currentError = err      // 交给 defer 统一复位（不要在抛出点各写一遍）
             throw err
         }
 
@@ -167,7 +193,20 @@ public final class EventSyncCoordinator: @unchecked Sendable {
             proposedVersions[delID] = nextVer
         }
 
-        let (written, perRecordErrors) = try await provider.push(records: records)
+        // ⚠️ 这里是**真机上实际会卡死的那条路径**：断网/限流时 provider.push 直接抛出
+        //    （Mock 的 offline 模式、真实 CloudKit 的网络错误都会）。
+        //    旧实现只在 `guard available` 处设了 .failed，异常从这一行抛出时
+        //    status 就永久停在 .inProgress(.push) → 设置页「同步中…」+ 按钮禁用。
+        //    把错误先记进 currentError 交给 defer 统一复位，同时**不吞掉**异常
+        //    （上层 flushDirtyAndDeleted 仍需据此保留脏标记）。
+        let written: Int
+        let perRecordErrors: [String: SyncError]
+        do {
+            (written, perRecordErrors) = try await provider.push(records: records)
+        } catch {
+            currentError = error
+            throw error
+        }
 
         // ---- provider.push 成功（没有抛异常）才真正提交版本号 ----
         for (id, v) in proposedVersions {
