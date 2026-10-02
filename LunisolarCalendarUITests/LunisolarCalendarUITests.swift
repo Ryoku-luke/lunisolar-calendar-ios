@@ -113,6 +113,26 @@ final class LunisolarCalendarUITests: XCTestCase {
             .firstMatch
     }
 
+    /// 「今天、且还没到」的时刻文案（形如 `19点54分`），用于需要落在**今天**的用例。
+    ///
+    /// 为什么要算而不是写死：`AICommandValidator.validateCreate` 会拦下
+    /// 「一次性（不重复）日程落在过去」——这是**正确**的产品行为，但它让写死时刻的
+    /// 用例变成「几点跑决定红绿」：写「下午3点」时，15:00 之后跑必然拿不到预览。
+    /// 2026-10-02 18:54 的全量跑就是这样红的。
+    ///
+    /// 距零点不足 5 分钟时返回 nil（调用方 `XCTSkip`）：那个窗口里构造不出
+    /// 「今天且还没到」的时刻，与其假红不如明说跳过。
+    private func laterTodayText() -> String? {
+        let cal = Calendar(identifier: .gregorian)
+        let now = Date()
+        guard let tomorrowStart = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)),
+              tomorrowStart.timeIntervalSince(now) > 300 else { return nil }
+        // 现在 + 1 小时；若跨天则收敛到 23:59（仍是今天，且必然在未来）
+        let target = min(now.addingTimeInterval(3600), tomorrowStart.addingTimeInterval(-60))
+        let c = cal.dateComponents([.hour, .minute], from: target)
+        return "\(c.hour ?? 0)点\(c.minute ?? 0)分"
+    }
+
     /// 事件行的标题断言（「当日安排」里能不能看到某条日程）。
     ///
     /// ⚠️ 不能写成 `app.staticTexts[title]`：`EventRow` 用了
@@ -303,8 +323,15 @@ final class LunisolarCalendarUITests: XCTestCase {
         let input = element(app, ID.aiInput)
         XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
         input.tap()
-        // 显式带上标题与「今天」，让解析结果落在今天
-        input.typeText("今天下午3点提醒我\(title)")
+        // 显式带上标题与「今天」，让解析结果落在今天。
+        // ⚠️ 时刻**不能写死**（原来写「下午3点」）：`AICommandValidator` 会正确拦下
+        // 「一次性日程落在过去」，于是预览不出现、这条断言假红——2026-10-02 18:54 的
+        // 全量跑正是这样红的（探针复现：parser OK，validator `inThePast`
+        // 「「2026年10月2日 15:00」已经过去了」）。取「现在 + 1 小时」。
+        guard let timeText = laterTodayText() else {
+            throw XCTSkip("距零点不足 5 分钟：构造不出「今天、且还没到」的时刻，而本用例必须落在今天")
+        }
+        input.typeText("今天\(timeText)提醒我\(title)")
 
         let parseButton = element(app, ID.aiParse)
         XCTAssertTrue(parseButton.waitForExistence(timeout: 5), "应有「解析并预览」按钮")
