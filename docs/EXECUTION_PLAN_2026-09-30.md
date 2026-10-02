@@ -586,6 +586,57 @@ test plan 时会重写 `TestableReference`，而 `parallelizable` 在新格式�
 
 ---
 
+## 八点六、P2 已开工：两项数据安全修复（2026-09-30）
+
+### ✅ B4 部分损坏只丢坏记录，不再清空整库（`f44dc78`）
+
+**为什么优先做它**：这是全项目**唯一会一次性毁掉用户全部日程**的路径。
+
+旧实现 `JSONDecoder().decode([CalendarEvent].self, …)` 是**整文件一次性解码**；
+而 `CalendarEvent` 的 rawValue 是**中文枚举字符串**（Priority/RepeatRule/EventType），
+解码用 `try c.decode`（缺键即抛）。于是**一条**记录被写坏（未知 rawValue / 缺字段 /
+半截写入）就会让整个数组解码失败，把用户全部日程清零，只留一个 `.corrupt` 备份。
+
+**新行为分两档**（保留原契约）：
+| 情况 | 行为 |
+|---|---|
+| 文件不是 JSON 数组、或**一条都解不出** | 仍整份隔离 `.corrupt.<ms>`（行为不变） |
+| 有部分能解出 | 好记录照常加载；坏记录另存 **`.bad.<ms>`** 旁路文件（JSON Lines） |
+
+**证伪**：新断言在未修复提交上跑 → `("0") is not equal to ("2") - 只应丢弃坏的那 1 条；实际：[]`
+——3 条记录因 1 条坏而**全部归零**。
+
+### ✅ B3 任何退出路径都不得停在 `.inProgress`（`e57b071`）
+
+**现象**：设置页显示「同步中…」并**禁用**「立即同步」，无任何提示，只能重启 App。
+
+**两条卡死路径**（都用 worktree 在未修复提交上证伪过）：
+1. **`provider.push` 抛出**（断网/限流/CloudKit 网络错误）—— 真机主路径。
+   错误被上层 `flushDirtyAndDeleted` 吞进日志，用户看不到。
+2. **同步开关关闭**（`isEnabled == false`）—— 提前 return、不抛错，因此没有复位点。
+
+> ⚠️ **更正一处本计划早先的判断**：原记录说「`guard available else` 已设 `.failed`，
+> 所以抛错路径没漏」。实跑证明**是错的**：Mock 的 offline 模式下 `isAvailable` 仍为 true，
+> 抛错发生在更靠后的 `provider.push(records:)`。两条路径都真实存在，且第 1 条更贴近真机。
+
+**改法**：`status = .inProgress` 移到 `isEnabled` guard **之后**；用 `defer` 统一兜底；
+`provider.push` 的抛出先记进 `currentError` 再 rethrow（**不吞异常**，上层仍需保留脏标记）；
+兜底如实反映错误 `currentError as? SyncError ?? mapError(...)`——无脑包成 `.unknown` 会把
+`.networkUnavailable` 这类已分类错误盖掉（修的过程中实测发现）。
+
+**证伪**：新断言在未修复提交上 **4/4 失败**，两条都停在 `inProgress(.push)`，与真机现象一致。
+
+### P2 剩余项
+
+| 项 | 状态 |
+|---|---|
+| P2-1 导出/备份入口 | **待裁决 D6**（导出 UI 是被主动移除的产品决策，非代码缺陷） |
+| P2-1 存储格式版本与迁移 | 未做（`JSONBackupWrapper.version` 存在但从未被读取） |
+| P2-3 导入静默覆盖本地编辑 | 未做（导入把 `updatedAt` 盖成当前时间，`.keepLatest` 下必然覆盖） |
+| P2-4 数据到期机制 | 未做（**节气 2032-12-22 / 放假 2027-01-01 / 黄历 2029-01-01** 三个悬崖，均静默降级） |
+
+---
+
 ## 九、里程碑与验收
 
 | 里程碑 | 内容 | 验收标准 |
