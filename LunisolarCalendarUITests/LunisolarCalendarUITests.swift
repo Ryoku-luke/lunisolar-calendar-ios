@@ -324,7 +324,8 @@ final class LunisolarCalendarUITests: XCTestCase {
     //
     // 修复：`AIAssistantView.create()` 在落点非今天时，提示改为「已加入 <日期> 的日程」
     //   并给出「去看看」按钮（复用 `NavigationCoordinator.openEventDate`）。
-    // 本用例锁定这两点——否则将来有人把文案改回笼统的"已加入日历"，这个坑会原样复活。
+    // 本用例锁定三点——否则将来有人把文案改回笼统的"已加入日历"，这个坑会原样复活：
+    //   ① 提示说出了具体日期 ② 给了「去看看」去路 ③ 点它真能跳到那天并看到该事件。
 
     func testFlow3d_eventOnAnotherDayAnnouncesDateAndOffersJump() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
@@ -349,23 +350,34 @@ final class LunisolarCalendarUITests: XCTestCase {
                       "应出现「确认创建」预览（解析失败说明「明天上午10点」没被识别）")
         confirm.tap()
 
-        // 断言 1：提示必须点出具体日期，而不是笼统的"已加入日历"
-        let announced = app.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS %@", "的日程")
-        ).firstMatch
-        XCTAssertTrue(announced.waitForExistence(timeout: 6),
+        // 顺序刻意为「先抓可点的那个，再断言文案」：
+        // 成功提示是 2 秒后自动消失的行内 Toast（AIAssistantView.showSuccess），
+        // 文案与「去看看」按钮同生同灭。若先对着文案做一次 waitForExistence，
+        // 查询开销就可能把那 2 秒窗口耗掉，后面找按钮变成随机红。
+        // 反过来用按钮当闸门是安全的：按钮在 ⇔ 文案在（同一 Section，同一状态位）。
+
+        // 断言 2：必须给去路
+        let goThere = element(app, ID.aiGoToCreatedDay)
+        XCTAssertTrue(goThere.waitForExistence(timeout: 6),
                       """
-                      日程建在非今天时，提示必须说明加到了哪一天（形如「已加入 <日期> 的日程」）。
-                      笼统的「日程已加入日历。」会让用户以为操作没生效。当前界面树：
+                      非今天的日程应提供「去看看」跳转按钮。当前界面树：
                       \(app.debugDescription)
                       """)
 
-        // 断言 2：必须给去路，且点它能跳到那天并看到刚建的事件
-        let goThere = element(app, ID.aiGoToCreatedDay)
-        XCTAssertTrue(goThere.waitForExistence(timeout: 6),
-                      "非今天的日程应提供「去看看」跳转按钮")
-        goThere.tap()
+        // 断言 1：提示必须点出具体日期，而不是笼统的"已加入日历"
+        // 用 `.matching(predicate)`（按元素自身的 label 过滤），不要用 `.containing(...)`
+        // ——后者是「含有匹配**后代**」的语义，纯 Text 没有后代，会永远找不到。
+        let announced = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS %@", "的日程"))
+            .firstMatch
+        XCTAssertTrue(announced.exists,
+                      """
+                      日程建在非今天时，提示必须说明加到了哪一天（形如「已加入 <日期> 的日程」）。
+                      笼统的「日程已加入日历。」会让用户以为操作没生效。
+                      """)
 
+        // 断言 3：点「去看看」必须真能跳到那天并看到刚建的事件
+        goThere.tap()
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 10),
                       """
                       点「去看看」后应跳到该日程所在那一天，并在「今日安排」里看到「\(title)」。
