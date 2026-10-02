@@ -148,6 +148,14 @@ public final class EventStore {
     /// - 使用 Swift Concurrency Task（@MainActor）替换 DispatchWorkItem，
     ///   与 CountdownStore 模式一致，满足 Swift 6 strict concurrency
     ///   （events/idToIndex/dirtyEventIDs 都是 MainActor 隔离属性）。
+    /// 存储为只读：磁盘格式比本 App 新、或版本标记读不懂时为 true。
+    ///
+    /// 一旦为 true，本实例**不写该目录里的任何文件**（事件、dirty/deleted 标记、隔离文件
+    /// 全部跳过）。这是刻意的取舍：不落盘只是这次会话的改动丢失，
+    /// 覆盖写却会把新版本 App 写入的数据连同它认识不到的字段一起抹掉。
+    /// 数据仍会尽力读出来给用户看（读不懂就隔离，绝不原地改写）。
+    public private(set) var storageIsReadOnly = false
+
     private var pendingSaveTask: Task<Void, Never>?
     private let saveDebounceNs: UInt64 = 500_000_000  // 0.5s
 
@@ -215,6 +223,30 @@ public final class EventStore {
             withIntermediateDirectories: true,
             attributes: nil
         )
+
+        // 存储格式版本与迁移：必须在 load() 之前跑完，否则读的是未迁移的旧结构。
+        //
+        // 两种异常一律切成**只读**（宁可这次不落盘，也不覆盖用户数据）：
+        //   · 磁盘格式比本 App 新（用户回退到旧版 App）；
+        //   · 版本标记读不懂（版本不确定，不能猜着迁移）。
+        do {
+            switch try StorageMigrator.migrate(directory: baseDir) {
+            case .upToDate:
+                break
+            case .migrated(let from, let to, let applied):
+                AppLogger.app.notice("存储格式已迁移：v\(from) → v\(to)（\(applied.joined(separator: " → "))）")
+            case .newerThanSupported(let stored, let supported):
+                storageIsReadOnly = true
+                AppLogger.app.error("""
+                存储格式 v\(stored) 比本 App 支持的 v\(supported) 更新：本次运行改为**只读**，\
+                不写任何磁盘文件，以免覆盖新版本数据。请升级 App。
+                """)
+            }
+        } catch {
+            storageIsReadOnly = true
+            AppLogger.app.error("存储格式标记无法识别（\(error)）：本次运行改为**只读**，避免误判版本后覆盖数据。")
+        }
+
         load()
         loadDirtyFlags()
 
@@ -786,6 +818,10 @@ public final class EventStore {
     /// 整文件隔离（原有逻辑）：复制到 `corrupt.<ms>`，再清空内存。
     /// 保持既有契约不变——`EventStoreTests.testCorruptFileIsQuarantinedNotOverwritten` 依赖它。
     private func quarantineWholeFile(after error: Error) {
+        guard !storageIsReadOnly else {
+            AppLogger.app.error("存储为只读（磁盘格式与本 App 不兼容）：已跳过本次写入，避免覆盖用户数据。")
+            return
+        }
         // BUG #41 P0 数据丢失修复：损坏文件不被下一次 saveNow() 原子写默默覆盖掉，
         // 而是先复制到 `calendar_events.json.corrupt.<timestamp>` 隔离目录，
         // 用户可自行从该备份/备份/云端恢复，或使用 Finder/iMazing 提取。
@@ -802,6 +838,11 @@ public final class EventStore {
     /// 用 JSON Lines（一行一条）便于人工查看与逐条恢复。
     private func quarantineBadRecords(_ bad: [Data]) {
         guard !bad.isEmpty else { return }
+        guard !storageIsReadOnly else {
+            AppLogger.app.error("存储为只读（磁盘格式与本 App 不兼容）：已跳过本次写入，避免覆盖用户数据。")
+            return
+        }
+
         let ms = Int64(Date().timeIntervalSince1970 * 1000)
         let dir = saveURL.deletingLastPathComponent()
         let url = dir.appendingPathComponent("calendar_events.json.bad.\(ms)")
@@ -847,6 +888,10 @@ public final class EventStore {
     private func saveNow() {
         pendingSaveTask?.cancel()
         pendingSaveTask = nil
+        guard !storageIsReadOnly else {
+            AppLogger.app.error("存储为只读（磁盘格式与本 App 不兼容）：已跳过本次写盘，避免覆盖用户数据。")
+            return
+        }
         do {
             let data = try JSONEncoder().encode(events)
             try data.write(to: saveURL, options: .atomic)
@@ -917,6 +962,10 @@ public final class EventStore {
 
     /// 每次 save() 成功后一并写入 dirty/deleted id（.atomic 原子写）
     private func saveDirtyFlags() {
+        guard !storageIsReadOnly else {
+            AppLogger.app.error("存储为只读（磁盘格式与本 App 不兼容）：已跳过本次写入，避免覆盖用户数据。")
+            return
+        }
         let encoder = JSONEncoder()
         func writeSet(_ set: Set<String>, to url: URL) {
             do {

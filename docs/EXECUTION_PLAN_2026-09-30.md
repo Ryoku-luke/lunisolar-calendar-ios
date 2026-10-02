@@ -472,6 +472,38 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 
 > 对应审查报告 §4 B5。**用户目前能恢复备份，却造不出备份。**
 
+> ✅ **2026-10-02 已完成：存储格式版本 + 目录级迁移机制**（导出入口仍卡 D6）
+>
+> **落地了什么**（`Sources/LunisolarCalendarApp/Stores/StorageFormat.swift` 新增）：
+> - 独立小文件 `storage_format.json` 记版本，**不动数据文件本身的形状**——
+>   旧版 App 仍能照常读裸数组，只是不认识这个标记（不会因此报错）；
+> - **无标记 = v1**（本机制落地前的历史格式）；**标记存在但读不懂 = 不确定**，
+>   一律拒绝写（`MigrationError.markerUnreadable`），绝不猜着当 v1 迁移；
+> - 迁移按 `StorageMigrator.registered` **逐级执行**，缺一环直接报错（不许跳过，
+>   跳过就是带着旧结构继续跑）；**只在全部成功后才落版本标记**；
+> - 磁盘版本比本 App 新（用户回退到旧版 App）→ `EventStore.storageIsReadOnly = true`，
+>   该实例**不写这个目录里的任何文件**（事件 / dirty 标记 / 隔离文件全跳过）。
+>   取舍写死在注释里：不落盘只是这次会话的改动丢失，覆盖写却会把新版本的数据连同
+>   它认识不到的字段一起抹掉。数据仍尽力读出来给用户看。
+> - `storageIsReadOnly` 会让第 4 条**每次读盘都不写盘**成立：全新目录、历史目录、
+>   只读目录三种情况下，目录内容都逐字节不变（有测试用目录快照钉住）。
+>
+> **为什么现在注册表是空的（重要，别误以为是没写完）**：`current = 1`，当前**没有**
+> 已知的格式变更需要迁移——`startDay/endDay` 这类历史演进早已用
+> `decodeIfPresent` + 「旧 payload 整块跳过」兼容掉了。所以这一版交付的是**机制**：
+> 下次改字段语义 / 枚举 rawValue 时「有地方可写、有测试可依」，
+> 而不是又一个事后一次性脚本。它立刻兑现的价值是**回退保护**（D 类事故里最静默的一种）。
+>
+> **它自己的测试当场抓到过一个真实缺陷**：版本标记原先把 `updatedAt` 存成 ISO8601
+> （写侧 `dateEncodingStrategy = .iso8601`），读侧却用默认数字策略 → 标记**刚写完就读不懂**
+> → 整个存储被误判成「版本不确定」而切成只读。已改成 Unix 秒，彻底去掉策略耦合。
+>
+> **验证**：369 用例 × 4 时区 0 失败（新增 `StorageFormatTests` 9 条）；
+> macOS + iOS SDK 构建；UI 测试 target 类型检查。
+> **证伪**：对实现造 5 种突变，**5/5 分别被对应的那条用例拦住**——
+> 去掉只读守卫 →「只读目录逐字节不变」红；标记读不懂当 v1 →「不确定必须拒绝」红；
+> 先落标记再迁移 / 缺环跳过 / 迁移抛错仍落标记 → 两条「迁移失败不得落标记」红。
+
 - **做什么**（**先裁决 D6**：导出 UI 是被主动移除的产品决策，函数有意留作测试镜像）
   1. 若裁决恢复：在设置页「数据」分区接上已有的 `DataPortability.exportJSON/exportICS/exportCSV`
      （`Support/DataPortability.swift:60,117,196`），走系统分享/文件导出。
@@ -582,6 +614,7 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 | D4 | 节气是否改为运行时计算 | P2-4 | 可一次性消除 9 年窗口，但改动大 |
 | D5 | 通知权限是否改到「首次添加提醒时」请求 | 未排期 | 现在只在设置页请求（`SettingsView.swift:146-150`），从不打开设置的用户**永远收不到通知**，而 `NotificationManager.swift:56` 的注释说会请求 → 注释与实现矛盾 |
 | D6 | **是否恢复导出/备份入口** | P2-1 | 远端 `1cc0b7f` 说明导出 UI 是**被主动移除**的产品决策、三个 `export*` 函数有意留作测试镜像。所以这是产品决策而非代码缺陷（详见 `HANDOFF_REVIEW` §4 B5 的更正） |
+| D7 | **存储只读时要不要在界面上告诉用户** | 未排期 | `EventStore.storageIsReadOnly`（磁盘格式比本 App 新 / 版本标记读不懂）目前只写日志：那段时间用户的增删改**不会落盘**。要提示就得加 4 语言文案（并过 `LocalizationParity` 类的 key 数校验），属于产品决策 |
 
 ---
 
