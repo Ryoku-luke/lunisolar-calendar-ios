@@ -33,6 +33,7 @@ private enum ID {
     static let aiParse = "ai.input.parse"
     static let aiConfirm = "ai.preview.confirm"
     static let aiDone = "ai.input.done"
+    static let aiGoToCreatedDay = "ai.created.goto"
     static let settingsSyncToggle = "settings.sync.toggle"
     static let settingsSyncStatus = "settings.sync.status"
     static let iPadSidebarCalendar = "ipad.sidebar.calendar"
