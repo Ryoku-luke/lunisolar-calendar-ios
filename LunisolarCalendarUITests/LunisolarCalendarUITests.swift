@@ -113,6 +113,19 @@ final class LunisolarCalendarUITests: XCTestCase {
             .firstMatch
     }
 
+    /// 事件行的标题断言（「当日安排」里能不能看到某条日程）。
+    ///
+    /// ⚠️ 不能写成 `app.staticTexts[title]`：`EventRow` 用了
+    /// `.accessibilityElement(children: .combine)`，整行被合成**一个**元素，
+    /// 其 label 是「标题 + 时间段」（见 `EventRow.swift` 的 accessibilityLabel）——
+    /// 按标题做**精确**匹配永远找不到事件行，行为完全正确也会红。
+    /// 这里用前缀匹配：将来若把 combine 去掉、标题还原成独立 Text，它同样成立。
+    private func eventRow(_ app: XCUIApplication, title: String) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", title))
+            .firstMatch
+    }
+
     /// 当前月份的月中日（15 号）。
     ///
     /// 为什么必须是月中日：跟手滑动时相邻两个月的网格会**同时渲染**（`calendarShell` 会被
@@ -211,7 +224,7 @@ final class LunisolarCalendarUITests: XCTestCase {
         saveButton.tap()
 
         // 回到日历后，当日安排里应能看到刚建的事件标题
-        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 10),
+        XCTAssertTrue(eventRow(app, title: title).waitForExistence(timeout: 10),
                       "保存后应回到日历，且当天安排里出现「\(title)」")
     }
 
@@ -305,7 +318,7 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 回到日历 Tab —— 这一步就是用户报告里「不立刻出现」的地方
         app.tabBars.buttons["日历"].tap()
 
-        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 10),
+        XCTAssertTrue(eventRow(app, title: title).waitForExistence(timeout: 10),
                       """
                       AI 创建后切回日历，「今日安排」里必须立刻出现「\(title)」。
                       若失败：数据层已证明写入正确，问题在视图未重新求值（观察失效），
@@ -383,7 +396,7 @@ final class LunisolarCalendarUITests: XCTestCase {
 
         // 断言 3：点「去看看」必须真能跳到那天并看到刚建的事件
         goThere.tap()
-        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 10),
+        XCTAssertTrue(eventRow(app, title: title).waitForExistence(timeout: 10),
                       """
                       点「去看看」后应跳到该日程所在那一天，并在「今日安排」里看到「\(title)」。
                       若失败：检查 NavigationCoordinator.openEventDate 是否被正确调用。
