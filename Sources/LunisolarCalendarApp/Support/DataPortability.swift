@@ -133,6 +133,10 @@ public enum DataPortability {
             lines.append("BEGIN:VEVENT")
             lines.append("UID:\(event.id.uuidString)")
             lines.append("DTSTAMP:\(dfmt.string(from: event.createdAt))")
+            // P2-3：DTSTAMP 的语义是「创建/盖章时间」，**不是**最后改动时间。
+            // 只写它的话，这份文件被重新导入时判断不出对方改过没有
+            // （importICS 是按 LAST-MODIFIED 优先定 updatedAt 的）→ 往返一圈就丢修订信息。
+            lines.append("LAST-MODIFIED:\(dfmt.string(from: event.updatedAt))")
 
             if event.isAllDay {
                 lines.append("DTSTART;VALUE=DATE:\(dfmtAllDay.string(from: event.startDate))")
@@ -264,6 +268,11 @@ public enum DataPortability {
                 var parsedIsCompleted = false
                 var hasStart = false
                 var hasEnd = false
+                // 源日历里的时间戳（RFC 5545）：DTSTAMP = 创建/盖章时间，
+                // LAST-MODIFIED = 最后修订时间。用它们替代构造器写入的「现在」——
+                // 详见下面给 event.updatedAt 赋值处的注释（P2-3）。
+                var parsedDTSTAMP: Date? = nil
+                var parsedLastModified: Date? = nil
 
                 while idx < lines.count && !lines[idx].uppercased().hasPrefix("END:VEVENT") {
                     let vline = lines[idx]
@@ -306,6 +315,11 @@ public enum DataPortability {
                         rawUID = value
                     } else if key.hasPrefix("SUMMARY") {
                         title = unescapeICS(value)
+                    } else if key.hasPrefix("DTSTAMP") {
+                        // 值恒为 UTC（带 Z）
+                        parsedDTSTAMP = parseICSDateTime(value, tzid: nil)
+                    } else if key.hasPrefix("LAST-MODIFIED") {
+                        parsedLastModified = parseICSDateTime(value, tzid: nil)
                     } else if key.hasPrefix("DTSTART") {
                         if key.contains("VALUE=DATE") {
                             if let d = dfmtAllDay.date(from: value) { startDate = d; isAllDay = true; hasStart = true }
@@ -382,6 +396,20 @@ public enum DataPortability {
                         repeatRule: parsedRRULE ?? .never,
                         priority: parsedPriority
                     )
+                    // P2-3：时间戳必须取**源文件**的，而不是构造器写的「导入那一刻」。
+                    //
+                    // 为什么：`merge(policy: .keepLatest)` 是按 `updatedAt` 判新旧的。
+                    // 导入时盖成「现在」的话，同一份 .ics 重复导入必然被判成「导入的更新」→
+                    // 用户的本地编辑被静默盖回去，而设置页还提示「导入成功」。
+                    // 取源时间后：文件没变过 → 导入的 updatedAt 仍旧 → 本地编辑留住；
+                    // 对方真的改过（LAST-MODIFIED 变新）→ 导入照常覆盖。
+                    // 两者都没有时保持构造器的「现在」：源文件没给时间，只能认为它就是最新。
+                    if let sourceStamp = parsedLastModified ?? parsedDTSTAMP {
+                        event.updatedAt = sourceStamp
+                    }
+                    if let created = parsedDTSTAMP {
+                        event.createdAt = created
+                    }
                     // STATUS:COMPLETED/CANCELLED → 导入后仍保持已完成，避免重挂提醒
                     if parsedIsCompleted { event.isCompleted = true }
                     // 把外部的 UID 记到 notes 末尾，便于排查（不覆盖原 notes）

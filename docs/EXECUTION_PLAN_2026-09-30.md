@@ -538,6 +538,34 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
   改为保留源时间或明确提示冲突。
 - **验收**：新增「导入 → 本地编辑 → 再次导入」用例，验证本地编辑不被悄悄覆盖。
 
+> ✅ **2026-10-02 已完成**（选「保留源时间」这条，没有做冲突弹窗）
+>
+> **根因更正**：审查报告指到 `CalendarEvent.swift:247`（构造器把 `updatedAt` 写成 `now`），
+> 但那个构造器对**真正新建**的事件是对的。真正的缺陷在**两条「构造型」导入路径**——
+> 它们把外部数据先构造成本地事件，于是导入时间被当成了记录的修订时间：
+> - `importICS`：不解析 `DTSTAMP` / `LAST-MODIFIED`（RFC 5545 的创建/最后修订时间）；
+> - `SystemImportMapper`：`SystemImportEvent` 根本没带源修订时间。
+>
+> 两处都用**确定性 id**（伪 UID / sourceID 哈希）→ 重复导入必然落进
+> `merge(policy: .keepLatest)` 的「同 id 冲突」分支，而 incoming.updatedAt = 导入那一刻
+> → **必然判「导入更新」** → 本地编辑被静默盖掉，设置页还提示「导入成功」。
+> JSON 导入这条路本来就没问题（它走解码、保住了文件里的时间戳），所以只有 ICS 与系统日历中招。
+>
+> **改法**：
+> - `importICS`：解析 `DTSTAMP`（→ `createdAt`）与 `LAST-MODIFIED`（→ `updatedAt`，优先）；
+> - `exportICS`：补写 `LAST-MODIFIED`——`DTSTAMP` 的语义是「创建/盖章时间」而不是最后改动，
+>   只写它的话，本 App 导出的文件被别人重新导入时同样判断不出新旧（往返一圈就丢修订信息）；
+> - `SystemImportEvent` 新增 `sourceModifiedAt`，真实 provider 填 `EKEvent.lastModifiedDate`，
+>   mapper 用它写 `updatedAt`（联系人没有这个概念 → nil）；
+> - **源文件确实没给时间戳时**保持原来的「导入时刻」语义：源没给时间，只能认为它就是最新
+>   （否则导入会永远不生效）。这条反向守卫也有测试，避免把修复做成"导入永远输"。
+>
+> **验证**：376 用例 × 4 时区 0 失败（新增 `ImportOverwriteTests` 5 条 + `SystemImportTests` 2 条）；
+> macOS + iOS SDK 构建；UI 测试 target 类型检查。
+> **证伪**：两条「先写测试再改」的用例在**改之前就是红的**（本地编辑被盖回原标题、
+> `updated=1`），修完全绿；另对实现造 3 种突变（mapper 不取源时间 / ICS 不取时间戳 /
+> 导出不写 LAST-MODIFIED），**3/3 分别被对应用例拦住**。
+
 ### P2-4 建立数据到期机制
 
 > 对应审查报告 §7。三个悬崖都会**静默降级**（不报错）。

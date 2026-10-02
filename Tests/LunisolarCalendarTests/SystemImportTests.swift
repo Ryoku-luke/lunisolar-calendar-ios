@@ -142,6 +142,44 @@ final class SystemImportTests: XCTestCase {
     }
 
     // 端到端：Stub Provider → Aggregator → EventStore.merge → 无重复
+    // P2-3：带源修订时间时，映射出来的 updatedAt 必须是**源**的，不是「导入那一刻」
+    func testMapperUsesSourceModifiedAt() {
+        let source = Date(timeIntervalSince1970: 1_788_220_800)   // 2026-09-01
+        let dto = SystemImportEvent(sourceID: "ek:modified", title: "改过的会",
+                                    startDate: Date(), sourceModifiedAt: source)
+        XCTAssertEqual(SystemImportMapper.toCalendarEvent(dto).updatedAt, source)
+    }
+
+    // P2-3 验收（系统日历这条路）：导入 → 本地编辑 → **系统那边没改过**再导入
+    // → 本地编辑必须留住。修复前：导入的 updatedAt = 导入那一刻 ≥ 本地编辑 → 被盖掉。
+    @MainActor
+    func testReimportWithoutSourceChangeKeepsLocalEdit() async {
+        let store = makeIsolatedEventStore()
+        _ = store.clearAll(skipSync: true)
+
+        let sourceModified = Date(timeIntervalSince1970: 1_788_220_800)
+        let dto = SystemImportEvent(sourceID: "ek:stable-9", title: "系统里的会",
+                                    startDate: Date(), sourceModifiedAt: sourceModified)
+        let provider = StubSystemImportProvider(source: .systemCalendar, events: [dto], authorized: true)
+
+        let (events1, _) = await SystemImportAggregator.gather(providers: [provider])
+        _ = store.merge(events1, policy: .keepLatest, skipSync: true)
+        guard let imported = store.events.first else { return XCTFail("首次导入应新增 1 条") }
+
+        // 本地编辑（update 会把 updatedAt 顶到「现在」）
+        var edited = imported
+        edited.title = "系统里的会（我改过）"
+        store.update(edited)
+
+        // 再次导入：系统那边一个字都没变
+        let (events2, _) = await SystemImportAggregator.gather(providers: [provider])
+        let r2 = store.merge(events2, policy: .keepLatest, skipSync: true)
+        XCTAssertEqual(r2.updated, 0, "源修订时间没变，不该判成「更新」")
+        XCTAssertEqual(r2.skipped, 1)
+        XCTAssertEqual(store.events.first?.title, "系统里的会（我改过）",
+                       "本地编辑被重复导入静默盖掉了（P2-3 在系统日历这条路上）")
+    }
+
     @MainActor
     func testEndToEndImportNoDuplicatesOnReimport() async {
         let store = makeIsolatedEventStore()
@@ -163,6 +201,8 @@ final class SystemImportTests: XCTestCase {
         XCTAssertEqual(store.events.count, 2)
 
         // 第二次完全相同数据导入：0 新增（确定性 UUID → 同 id → keepLatest 视为更新不追加副本）
+        // 注：这批 DTO 没带 sourceModifiedAt → 走「源没给时间就当作最新」的回退路径，
+        //     所以这里仍然计 updated。带源时间的路径见 testReimportWithoutSourceChangeKeepsLocalEdit。
         let (events2, _) = await SystemImportAggregator.gather(providers: [provider])
         let r2 = store.merge(events2, policy: .keepLatest, skipSync: true)
         XCTAssertEqual(r2.added, 0, "重复导入不应产生副本")

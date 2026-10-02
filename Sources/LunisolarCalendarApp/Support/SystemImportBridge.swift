@@ -26,6 +26,14 @@ public struct SystemImportEvent: Sendable, Equatable {
     /// 优先级（联系人紧急事项给 high，普通日历日程给 normal）
     public let priority: Priority
 
+    /// 源平台上的**最后修订时间**（日历 = `EKEvent.lastModifiedDate`；联系人没有这个概念，为 nil）。
+    ///
+    /// 为什么值得单独带一路：`merge(policy: .keepLatest)` 按 `updatedAt` 判新旧，
+    /// 而导入若把 `updatedAt` 盖成「导入那一刻」，**重复导入同一批系统事件**就会
+    /// 把用户的本地编辑静默盖掉（同 sourceID → 确定性 UUID → 必然走冲突分支）。
+    /// 带上源修订时间后：系统那边没改过 → 导入不覆盖；真改过 → 照常覆盖。
+    public let sourceModifiedAt: Date?
+
     public init(
         sourceID: String,
         title: String,
@@ -36,7 +44,8 @@ public struct SystemImportEvent: Sendable, Equatable {
         notes: String? = nil,
         repeatRule: RepeatRule = .never,
         eventType: EventType = .schedule,
-        priority: Priority = .normal
+        priority: Priority = .normal,
+        sourceModifiedAt: Date? = nil
     ) {
         self.sourceID = sourceID
         self.title = title
@@ -48,6 +57,7 @@ public struct SystemImportEvent: Sendable, Equatable {
         self.repeatRule = repeatRule
         self.eventType = eventType
         self.priority = priority
+        self.sourceModifiedAt = sourceModifiedAt
     }
 }
 
@@ -103,6 +113,11 @@ public enum SystemImportMapper {
         )
         // 系统事件导入后默认不通知（用户可在 App 内手动开启）
         ev.isNotified = false
+        // 时间戳取**源平台**的修订时间（见 SystemImportEvent.sourceModifiedAt 的注释）：
+        // 取不到时保持构造器的「现在」——源没给时间，只能认为它就是最新。
+        if let modified = dto.sourceModifiedAt {
+            ev.updatedAt = modified
+        }
         return ev
     }
 

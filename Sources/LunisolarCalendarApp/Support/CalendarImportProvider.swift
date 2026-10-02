@@ -93,7 +93,9 @@ public struct CalendarImportProvider: SystemImportProviding, @unchecked Sendable
             notes: ek.notes?.isEmpty == false ? ek.notes : nil,
             repeatRule: rule,
             eventType: .schedule,
-            priority: .normal
+            priority: .normal,
+            // P2-3：带上系统日历的修订时间，重复导入才不会盖掉本地编辑
+            sourceModifiedAt: ek.lastModifiedDate
         )
     }
 }
