@@ -499,7 +499,8 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 > → 整个存储被误判成「版本不确定」而切成只读。已改成 Unix 秒，彻底去掉策略耦合。
 >
 > **验证**：369 用例 × 4 时区 0 失败（新增 `StorageFormatTests` 9 条）；
-> macOS + iOS SDK 构建；UI 测试 target 类型检查。
+> macOS + iOS SDK 构建；UI 测试 target 类型检查；
+> ✅ **五通道全绿**（`Tools/run_tests.sh`，2026-10-02）——覆盖「迁移在正常目录上无副作用」。
 > **证伪**：对实现造 5 种突变，**5/5 分别被对应的那条用例拦住**——
 > 去掉只读守卫 →「只读目录逐字节不变」红；标记读不懂当 v1 →「不确定必须拒绝」红；
 > 先落标记再迁移 / 缺环跳过 / 迁移抛错仍落标记 → 两条「迁移失败不得落标记」红。
