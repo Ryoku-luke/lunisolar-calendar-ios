@@ -332,7 +332,12 @@ final class LunisolarCalendarUITests: XCTestCase {
                           "仅在 iPhone 上运行（iPad 为侧栏布局，AI 入口路径不同）")
         let app = launchApp()
 
-        let title = "明日日程-\(Int(Date().timeIntervalSince1970))"
+        // ⚠️ 标题里绝不能出现日期词：解析器会把标题中**所有**已识别的日期词全局删掉
+        // （`AICommandParser` 第 3 步对 `consumedDate` 做 replacingOccurrences，
+        //  而 normalize 会把「明日」归一成「明天」）。实测「明日日程-<ts>」的落库标题是
+        // 「日程-<ts>」——断言会去找一个永远不存在的字符串。
+        // 这里用不含日期词的标题；其原样落库已由探针验证。
+        let title = "AI跨日日程-\(Int(Date().timeIntervalSince1970))"
         app.tabBars.buttons["AI 助手"].tap()
 
         let input = element(app, ID.aiInput)
