@@ -475,6 +475,101 @@ final class EventStoreTests: XCTestCase {
         XCTAssertEqual(backupsAfter.count, 1, "写新事件后隔离备份仍需保留，不能被 .atomic 覆盖")
     }
 
+    // MARK: B4 回归：**部分**损坏只能丢坏的那几条，不能清空整库
+    //
+    // 旧行为：load() 用 `JSONDecoder().decode([CalendarEvent].self, …)` 整文件一次性解码。
+    //   CalendarEvent 的 rawValue 是**中文枚举字符串**（Priority/RepeatRule/EventType），
+    //   解码用 try c.decode（缺键即抛）——于是「一条记录被写坏」（未知 rawValue、
+    //   缺字段、半截写入）会让整个数组解码失败，把**用户全部日程**一起清空。
+    //   真机上这等于灾难，而且用户只会看到"日程都没了"。
+    //
+    // 新行为分两档：
+    //   · 文件不是 JSON 数组 / 一条都解不出 → 走原有整份隔离（上面那条用例锁定）
+    //   · 有部分能解出 → 好记录照常加载，坏记录另存 .bad.<ms> 旁路文件
+
+    /// 造一个「前两条正常、第三条 priority 是未知 rawValue」的数据文件
+    private func makePartiallyCorruptFile(in dir: URL) throws -> URL {
+        let cal = Calendar(identifier: .gregorian)
+        let base = cal.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 9))!
+        let events = [
+            CalendarEvent(title: "好记录A", startDate: base),
+            CalendarEvent(title: "好记录B", startDate: base.addingTimeInterval(3600)),
+            CalendarEvent(title: "坏记录", startDate: base.addingTimeInterval(7200)),
+        ]
+        let data = try JSONEncoder().encode(events)
+        guard var arr = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            throw XCTSkip("无法把事件数组转成 JSON 对象数组")
+        }
+        // 只毒化第三条：priority 写成枚举里不存在的值。
+        // （选它是因为 rawValue 是中文字符串，最贴近真机上"数据被写坏"的形态）
+        arr[2]["priority"] = "超高"   // 合法值只有 低/中/高/紧急
+        let corrupted = try JSONSerialization.data(withJSONObject: arr)
+        let saveURL = dir.appendingPathComponent("calendar_events.json")
+        try corrupted.write(to: saveURL, options: .atomic)
+        return saveURL
+    }
+
+    func testPartiallyCorruptFileKeepsGoodRecords() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("partial-corrupt-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        _ = try makePartiallyCorruptFile(in: dir)
+
+        let store = EventStore(storageBaseDir: dir)
+
+        // 核心断言：好记录必须**全部保留**（旧实现在这里会是 0 条）
+        XCTAssertEqual(store.events.count, 2, "只应丢弃坏的那 1 条；实际：\(store.events.map(\.title))")
+        XCTAssertEqual(store.events.map(\.title).sorted(), ["好记录A", "好记录B"])
+
+        // 坏记录必须被隔离到旁路文件，而不是直接蒸发
+        let entries = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        let badFiles = entries.filter { $0.hasPrefix("calendar_events.json.bad.") }
+        XCTAssertEqual(badFiles.count, 1, "应有且仅有一个 .bad.<ms> 旁路文件；实际：\(entries)")
+        let badURL = dir.appendingPathComponent(badFiles[0])
+        let badPayload = try String(contentsOf: badURL, encoding: .utf8)
+        XCTAssertTrue(badPayload.contains("坏记录"), "旁路文件应含坏记录的原始 JSON，便于人工恢复")
+
+        // 既然已逐条救回，就不该再产生「整份损坏」备份（那是另一种分档）
+        let wholeFileBackups = entries.filter { $0.hasPrefix("calendar_events.json.corrupt.") }
+        XCTAssertTrue(wholeFileBackups.isEmpty,
+                      "部分损坏走的是逐条救回，不应再整份隔离；实际：\(wholeFileBackups)")
+
+        // 再写一条 → 新文件只含 3 条好记录（不含那条坏的），且旁路文件不被覆盖
+        store.add(CalendarEvent(title: "新加的", startDate: Date()))
+        store._testFlushSave()
+        let entriesAfter = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        XCTAssertEqual(entriesAfter.filter { $0.hasPrefix("calendar_events.json.bad.") }.count, 1,
+                       "写新事件后旁路文件仍需保留")
+    }
+
+    /// 分档边界：JSON 合法但**一条都解不出** → 仍走整份隔离（不能把坏数据当"救回 0 条"悄悄吞掉）
+    func testAllRecordsCorruptStillQuarantinesWholeFile() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("all-bad-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        // 合法的 JSON 数组，但两条的 priority 都是未知值 → 0 条能解出
+        let arr: [[String: Any]] = [
+            ["id": UUID().uuidString, "title": "坏1", "type": "schedule",
+             "startDate": 0.0, "endDate": 3600.0, "isAllDay": false,
+             "repeatRule": "不重复", "priority": "超高", "isCompleted": false,
+             "isNotified": false, "createdAt": 0.0, "updatedAt": 0.0],
+            ["id": UUID().uuidString, "title": "坏2", "type": "schedule",
+             "startDate": 0.0, "endDate": 3600.0, "isAllDay": false,
+             "repeatRule": "不重复", "priority": "超高", "isCompleted": false,
+             "isNotified": false, "createdAt": 0.0, "updatedAt": 0.0],
+        ]
+        let saveURL = dir.appendingPathComponent("calendar_events.json")
+        try JSONSerialization.data(withJSONObject: arr).write(to: saveURL, options: .atomic)
+
+        let store = EventStore(storageBaseDir: dir)
+        XCTAssertTrue(store.events.isEmpty, "一条都解不出时应清空内存（不能假装救回）")
+
+        let entries = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        XCTAssertEqual(entries.filter { $0.hasPrefix("calendar_events.json.corrupt.") }.count, 1,
+                       "一条都解不出 → 必须整份隔离备份；实际：\(entries)")
+    }
+
     /// 小性能包装：把操作和断言分离；Linux XCTest 没有 os_signpost，我们这里只打印耗时。
     private func measureAndCheck<T>(_ work: () -> T, completion: (T) -> Void) {
         let t0 = Date()

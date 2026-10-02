@@ -723,21 +723,96 @@ public final class EventStore {
             events = try JSONDecoder().decode([CalendarEvent].self, from: data)
             sort()
         } catch {
-            // BUG #41 P0 数据丢失修复：损坏文件不被下一次 saveNow() 原子写默默覆盖掉，
-            // 而是先复制到 `calendar_events.json.corrupt.<timestamp>` 隔离目录，
-            // 用户可自行从该备份/备份/云端恢复，或使用 Finder/iMazing 提取。
-            let backup = quarantineCorruptedURL(original: saveURL)
-            do {
-                try FileManager.default.copyItem(at: saveURL, to: backup)
-                AppLogger.app.error("本地数据损坏 (\(error))，用户原文件已隔离备份至：\(backup.path)")
-            } catch {
-                AppLogger.app.error("本地数据损坏 (\(error))，且隔离备份失败 (\(backup.path): \(error))，请尽快断电别写盘！")
+            // 整文件解码失败：**先尝试逐条救回**，再决定是否放弃。
+            //
+            // 为什么需要这一档：`CalendarEvent` 的 rawValue 是**中文枚举字符串**
+            // （Priority/RepeatRule/EventType），解码用的是 `try c.decode`（缺键即抛）。
+            // 因此「一条记录被写坏」——未知 rawValue、缺字段、半截写入——会让
+            // 整个数组解码失败，把**用户全部日程**一起清空。这在真机上等于灾难。
+            //
+            // 分档：
+            //   · 文件本身不是 JSON 数组 / 没有任何一条能解出 → 走原有隔离逻辑（events = []）
+            //   · 有部分能解出 → 只把**坏的那几条**另存旁路文件，好记录照常加载
+            let data = (try? Data(contentsOf: saveURL)) ?? Data()
+            let salvaged = Self.salvageRecords(fromJSONArray: data)
+            if salvaged == nil || salvaged?.good.isEmpty == true {
+                quarantineWholeFile(after: error)
+                events = []
+            } else if let salvaged {
+                events = salvaged.good
+                sort()
+                quarantineBadRecords(salvaged.bad)
+                AppLogger.app.error("本地数据部分损坏：已救回 \(salvaged.good.count) 条，隔离 \(salvaged.bad.count) 条坏记录（其余字段不变）")
             }
-            events = []
         }
         rebuildIDIndex()
         clearLastInsertHint()
         invalidateCache()
+    }
+
+    /// 逐条容错解码的结果
+    struct SalvageResult {
+        var good: [CalendarEvent] = []
+        var bad: [Data] = []      // 坏记录的原始 JSON 片段（保留以便用户/我们恢复）
+    }
+
+    /// 把 `[{...},{...}]` 逐条解码：好的收下，坏的留下原始片段。
+    /// - Returns: nil 表示顶层不是 JSON 数组（文件级损坏，应整份隔离）；
+    ///            否则返回结果（`good` 可能为空）。
+    ///
+    /// 刻意**不用** `[CalendarEvent]` 的整体解码：那样一条坏记录就会让整个数组失败，
+    /// 正是要修的那个问题。
+    static func salvageRecords(fromJSONArray data: Data) -> SalvageResult? {
+        guard let raw = try? JSONSerialization.jsonObject(with: data) as? [Any] else { return nil }
+        var result = SalvageResult()
+        let decoder = JSONDecoder()
+        for element in raw {
+            guard let elementData = try? JSONSerialization.data(withJSONObject: element),
+                  let event = try? decoder.decode(CalendarEvent.self, from: elementData) else {
+                // 解不出的那条：尽力留下原始片段（可能只是 JSONSerialization 不接受，
+                // 那就退化成空 Data 占位，至少计数正确、不会静默少报）
+                if let elementData = try? JSONSerialization.data(withJSONObject: element) {
+                    result.bad.append(elementData)
+                } else {
+                    result.bad.append(Data())
+                }
+                continue
+            }
+            result.good.append(event)
+        }
+        return result
+    }
+
+    /// 整文件隔离（原有逻辑）：复制到 `corrupt.<ms>`，再清空内存。
+    /// 保持既有契约不变——`EventStoreTests.testCorruptFileIsQuarantinedNotOverwritten` 依赖它。
+    private func quarantineWholeFile(after error: Error) {
+        // BUG #41 P0 数据丢失修复：损坏文件不被下一次 saveNow() 原子写默默覆盖掉，
+        // 而是先复制到 `calendar_events.json.corrupt.<timestamp>` 隔离目录，
+        // 用户可自行从该备份/备份/云端恢复，或使用 Finder/iMazing 提取。
+        let backup = quarantineCorruptedURL(original: saveURL)
+        do {
+            try FileManager.default.copyItem(at: saveURL, to: backup)
+            AppLogger.app.error("本地数据损坏 (\(error))，用户原文件已隔离备份至：\(backup.path)")
+        } catch {
+            AppLogger.app.error("本地数据损坏 (\(error))，且隔离备份失败 (\(backup.path): \(error))，请尽快断电别写盘！")
+        }
+    }
+
+    /// 把「部分损坏」里坏的那几条追加到旁路文件 `calendar_events.json.bad.<ms>`。
+    /// 用 JSON Lines（一行一条）便于人工查看与逐条恢复。
+    private func quarantineBadRecords(_ bad: [Data]) {
+        guard !bad.isEmpty else { return }
+        let ms = Int64(Date().timeIntervalSince1970 * 1000)
+        let dir = saveURL.deletingLastPathComponent()
+        let url = dir.appendingPathComponent("calendar_events.json.bad.\(ms)")
+        let lines = bad.compactMap { $0.isEmpty ? nil : String(data: $0, encoding: .utf8) }
+        guard let payload = lines.joined(separator: "\n").data(using: .utf8) else { return }
+        do {
+            try payload.write(to: url, options: .atomic)
+            AppLogger.app.error("已隔离 \(bad.count) 条无法解码的记录至：\(url.path)")
+        } catch {
+            AppLogger.app.error("隔离坏记录失败（\(url.path): \(error)）")
+        }
     }
 
     /// 把损坏/异常文件重命名为 `corrupt.<epochMs>` 同目录副本，避免与下次正常原子写互踩
