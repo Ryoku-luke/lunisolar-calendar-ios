@@ -379,9 +379,12 @@ struct CalendarMonthView: View {
                 auxiliaryPage = .dateJump
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
-                    // verbatim：避免 LocalizedStringKey 对 Int 插值按系统 locale 加千位分隔
-                    // （英文 locale 下 2026 会渲染成 "2,026"）；numericText 让月/年数字滚动过渡更自然
-                    Text(verbatim: "\(currentMonth.month)月")
+                    // 月份名走 MonthLabel（locale 感知、日历固定公历）。
+                    // 原先写死 `"\(month)月"`，英文界面显示「9月」（P3-3）；
+                    // 而 `Text(date, format:)` 会跟随 locale 的日历，佛历/和历下月名会错。
+                    // 年份仍是 verbatim 纯数字：避免 LocalizedStringKey 对 Int 插值加千位分隔
+                    // （英文 locale 下 2026 会渲染成 "2,026"）。
+                    Text(verbatim: MonthLabel.name(for: currentMonth))
                         .font(AppTheme.Font.hero).foregroundStyle(Color.label)
                         .contentTransition(.numericText())
                     Text(verbatim: "\(currentMonth.year)")

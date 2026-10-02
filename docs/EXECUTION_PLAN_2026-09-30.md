@@ -631,10 +631,44 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 |---|---|---|---|
 | ~~**P3-1 节日对比度**~~ ✅ 2026-10-02 | `Views/CalendarMonthView.swift:507-508` 把未校验的 `festivalTint` 当填充色，`Views/CalendarComponents.swift:250` 强制白字 → 儿童节 1.40:1、中秋 1.97:1。改为按亮度选前景色（黑/白）或改用描边强调 | 新增测试覆盖**这条真实路径**（现有 `AccentContrastTests` 只测助手函数），而非仅助手 | 首屏问题，优先 |
 | ~~**P3-2 横屏根视图**~~ ✅ 2026-10-02 | `App/LunisolarCalendarApp.swift:93` 用 `horizontalSizeClass == .regular` 切根视图 → Plus/Max iPhone 横屏变 iPad 三栏、TabBar 消失。改为按 `userInterfaceIdiom` 或同时判宽度 | iPhone 横屏保留 TabBar；iPad 仍三栏 | 项目自己的 `DEVICE_TEST_CHECKLIST.md:267` 标注未验证 |
-| **P3-3 修 3 处漏译** | `Views/WeatherCardView.swift:101`、`Views/SelectedDayCardView.swift:46`、`Views/CalendarMonthView.swift:381`（`Text(verbatim:)` 让英文界面显示「9月」） | 4 语言表 key 齐备；英文界面实测无中文 | 小改动 |
+| ~~**P3-3 修 3 处漏译**~~ ✅ 2026-10-02 | `Views/WeatherCardView.swift:101`、`Views/SelectedDayCardView.swift:46`、`Views/CalendarMonthView.swift:381`（`Text(verbatim:)` 让英文界面显示「9月」） | 4 语言表 key 齐备；英文界面实测无中文 | 小改动 |
 | **P3-4 Dynamic Type 截断** | 大号数字（`numeralXL` 56pt）被限制在 `.frame(width: 92)` / `.frame(width: 110)`（`Views/SelectedDayCardView.swift:23-31`、`Views/DayDetailView.swift:85-92`）→ 辅助字号下截断 | 最大辅助字号下不截断、不重叠 | 无障碍硬缺口 |
 | **P3-5 性能** | ①`Views/AllEventsView.swift` 每次 body 约 10 轮 O(N) 全量扫描（`:337-341` 起），搜索逐键触发 → 改为算一次缓存；②`Views/YearOverviewView.swift:193-238` 主线程同步算 365 天 + 每日新建 `DateFormatter` + 约 440 个 `AnyView` → 移到后台/复用 formatter | 大库（数百事件）下横滑与搜索无卡顿 | 建议先加性能基线再改 |
 | **P3-6 无障碍覆盖** | 29 个视图文件中 23 个零 `accessibilityLabel/Hint`；年视图约 440 个可点格无标签/ID 且点击目标 16–20pt（低于 44pt HIG） | VoiceOver 能走通月历/年视图/日期跳转 | 可与 P4-1 合并 |
+
+### P3-3 漏译 ✅ 已完成（2026-10-02）
+
+**实际漏了什么**（不是计划里写的 3 处，而是**两处 + 一层缺失的验证**）：
+
+1. `CalendarMonthView` 的月份标题写死 `Text(verbatim: "\(month)月")` → 英文界面显示「9月」。
+   改法：新增 `MonthLabel.name(for:locale:)`——**locale 感知但日历固定公历**。
+   为什么不用 `Text(date, format: .dateTime.month(.wide))`：那个跟随 `Locale.current` 的**日历**，
+   系统区域设为伊斯兰历时月名会变成该历法的月（而下面的网格是公历），
+   这类坑在 `DataPortability` 的日期格式化注释里已经踩过一次。
+   模板取 `MMM` 而非 `MMMM`：中文/日文的 `MMM` 就是「9月」（与 App 其它日期串一致），
+   `MMMM` 会变成「九月」——那是本次修复之外的中文界面变更。英文得 "Sep"。
+2. `WeatherCardView` 的 `Text("最高\(max)° 最低\(min)°")` 走 LocalizedStringKey 查表，
+   但**4 张表里都没有这条 key** → 英文界面直接显示中文。改成显式 `NSLocalizedString`。
+3. 另外扫出 3 条 `NSLocalizedString` 查了表里没有的 key（iPad 详情占位副标题：
+   「在此与 AI 对话…」「所有事件按时间线汇集于此」「外观、同步、数据与关于信息」）→ 已补四语言。
+
+**一层缺失的验证（这才是根因）**：4 张 `.strings`（472 key）**此前没有任何测试**——
+key 是否齐备、源码查的 key 是否存在，全靠人眼。新增 `LocalizationTests`（9 条）覆盖：
+- **A 表本身**：四张表 key 集合一致、无重复 key（`.strings` 会静默取最后一条）、无空翻译；
+  解析器必须吃下每一行（解析不了就红，防止解析器与实际文件悄悄错位）；
+- **B 显式查表**：源码里 `NSLocalizedString` / `L10n.str` 的 key 在四张表都存在（330 个）；
+- **C `Text("字面量")`**：key 也要存在（2 条刻意不翻译的走白名单：版权行、占位破折号）；
+- **D 含中文的插值 `Text`**：**必须显式进白名单**——插值后的 key 形如 `%@/%d`，
+  源码级推不准，所以用"必须声明"代替"自动判定"。这正是天气那条漏译的类别；
+- 月份名本地化 + **公历固定**（伊斯兰历 locale 下不得输出该历法月名）的守卫；
+  以及月历标题**接线**的源码守卫（视图里的那一行单测够不着，理由同 P3-2）。
+
+**验证**：407 用例 × 4 时区 0 失败；macOS + iOS SDK 构建；UI 测试 target 类型检查。
+**证伪 7/7**：①en 表删一条 key ②四张表都删天气 key ③表内重复 key ④空翻译
+⑤月历标题退回写死「(月)月」⑥`MonthLabel` 去掉公历固定 ⑦新增一处含中文的插值 `Text`
+—— 分别被 A/B/C/D 与两条守卫拦住。
+
+**仍未做**：纯插值（不含中文）的字面量与 `.stringsdict` 复数规则不在检查范围内（已在测试注释里写明）。
 
 ### P3-2 横屏根视图 ✅ 已完成（2026-10-02）
 
@@ -779,7 +813,7 @@ macOS + iOS SDK 构建；UI 测试 target 类型检查。
 |---|---|
 | `Views/AIAssistantView.swift` | `create()` 判断落点是否今天：非今天时提示改为「**已加入 <日期> 的日程**」，并给「**去看看**」按钮（复用 `NavigationCoordinator.openEventDate`）。`showSuccess` 统一清 `completedOffDay`，避免删除/修改的提示上挂到无关按钮 |
 | `Support/AccessibilityID.swift` | 新增 `aiGoToCreatedDay = "ai.created.goto"` 并登记进 `all`（有命名规范测试把关） |
-| 4 套 `Localizable.strings` | 新增 `已加入 %@ 的日程`、`去看看`（四语言 key 数一致：472） |
+| 4 套 `Localizable.strings` | 新增 `已加入 %@ 的日程`、`去看看`（四语言 key 数一致：472；**当时点**的数字，P3-3 后为 476） |
 | `LunisolarCalendarUITests` | 新增 **Flow 3d**：用「明天…」创建 → 断言提示含日期 + 有「去看看」→ 点它跳过去并看到该事件 |
 
 **为什么不只是改文案**：笼统的「日程已加入日历。」在落点是别的日子时是**误导性成功**——用户据此以为操作生效了。所以必须同时给日期**和**去路。

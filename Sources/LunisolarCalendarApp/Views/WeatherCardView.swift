@@ -98,7 +98,11 @@ struct WeatherCardView: View {
                         .monospacedDigit()
                 }
                 // 高低温
-                Text("最高\(Int(day.maxTemp.rounded()))° 最低\(Int(day.minTemp.rounded()))°")
+                // P3-3：原先 `Text("最高\(max)° 最低\(min)°")` 走 LocalizedStringKey 查表，
+                // 但 4 张表里都没有这条 key → 英文界面直接显示中文。
+                // 改成显式 NSLocalizedString：翻译有据可查，源码级 key 检查也能覆盖到它。
+                Text(String(format: NSLocalizedString("最高%d° 最低%d°", comment: "天气卡：当日最高/最低温"),
+                            Int(day.maxTemp.rounded()), Int(day.minTemp.rounded())))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)

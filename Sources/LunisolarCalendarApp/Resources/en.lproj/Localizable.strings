@@ -489,3 +489,9 @@
 /* iPad Inspector · 倒数日详情空态 */
 "未选择倒数日" = "No Countdown Selected";
 "在左侧列表中选择一个倒数日，这里会显示它的详情" = "Select a countdown in the list on the left to see its details here.";
+
+/* P3-3 补漏译：天气高低温 + iPad 详情占位副标题 */
+"最高%d° 最低%d°" = "High %d° Low %d°";
+"在此与 AI 对话，安排日程与倒数日" = "Chat with AI to schedule events and countdowns";
+"所有事件按时间线汇集于此" = "All events, gathered on a timeline";
+"外观、同步、数据与关于信息" = "Appearance, sync, data and about";
