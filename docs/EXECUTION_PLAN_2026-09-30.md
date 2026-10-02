@@ -723,6 +723,27 @@ macOS + iOS SDK 构建；UI 测试 target 类型检查。
 
 ✅ **五通道全绿**（`Tools/run_tests.sh`，2026-10-02）。
 
+> 🚨 **2026-10-02 用户复核发现：这一版带着 4 条并发警告（已修）**
+>
+> `LayoutIdiom.current` 读 `UIDevice.current`，而 iOS 26 SDK 里 `UIDevice` 是
+> **主线程隔离**的 → 严格并发下 2 条警告 ×2 个读取点 = Xcode 里 4 条 ⚠️：
+> 「Main actor-isolated property 'userInterfaceIdiom' can not be referenced from a nonisolated context」。
+> 修法：`current` 与 `usesSplitLayout(horizontalSizeClass:)` 标 `@MainActor`
+> （消费方全是视图 body 与单测，没有代价）；纯函数那支保持 nonisolated。
+>
+> **为什么四通道全绿却没发现——这是本次真正的教训**：
+> 1. **警告不改变退出码**，而四通道只判「Build complete / 测试 0 失败」；
+> 2. 我自己复核时还额外踩了一脚：只看 `tail -1` 的 "Build complete"，把警告整个吞了；
+> 3. 这条分支在 **macOS 构建里根本不参与编译**（`#include UIKit` 那段在 `#else` 外面），
+>    所以只有 iOS SDK 构建会报——而我恰恰在那条通道上只看了一行。
+>
+> **已做的根治**：`Tools/run_tests.sh` 现在支持 `CHANNEL_FORBID='warning: '`，
+> 在该通道**判定通过的同时**若日志里还有编译器警告就判失败（SwiftPM 缓存噪音在白名单里）。
+> 已对「swift test（macOS）」「iOS SDK 构建」「UI 测试 target 类型检查」三条通道启用。
+> 用假通道验证过：带警告 → ❌、只有缓存噪音 → ✅、未启用 → 不受影响。
+> （过程中还修掉一个 bash 陷阱：`"$name（…）"` 里变量后紧跟中文会被当成变量名的一部分，
+> 必须写 `"${name}（…）"`。）
+
 **未做（可选后续）**：真正的行为验收需要**Max 尺寸的 iPhone 横屏**才能暴露
 （Pro 尺寸横屏仍是 compact，不会踩到这个 bug）。可以加一条「转横屏后断言 TabBar 仍在」
 的 UI 用例，但它只在 Max 机型上才有鉴别力；而把 Max 加成第六条通道会让每次闸门再慢十几分钟。

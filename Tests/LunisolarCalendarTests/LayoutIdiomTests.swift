@@ -110,7 +110,9 @@ final class LayoutIdiomTests: XCTestCase {
         }
     }
 
-    /// 当前设备形态在本机（模拟器/宿主）应是可判定的具体值，而不是 .other
+    /// 当前设备形态在本机（模拟器/宿主）应是可判定的具体值，而不是 .other。
+    /// `@MainActor`：`LayoutIdiom.current` 读的是主线程隔离的 `UIDevice`。
+    @MainActor
     func testCurrentDeviceIsResolved() {
         XCTAssertNotEqual(LayoutIdiom.current, .other,
                           "拿不到设备形态说明 UIDevice 分支没生效——那会让所有设备都走单栏")

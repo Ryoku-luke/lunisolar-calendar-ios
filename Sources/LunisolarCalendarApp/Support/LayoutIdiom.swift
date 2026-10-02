@@ -36,7 +36,14 @@ public enum LayoutIdiom {
         device == .pad && horizontalSizeClass == .regular
     }
 
-    /// 当前设备形态
+    /// 当前设备形态。
+    ///
+    /// ⚠️ 必须标 `@MainActor`：iOS 26 SDK 里 `UIDevice.current` 本身是主线程隔离的
+    /// （`UIDevice` 是主线程单例，`userInterfaceIdiom` 随之隔离）。不标就会在
+    /// Swift 6 严格并发下报「Main actor-isolated property 'userInterfaceIdiom'
+    /// can not be referenced from a nonisolated context」——**Xcode 里 4 条警告**。
+    /// 消费方全是 SwiftUI 视图（`body` 本身在主线程）与单测，标主线程隔离没有代价。
+    @MainActor
     public static var current: Device {
         #if canImport(UIKit)
         switch UIDevice.current.userInterfaceIdiom {
@@ -50,7 +57,9 @@ public enum LayoutIdiom {
         #endif
     }
 
-    /// 当前环境是否走 iPad 分栏（视图侧的唯一入口）
+    /// 当前环境是否走 iPad 分栏（视图侧的唯一入口）。
+    /// 读 `current`（MainActor 隔离）→ 本方法也必须 `@MainActor`；调用方均为视图 body。
+    @MainActor
     public static func usesSplitLayout(horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
         usesSplitLayout(device: current, horizontalSizeClass: horizontalSizeClass)
     }

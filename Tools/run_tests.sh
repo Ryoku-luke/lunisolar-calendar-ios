@@ -21,6 +21,8 @@
 # - 每条通道的完整输出写进 /tmp/run_tests.<通道>.log，失败时打印该文件路径；
 #   终端只显示判定行，不刷屏。
 # - 任一通道失败 → 退出码非零（可直接接 CI 或 git hook）。
+# - **编译警告也算失败**（`CHANNEL_FORBID='warning: '`）：警告不改退出码，
+#   历史上正是这样漏掉过一次（见 CHANNEL_FORBID 处的说明）。
 # - 机型不存在时该通道判失败，并列出可用机型。
 # - **两条 UI 通道先 `simctl shutdown all` 再跑**，且只在「模拟器基础设施抖动」
 #   （Busy / failed preflight checks / runner 起不来）时清理并重试一次；
@@ -47,6 +49,18 @@ FAILED_NAMES=()
 # ⚠️ 只在这个白名单上重试：真实断言失败绝不重试，否则等于把红糊成绿。
 FLAKY_INFRA_PATTERN='Failed to install or launch the test runner|failed preflight checks|SBMainWorkspace.*Busy|Unable to boot device|Timed out while loading'
 
+# 编译器警告白名单：受限环境（CI 容器 / Agent 沙箱）下 SwiftPM 的缓存噪音，不是代码问题。
+CHANNEL_FORBID_ALLOW='org\.swift\.swiftpm|not writable|readonly database'
+
+# 为什么「编译警告也算红」（2026-10-02 的教训）：
+# 我在 P3-2 里加了 `LayoutIdiom.current`，它读 `UIDevice.current`（iOS 26 SDK 里主线程隔离），
+# 漏了 `@MainActor` → 严格并发下 2 条警告。四通道**全绿**（警告不影响退出码），
+# 而我自己复核时只看 `tail -1` 的 "Build complete"，把警告整个吞了，
+# 最后是用户在 Xcode 里看到 4 条 ⚠️ 才发现。
+# 用法：`CHANNEL_FORBID='warning: ' channel …` —— 通过判定的同时若日志里还有
+# 匹配 CHANNEL_FORBID 的行（白名单除外）就判失败。
+CHANNEL_FORBID="${CHANNEL_FORBID:-}"
+
 # channel <显示名> <判定用的正则> <命令...>
 channel() {
   local name="$1" pattern="$2"
@@ -63,6 +77,19 @@ channel() {
     status=$?
 
     if [[ $status -eq 0 ]] && grep -qE "$pattern" "$log"; then
+      if [[ -n "$CHANNEL_FORBID" ]]; then
+        local hits
+        hits="$(grep -E "$CHANNEL_FORBID" "$log" | grep -vE "$CHANNEL_FORBID_ALLOW" || true)"
+        if [[ -n "$hits" ]]; then
+          echo "❌ ${name}（判定通过，但带编译警告）"
+          echo "   编译器警告会静默积累成技术债，这里当失败处理。命中行："
+          echo "$hits" | head -10 | sed 's/^/   | /'
+          echo "   完整日志：$log"
+          FAILED_NAMES+=("${name}（编译警告）")
+          FAIL=$((FAIL + 1))
+          return 1
+        fi
+      fi
       echo "✅ $name"
       grep -E "$pattern" "$log" | tail -2
       PASS=$((PASS + 1))
@@ -100,11 +127,11 @@ ui_channel() {
 echo "项目五通道验证 —— iPhone: $IPHONE_SIM / iPad: $IPAD_SIM / iOS $OS_VER"
 [[ "${SKIP_UI:-0}" == "1" ]] && echo "（SKIP_UI=1：跳过两条 UI 测试通道）"
 
-channel "swift test（macOS 宿主）" \
+CHANNEL_FORBID='warning: ' channel "swift test（macOS 宿主）" \
   "Executed [0-9]+ tests, with 0 failures" \
   swift test
 
-channel "iOS SDK 构建" \
+CHANNEL_FORBID='warning: ' channel "iOS SDK 构建" \
   "Build complete" \
   swift build --triple arm64-apple-ios17.0-simulator \
     --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
@@ -112,7 +139,7 @@ channel "iOS SDK 构建" \
 # 放在两条 UI 测试通道之前：UI 测试 target 不在 SwiftPM 包里，`swift test` 看不见它，
 # 副本漏同步这类问题只有这里能在几秒内拦住（2026-10-02 实测：本地 360 用例全绿，
 # 而 UI 测试 target 编译失败）。SKIP_UI=1 时也跑——它只是编译检查，不碰模拟器。
-channel "UI 测试 target 类型检查" \
+CHANNEL_FORBID='warning: ' channel "UI 测试 target 类型检查" \
   "UITESTS_TYPECHECK_OK" \
   Tools/typecheck_uitests.sh
 
