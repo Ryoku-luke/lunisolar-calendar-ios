@@ -565,6 +565,7 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 > **证伪**：两条「先写测试再改」的用例在**改之前就是红的**（本地编辑被盖回原标题、
 > `updated=1`），修完全绿；另对实现造 3 种突变（mapper 不取源时间 / ICS 不取时间戳 /
 > 导出不写 LAST-MODIFIED），**3/3 分别被对应用例拦住**。
+> ✅ **五通道全绿**（`Tools/run_tests.sh`，2026-10-02）。
 
 ### P2-4 建立数据到期机制
 
