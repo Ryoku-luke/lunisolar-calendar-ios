@@ -216,6 +216,19 @@
 > target 从「从未编译过」到「一条用例全绿」，用了三次真跑。
 > **仍未跑**：该 target 里其余 13 条用例（见 §七 的下一步）。
 
+> **第四次真跑（全量 5 通道）**：4 绿 1 红——**iPhone UI 通道 11/11 通过**（0 失败，
+> 3 条按设计跳过），红的只有一条 Flow 3c：它写死「今天下午3点」，而
+> `AICommandValidator` 会（正确地）拒绝落在过去的一次性日程，18:54 跑必红。
+> 已修（`laterTodayText()`：现在 + 1 小时，距零点 <5 分钟则 `XCTSkip`）。
+> iPad 通道 5/5 通过（Flow 1/2/4/6/9），其余按设计跳过。
+>
+> **第五次真跑**：iPhone 11/11 ✅（Flow 3c 修复确认），**iPad 通道红在基础设施**——
+> `Failed to install or launch the test runner … SBMainWorkspace … Busy
+> ("Application failed preflight checks")`，一条用例都没跑；同一通道上一轮 5/5。
+> 已给 `Tools/run_tests.sh` 加对症处理：两条 UI 通道开跑前 `simctl shutdown all`，
+> 且只在 `FLAKY_INFRA_PATTERN` 白名单上重试一次（真实断言失败**绝不**重试）。
+> 重试逻辑用假通道验证过：抖动通道重试后计通过、真实失败通道立即计失败。
+
 ### P0-3 让 CI 真正转绿 ✅ 已完成（2026-09-30）
 
 > **结果**：`main` 分支 `50ab407` 的 CI **全绿**（用户截图证实）：

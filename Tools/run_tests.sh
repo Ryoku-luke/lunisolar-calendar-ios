@@ -22,6 +22,9 @@
 #   终端只显示判定行，不刷屏。
 # - 任一通道失败 → 退出码非零（可直接接 CI 或 git hook）。
 # - 机型不存在时该通道判失败，并列出可用机型。
+# - **两条 UI 通道先 `simctl shutdown all` 再跑**，且只在「模拟器基础设施抖动」
+#   （Busy / failed preflight checks / runner 起不来）时清理并重试一次；
+#   真实断言失败绝不重试（见 FLAKY_INFRA_PATTERN 处的注释）。
 
 set -uo pipefail   # 刻意不用 -e：要跑完全部通道再汇总
 cd "$(dirname "$0")/.." || exit 1
@@ -34,29 +37,64 @@ PASS=0
 FAIL=0
 FAILED_NAMES=()
 
+# 模拟器偶发的**基础设施**抖动（与代码无关）——命中时清理并重试一次。
+#
+# 实测（2026-10-02 19:05）：iPad 通道在 iPhone 通道刚跑完后
+# `Failed to install or launch the test runner ... SBMainWorkspace ... Busy
+# ("Application failed preflight checks")`，一条用例都没跑就判定失败；
+# 而同一通道上一轮 5 条全绿。这类失败重试即可通过。
+#
+# ⚠️ 只在这个白名单上重试：真实断言失败绝不重试，否则等于把红糊成绿。
+FLAKY_INFRA_PATTERN='Failed to install or launch the test runner|failed preflight checks|SBMainWorkspace.*Busy|Unable to boot device|Timed out while loading'
+
 # channel <显示名> <判定用的正则> <命令...>
 channel() {
   local name="$1" pattern="$2"
   shift 2
   local log="/tmp/run_tests.${name// /_}.log"
+  local attempt=1 status=0 attemptLabel=""
 
-  echo
-  echo "──── $name ────"
-  "$@" >"$log" 2>&1
-  local status=$?
+  while :; do
+    attemptLabel=""
+    [[ $attempt -gt 1 ]] && attemptLabel="（第 $attempt 次尝试）"
+    echo
+    echo "──── $name$attemptLabel ────"
+    "$@" >"$log" 2>&1
+    status=$?
 
-  if [[ $status -eq 0 ]] && grep -qE "$pattern" "$log"; then
-    echo "✅ $name"
-    grep -E "$pattern" "$log" | tail -2
-    PASS=$((PASS + 1))
-  else
+    if [[ $status -eq 0 ]] && grep -qE "$pattern" "$log"; then
+      echo "✅ $name"
+      grep -E "$pattern" "$log" | tail -2
+      PASS=$((PASS + 1))
+      return 0
+    fi
+
+    # 只在「基础设施抖动」上重试一次；其余失败立即判定，不掩盖真实失败
+    if [[ $attempt -lt 2 ]] && grep -qE "$FLAKY_INFRA_PATTERN" "$log"; then
+      echo "⚠️  $name 命中模拟器基础设施抖动，清理后重试一次："
+      grep -oE "$FLAKY_INFRA_PATTERN" "$log" | head -1 | sed 's/^/   | /'
+      xcrun simctl shutdown all >/dev/null 2>&1 || true
+      sleep 5
+      attempt=$((attempt + 1))
+      continue
+    fi
+
     echo "❌ ${name}（退出码 ${status}）"
     echo "   完整日志：$log"
     echo "   末尾 20 行："
     tail -20 "$log" | sed 's/^/   | /'
     FAILED_NAMES+=("$name")
     FAIL=$((FAIL + 1))
-  fi
+    return 1
+  done
+}
+
+# UI 通道专用：开跑前先关掉所有模拟器。
+# 为什么：上一个 UI 通道用过的设备常常还开着，CoreSimulator 再起第二台设备时
+# 容易报 Busy / failed preflight checks（见上面的白名单）。
+ui_channel() {
+  xcrun simctl shutdown all >/dev/null 2>&1 || true
+  channel "$@"
 }
 
 echo "项目五通道验证 —— iPhone: $IPHONE_SIM / iPad: $IPAD_SIM / iOS $OS_VER"
@@ -79,13 +117,13 @@ channel "UI 测试 target 类型检查" \
   Tools/typecheck_uitests.sh
 
 if [[ "${SKIP_UI:-0}" != "1" ]]; then
-  channel "iPhone UI 测试（${IPHONE_SIM}）" \
+  ui_channel "iPhone UI 测试（${IPHONE_SIM}）" \
     '\*\* TEST SUCCEEDED \*\*' \
     xcodebuild test -project LunisolarCalendar.xcodeproj -scheme LunisolarCalendar \
       -destination "platform=iOS Simulator,name=$IPHONE_SIM,OS=$OS_VER" \
       -only-testing:LunisolarCalendarUITests
 
-  channel "iPad UI 测试（${IPAD_SIM}）" \
+  ui_channel "iPad UI 测试（${IPAD_SIM}）" \
     '\*\* TEST SUCCEEDED \*\*' \
     xcodebuild test -project LunisolarCalendar.xcodeproj -scheme LunisolarCalendar \
       -destination "platform=iOS Simulator,name=$IPAD_SIM,OS=$OS_VER" \
