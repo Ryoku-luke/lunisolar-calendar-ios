@@ -593,10 +593,11 @@ struct AIAssistantView: View {
             let isOtherDay = !cal.isDate(startDate, inSameDayAs: Date())
             if isOtherDay {
                 let dayText = Self.dayFormatter.string(from: startDate)
-                completedOffDay = startDate
-                showSuccess(String(format: NSLocalizedString("已加入 %@ 的日程", comment: "AI助手：日程建在其它日子"), dayText))
+                // 「去看看」的日期必须走 showSuccess 的参数：不能再单独赋值 completedOffDay，
+                // 那会被 showSuccess 清掉（按钮永远不出现——见 showSuccess 的注释）。
+                showSuccess(String(format: NSLocalizedString("已加入 %@ 的日程", comment: "AI助手：日程建在其它日子"), dayText),
+                            offDay: startDate)
             } else {
-                completedOffDay = nil
                 showSuccess(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
             }
             input = ""
@@ -617,23 +618,36 @@ struct AIAssistantView: View {
         return f
     }()
 
-    /// 行内成功提示：2 秒后自动消失（不打断连续输入，也省掉模态的两次点击）
+    /// 行内成功提示：自动消失（不打断连续输入，也省掉模态的两次点击）
     ///
-    /// ⚠️ 这里必须清 `completedOffDay`：删除 / 修改走的也是 `showSuccess`，
-    /// 若不清，上一次创建留下的「去看看」按钮会挂到本次的删除提示上（指向无关日期）。
-    /// 需要「去看看」的只有 `create`，它在调用本方法**之后**才设置该字段。
-    private func showSuccess(_ text: String) {
+    /// `offDay` 是「去看看」跳转按钮的**唯一入口**：非 nil 才渲染该按钮。
+    /// ⚠️ 所以 `completedOffDay` 必须只由本方法读写。此前 `create()` 先
+    /// `completedOffDay = startDate`、再调用本方法，而本方法开头会把它清空——
+    /// 结果「去看看」按钮**从未出现过**：文案对（「已加入 10月3日 的日程」），
+    /// 去路是死的。这正是 2026-10-02 UI 测试 Flow 3d 抓到的真因（当时提示文案是对的，
+    /// 断言 1 通过、断言 2 失败，屏幕录制里能看到提示卡片没有按钮）。
+    /// 删除 / 修改走的也是本方法，`offDay` 省略即 nil，顺手清掉上一次创建留下的按钮。
+    private func showSuccess(_ text: String, offDay: Date? = nil) {
         inlineError = nil
-        completedOffDay = nil
+        completedOffDay = offDay
         completedMessage = text
+        // 带行动按钮的提示停留更久：2 秒够读一句纯文案，但不够「读日期 → 决定 → 点按钮」。
+        // 「去看看」正是那次真机反馈的补救路径，抢不到就等于没做；UI 测试也不该跟秒表赛跑。
+        // 这是 UX 取值，要调只动这两个常量。
+        let dwell: Duration = offDay == nil ? Self.plainSuccessDwell : Self.actionableSuccessDwell
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: dwell)
             if completedMessage == text {
                 completedMessage = nil
                 completedOffDay = nil
             }
         }
     }
+
+    /// 纯文案提示停留时长（原行为）
+    private static let plainSuccessDwell: Duration = .seconds(2)
+    /// 带「去看看」按钮的提示停留时长：必须够用户读完并点中
+    private static let actionableSuccessDwell: Duration = .seconds(6)
 
     /// 结构化错误统一展示（文案来自 AICommandError.message），行内呈现而非模态
     private func present(_ error: AICommandError) {
