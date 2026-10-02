@@ -507,8 +507,15 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertTrue(clear.waitForExistence(timeout: 3),
                       "空态应带「清除筛选」行动按钮（四要素的第四项）")
         clear.tap()
-        XCTAssertFalse(empty.waitForExistence(timeout: 3),
-                       "点「清除筛选」后空态应消失（搜索条件真的被清掉）")
+        // 「搜索条件真的被清掉」的可观测证据是**行动按钮消失**，不能断言空态消失：
+        // 本用例跑在 `-uitest-empty-store` 的空库上，清掉条件后列表依然为空、
+        // 空态依然在（`AllEventsView` 用的还是同一个 `state.empty` 元素，
+        // 只是 `actionTitle` 从「清除筛选」变成 nil）——
+        // 原来这里写 `XCTAssertFalse(empty.waitForExistence(...))`，必定红。
+        XCTAssertFalse(label(app, "清除筛选").waitForExistence(timeout: 3),
+                       "点「清除筛选」后行动按钮应消失（说明筛选条件真的被清掉）")
+        // 注意：空库下「搜索真的筛掉了内容」这一半天然是空的（列表本来就空）。
+        // 要让它非空洞，得先造一条数据再搜——留给 P3 的搜索用例，见执行计划 §七。
     }
 
     // MARK: - Flow 4：iPad 三栏与侧栏导航（iPhone 上跳过）

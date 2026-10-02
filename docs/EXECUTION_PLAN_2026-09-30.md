@@ -545,6 +545,7 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 | 喜神/财神 vs 日干规则、农历表穷举 oracle（现有只覆盖 5 个年份）、节气 vs 星历 | P1-2 / P4-2 |
 | UI 测试盲区：编辑/删除、全天、重复规则、提醒、倒数日增删、导入、深色模式、Dynamic Type、en/ja、VoiceOver | P3 各项 |
 | **UI 测试 target 本身能否编译**：它不在 SwiftPM 包里，`swift test` 看不见，改 `AccessibilityID` 漏同步副本时会静默到 `xcodebuild` 才炸 | ✅ 已补（2026-10-02）：`UITestIDMirrorTests` + 单文件 `swiftc -typecheck` 通道，见 P0-2 |
+| Flow 6「搜索真的把内容筛掉了」这一半在 `-uitest-empty-store` 下是**空洞**的（列表本来就空，搜不搜都空） | P3 搜索用例：先造一条数据再搜 |
 | `xcodebuild test` 补一个单元测试 target（可选） | P4 |
 
 ---
