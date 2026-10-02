@@ -38,7 +38,7 @@ internal struct HuangliDBRoot: Decodable {
 // MARK: - Provider（Bundle 资源加载 + O(1) 查询 + fallback）
 
 /// 黄历离散数据库提供者：
-/// 1) 内置 2024-01-01 ~ 2028-12-31 的 huangli_db.json (385KB)，保证最近 5 年"准"
+/// 1) 内置 2024-01-01 ~ 2028-12-31 的 huangli_db.json (436KB)，保证最近 5 年"准"
 /// 2) 若资源加载失败或日期不在区间，调用 HuangliGenerator.algorithmGenerate() 走算法 fallback
 /// 3) 只读单例 + 延迟加载，首次访问才 JSON 解码 (~3ms)
 public enum HuangliDBProvider {
@@ -129,6 +129,18 @@ public enum HuangliDBProvider {
         // fallback: 算法生成
         let day = HuangliGenerator.algorithmGenerate(for: normDate, lunar: lunar)
         return Resolved(huangliDay: day, source: .algorithm)
+    }
+
+    /// 结构化覆盖范围（"yyyy-MM-dd"，含端点）。供**数据到期检查**使用。
+    ///
+    /// 与 `coverageDescription` 分开：那个是给人看的本地化文案，这个是给检查用的边界值。
+    /// 注意本数据集的"到期"与节气/放假**不同性质**：越界后落到的是同一个生成算法的
+    /// 兜底结果，质量不变（见 `HANDOFF_REVIEW` §4 对其"经核验数据"表述的更正），
+    /// 所以到期检查对它只告警、不判失败。
+    public static var dataCoverage: (start: String, end: String)? {
+        let c = Cache.shared
+        guard let start = c.rangeStartKey, let end = c.rangeEndKey else { return nil }
+        return (start, end)
     }
 
     /// 覆盖范围描述（用于 UI 展示 / 诊断；**不得**表述为"权威 / 经核验"数据）

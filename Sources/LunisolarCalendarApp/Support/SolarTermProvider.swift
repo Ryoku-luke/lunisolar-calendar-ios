@@ -3,7 +3,9 @@ import Foundation
 // MARK: - 二十四节气
 
 /// 二十四节气数据与倒计时。
-/// 节气精确到分钟，此处内置 2025–2028 年的精确时刻（基于天文计算）。
+/// 节气精确到分钟，此处内置 **2024–2032** 年的精确时刻（基于天文计算 / Swiss Ephemeris）。
+/// 末条之后 `nextTerm` 会返回 nil（节气倒计时静默消失）——到期防线的阈值与补数据流程见
+/// `docs/DATA_UPDATE_RUNBOOK.md` 与 `DataExpiryTests`。
 public enum SolarTermProvider: Sendable {
 
     /// 二十四节气名称（按年内顺序）
@@ -266,6 +268,15 @@ public enum SolarTermProvider: Sendable {
         .init(year: 2032, index: 22,  month: 12,  day: 6,  hour: 21, minute: 53),
         .init(year: 2032, index: 23,  month: 12,  day: 21,  hour: 15, minute: 55),
     ]
+
+    /// 内置节气表的覆盖范围（首/末条交节时刻）。
+    ///
+    /// 供**数据到期检查**与诊断使用：末条之后 `nextTerm(from:)` 会返回 nil，
+    /// 用户侧表现为「节气倒计时整体消失」，且**不报错**（静默降级）。
+    public static var dataCoverage: (start: Date, end: Date)? {
+        guard let first = sortedEntries.first, let last = sortedEntries.last else { return nil }
+        return (first.date, last.date)
+    }
 
     /// 按发生时间排好序的节气表（避免 nextTerm 每次 O(N log N) 重排）。
     /// entries 源数据本身是「年 × 年内节气序号 0-23」升序写入，Date 也单调递增，但

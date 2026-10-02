@@ -145,7 +145,7 @@ public enum FestivalManager: Sendable {
         }
 
         // 3. 节气节日（P2-2）：当天恰逢节气交节时标注（如清明/冬至/立春）。
-        //    随 SolarTermProvider 数据（2025-2028）联动；2029+ 无数据时不显示。
+        //    随 SolarTermProvider 数据（2024–2032）联动；2033+ 无数据时不显示。
         if let term = SolarTermProvider.termOn(norm) {
             result.append(Festival(
                 name: term, emoji: "🌿", kind: .solarTerm,

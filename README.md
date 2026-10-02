@@ -14,6 +14,8 @@
 > - [`docs/EXECUTION_PLAN_2026-09-30.md`](docs/EXECUTION_PLAN_2026-09-30.md) —— 按什么顺序做、如何验收：
 >   分阶段执行计划（P0 安全底座 → P1 数据正确性 → P2 数据安全 → P3 界面无障碍 → P4 维护性），
 >   含需裁决事项与里程碑验收标准。
+> - [`docs/DATA_UPDATE_RUNBOOK.md`](docs/DATA_UPDATE_RUNBOOK.md) —— 内置数据（放假安排 / 节气表 /
+>   黄历库）都有**静默降级**的到期日：到期前怎么补、补完要同步哪些测试、到期防线在哪。
 
 ## 功能
 

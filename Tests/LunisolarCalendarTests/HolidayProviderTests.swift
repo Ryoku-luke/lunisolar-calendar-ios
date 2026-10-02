@@ -65,10 +65,22 @@ final class HolidayProviderTests: XCTestCase {
         XCTAssertFalse(HolidayProvider.dataCoverageDescription.isEmpty)
     }
 
-    func test2027NotYetPublishedReturnsNormal() {
-        // 2027 年安排尚未发布：不得返回编造数据，应退回普通日
-        XCTAssertEqual(HolidayProvider.info(for: date(2027, 1, 1)).type, .normal)
-        XCTAssertEqual(HolidayProvider.info(for: date(2027, 1, 1)).name, "")
+    /// 2027 元旦：**自更新**用例（补 2027 数据的人不需要记得回来改这条测试）。
+    ///
+    /// 旧版本把「2027-01-01 == .normal」写成永久断言——那等于把「数据悬崖」当成了契约：
+    /// 补完 2027 数据那天它必然红，而红的原因不是代码错，是测试没跟上
+    /// （见 docs/DATA_UPDATE_RUNBOOK.md）。现在按数据实际覆盖到哪儿来判：
+    /// 没覆盖就要求「不许编造、退回普通日」，覆盖了就要求「元旦必须是假期」。
+    func test2027NewYearReflectsDataStage() {
+        let info = HolidayProvider.info(for: date(2027, 1, 1))
+        // key 零填充，字典序即日期序（与 HolidayProvider.dataCoverage 同一套约定）
+        if HolidayProvider.dataCoverage.end < "2027-01-01" {
+            XCTAssertEqual(info.type, .normal, "2027 安排尚未发布时不得编造数据，应退回普通日")
+            XCTAssertEqual(info.name, "")
+        } else {
+            XCTAssertEqual(info.type, .holiday, "2027 数据已覆盖，元旦应为假期")
+            XCTAssertEqual(info.name, "元旦")
+        }
     }
 
     // MARK: 2025 锚点抽查（《国务院办公厅关于2025年部分节假日安排的通知》）
