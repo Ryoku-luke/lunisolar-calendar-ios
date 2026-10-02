@@ -83,7 +83,10 @@ struct CalendarMonthView: View {
         }
     }
 
-    private var isIPadSplit: Bool { hSizeClass == .regular }
+    /// 是否走 iPad 分栏布局（弹性行高/更大间距）。
+    /// ⚠️ 不能用 `hSizeClass == .regular`：iPhone Plus/Max 横屏也是 regular，
+    /// 会让手机套上 iPad 的网格布局（P3-2）。判据统一在 `LayoutIdiom`。
+    private var isIPadSplit: Bool { LayoutIdiom.usesSplitLayout(horizontalSizeClass: hSizeClass) }
 
     var body: some View {
         if embedsInNavigationStack {

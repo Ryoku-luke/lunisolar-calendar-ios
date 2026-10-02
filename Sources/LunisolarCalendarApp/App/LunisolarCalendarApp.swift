@@ -81,8 +81,10 @@ public struct AppRootView: View {
 
 // MARK: - 自适应根视图：iPhone NavigationStack / iPad NavigationSplitView
 
-/// iPad (regular sizeClass) 用双栏 SplitView：左月历 + 右详情
-/// iPhone (compact) 保留单栏 NavigationStack
+/// iPad 用双栏 SplitView：左月历 + 右详情；iPhone 保留单栏 NavigationStack + 底部 TabBar。
+///
+/// ⚠️ 判据是 `LayoutIdiom.usesSplitLayout`，**不是** `horizontalSizeClass == .regular`：
+/// iPhone Plus/Max **横屏**宽度也是 regular，只按宽度判会把手机切成三栏、TabBar 消失（P3-2）。
 public struct AdaptiveRootView: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
 
@@ -90,7 +92,7 @@ public struct AdaptiveRootView: View {
 
     public var body: some View {
         Group {
-            if hSizeClass == .regular {
+            if LayoutIdiom.usesSplitLayout(horizontalSizeClass: hSizeClass) {
                 // iPad：双栏布局
                 iPadRootView()
             } else {

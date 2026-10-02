@@ -630,11 +630,41 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 | 任务 | 做什么 | 验收 | 备注 |
 |---|---|---|---|
 | ~~**P3-1 节日对比度**~~ ✅ 2026-10-02 | `Views/CalendarMonthView.swift:507-508` 把未校验的 `festivalTint` 当填充色，`Views/CalendarComponents.swift:250` 强制白字 → 儿童节 1.40:1、中秋 1.97:1。改为按亮度选前景色（黑/白）或改用描边强调 | 新增测试覆盖**这条真实路径**（现有 `AccentContrastTests` 只测助手函数），而非仅助手 | 首屏问题，优先 |
-| **P3-2 横屏根视图** | `App/LunisolarCalendarApp.swift:93` 用 `horizontalSizeClass == .regular` 切根视图 → Plus/Max iPhone 横屏变 iPad 三栏、TabBar 消失。改为按 `userInterfaceIdiom` 或同时判宽度 | iPhone 横屏保留 TabBar；iPad 仍三栏 | 项目自己的 `DEVICE_TEST_CHECKLIST.md:267` 标注未验证 |
+| ~~**P3-2 横屏根视图**~~ ✅ 2026-10-02 | `App/LunisolarCalendarApp.swift:93` 用 `horizontalSizeClass == .regular` 切根视图 → Plus/Max iPhone 横屏变 iPad 三栏、TabBar 消失。改为按 `userInterfaceIdiom` 或同时判宽度 | iPhone 横屏保留 TabBar；iPad 仍三栏 | 项目自己的 `DEVICE_TEST_CHECKLIST.md:267` 标注未验证 |
 | **P3-3 修 3 处漏译** | `Views/WeatherCardView.swift:101`、`Views/SelectedDayCardView.swift:46`、`Views/CalendarMonthView.swift:381`（`Text(verbatim:)` 让英文界面显示「9月」） | 4 语言表 key 齐备；英文界面实测无中文 | 小改动 |
 | **P3-4 Dynamic Type 截断** | 大号数字（`numeralXL` 56pt）被限制在 `.frame(width: 92)` / `.frame(width: 110)`（`Views/SelectedDayCardView.swift:23-31`、`Views/DayDetailView.swift:85-92`）→ 辅助字号下截断 | 最大辅助字号下不截断、不重叠 | 无障碍硬缺口 |
 | **P3-5 性能** | ①`Views/AllEventsView.swift` 每次 body 约 10 轮 O(N) 全量扫描（`:337-341` 起），搜索逐键触发 → 改为算一次缓存；②`Views/YearOverviewView.swift:193-238` 主线程同步算 365 天 + 每日新建 `DateFormatter` + 约 440 个 `AnyView` → 移到后台/复用 formatter | 大库（数百事件）下横滑与搜索无卡顿 | 建议先加性能基线再改 |
 | **P3-6 无障碍覆盖** | 29 个视图文件中 23 个零 `accessibilityLabel/Hint`；年视图约 440 个可点格无标签/ID 且点击目标 16–20pt（低于 44pt HIG） | VoiceOver 能走通月历/年视图/日期跳转 | 可与 P4-1 合并 |
+
+### P3-2 横屏根视图 ✅ 已完成（2026-10-02）
+
+**缺陷**：判断「是不是 iPad 那套分栏」用的是 `horizontalSizeClass == .regular`。
+但 **iPhone Plus/Max 横屏也是 regular** → 手机被切成三栏、底部 TabBar 消失。
+`sizeClass` 回答的是「有多宽」，不是「是什么设备」。
+
+**同一处错误判据其实有 2 个调用点**（计划里只点了根视图那一处）：
+1. `AdaptiveRootView`（切根视图，TabBar 消失的那条）；
+2. `CalendarMonthView.isIPadSplit`（会让手机套上 iPad 的弹性行高网格布局）。
+
+**改法**：新增 `Support/LayoutIdiom.swift`，判据收敛成一个纯函数
+`usesSplitLayout(device:horizontalSizeClass:) = (device == .pad && sizeClass == .regular)`，
+两个调用点都走它。保留 sizeClass 这一半是刻意的——iPad 分屏/侧拉的窄栏
+（compact）继续回落单栏，这是既有行为，本次不动。宽度为 `nil` 时保守走单栏。
+
+**验证**：398 用例 × 4 时区 0 失败（新增 `LayoutIdiomTests` 9 条）；
+macOS + iOS SDK 构建；UI 测试 target 类型检查。
+**证伪**：4 种突变 4/4 被拦——①判据退回「只按宽度」→ 3 条红；②**根视图**接线被改回按宽度判
+→ 接线守卫红；③**isIPadSplit** 接线被改回 → 接线守卫红；④判据放宽成「手机也算 iPad」→ 3 条红。
+
+**关于测试手段的诚实说明**：两个调用点都在 SwiftUI 视图里（`body` / 计算属性），
+单测构造不出带 environment 的 View，所以除了判据的单测之外，另加了一条**只扫这两行代码**的
+接线守卫（扫源码、排除注释）。它偏脆（改格式要同步字符串），但它是唯一能发现
+「调用点被改回按宽度判」的手段——上面 ②③ 两条突变正是它拦下的。
+
+**未做（可选后续）**：真正的行为验收需要**Max 尺寸的 iPhone 横屏**才能暴露
+（Pro 尺寸横屏仍是 compact，不会踩到这个 bug）。可以加一条「转横屏后断言 TabBar 仍在」
+的 UI 用例，但它只在 Max 机型上才有鉴别力；而把 Max 加成第六条通道会让每次闸门再慢十几分钟。
+要手工验证时跑：`IPHONE_SIM="iPhone 17 Pro Max" Tools/run_tests.sh`。
 
 ### P3-1 节日对比度 ✅ 已完成（2026-10-02）
 
