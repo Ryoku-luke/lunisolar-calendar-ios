@@ -632,9 +632,33 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 | ~~**P3-1 节日对比度**~~ ✅ 2026-10-02 | `Views/CalendarMonthView.swift:507-508` 把未校验的 `festivalTint` 当填充色，`Views/CalendarComponents.swift:250` 强制白字 → 儿童节 1.40:1、中秋 1.97:1。改为按亮度选前景色（黑/白）或改用描边强调 | 新增测试覆盖**这条真实路径**（现有 `AccentContrastTests` 只测助手函数），而非仅助手 | 首屏问题，优先 |
 | ~~**P3-2 横屏根视图**~~ ✅ 2026-10-02 | `App/LunisolarCalendarApp.swift:93` 用 `horizontalSizeClass == .regular` 切根视图 → Plus/Max iPhone 横屏变 iPad 三栏、TabBar 消失。改为按 `userInterfaceIdiom` 或同时判宽度 | iPhone 横屏保留 TabBar；iPad 仍三栏 | 项目自己的 `DEVICE_TEST_CHECKLIST.md:267` 标注未验证 |
 | ~~**P3-3 修 3 处漏译**~~ ✅ 2026-10-02 | `Views/WeatherCardView.swift:101`、`Views/SelectedDayCardView.swift:46`、`Views/CalendarMonthView.swift:381`（`Text(verbatim:)` 让英文界面显示「9月」） | 4 语言表 key 齐备；英文界面实测无中文 | 小改动 |
-| **P3-4 Dynamic Type 截断** | 大号数字（`numeralXL` 56pt）被限制在 `.frame(width: 92)` / `.frame(width: 110)`（`Views/SelectedDayCardView.swift:23-31`、`Views/DayDetailView.swift:85-92`）→ 辅助字号下截断 | 最大辅助字号下不截断、不重叠 | 无障碍硬缺口 |
+| ~~**P3-4 Dynamic Type 截断**~~ ✅ 2026-10-02 | 大号数字（`numeralXL` 56pt）被限制在 `.frame(width: 92)` / `.frame(width: 110)`（`Views/SelectedDayCardView.swift:23-31`、`Views/DayDetailView.swift:85-92`）→ 辅助字号下截断 | 最大辅助字号下不截断、不重叠 | 无障碍硬缺口 |
 | **P3-5 性能** | ①`Views/AllEventsView.swift` 每次 body 约 10 轮 O(N) 全量扫描（`:337-341` 起），搜索逐键触发 → 改为算一次缓存；②`Views/YearOverviewView.swift:193-238` 主线程同步算 365 天 + 每日新建 `DateFormatter` + 约 440 个 `AnyView` → 移到后台/复用 formatter | 大库（数百事件）下横滑与搜索无卡顿 | 建议先加性能基线再改 |
 | **P3-6 无障碍覆盖** | 29 个视图文件中 23 个零 `accessibilityLabel/Hint`；年视图约 440 个可点格无标签/ID 且点击目标 16–20pt（低于 44pt HIG） | VoiceOver 能走通月历/年视图/日期跳转 | 可与 P4-1 合并 |
+
+### P3-4 Dynamic Type 截断 ✅ 已完成（2026-10-02）
+
+**缺陷**：日期胶囊里的数字用 `AppTheme.Font.numeralXL`（基准 56pt，经 `UIFontMetrics`
+按 Dynamic Type 缩放），而胶囊写死 `.frame(width: 92)`（当日卡）/ `.frame(width: 110)`（日详情）。
+默认字号放得下「31」，辅助档位把 56pt 放大 2–3 倍后数字被裁掉——
+**用户把字调大，反而看不见日期**。
+
+**改法两层**（只做第一层是不够的）：
+1. **辅助档位改为上下堆叠**：数字独占一行，不再与右侧详情争宽度。
+   判据抽成纯函数 `DayCardLayout.axis(for: typeSize)`（`isAccessibilitySize` → 纵向）——
+   只放开宽度会让详情列被挤扁、极端档位下互相重叠。
+2. **胶囊宽度 `width` → `minWidth`**，并给数字加 `.fixedSize(horizontal: true, vertical: false)`：
+   任何档位下都不会被父级压缩成截断；非辅助档位的版式与改动前一致（横排、92/110pt 起）。
+
+**验证**：412 用例 × 4 时区 0 失败（新增 `DayCardLayoutTests` 5 条）；
+macOS + iOS SDK 构建；UI 测试 target 类型检查。
+**证伪 5/5**：①判据永远横排（回到缺陷）→ 2 条红；②判据永远竖排（过度纠正）→ 2 条红；
+③当日卡胶囊退回固定宽度 → 接线守卫红；④日详情不再用 adaptiveCardStack → 守卫红；
+⑤当日卡数字去掉 fixedSize → 守卫红。
+
+**诚实说明（本次没能机器验证的部分）**：**渲染结果**——"最大辅助档位下确实不裁切、不重叠"——
+单测构造不出带 environment 的 SwiftUI 视图，所以判据与接线有测试、**外观只能靠眼睛**。
+已在 `docs/DEVICE_TEST_CHECKLIST.md` 新增 §12 记录复测步骤（含"调回默认字号确认版式未变"）。
 
 ### P3-3 漏译 ✅ 已完成（2026-10-02）
 

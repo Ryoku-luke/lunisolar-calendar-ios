@@ -7,8 +7,26 @@ struct SelectedDayCardView: View {
     let selectedDate: Date
     let accent: DayAccent
     @Environment(EventStore.self) private var store
+    /// 辅助字号档位要重排（见 DayCardLayout）：数字放大后不能再和详情挤一行
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// 天气结果（由天气文字块上报）：与并排的大图标共享，避免两者各拉一份、状态不一致
     @State private var weatherSnapshot: WeatherSnapshot?
+
+    /// 辅助字号档位下把「胶囊 + 详情」从横排改成上下堆叠。
+    ///
+    /// 为什么需要它：数字的基准字号 56pt 会随 Dynamic Type 放大 2–3 倍，
+    /// 横排时它和右侧详情列争宽度 —— 只放开胶囊宽度会让详情被挤扁甚至重叠（P3-4）。
+    /// 方向由 `DayCardLayout.axis(for:)` 决定（纯函数，可单测）。
+    @ViewBuilder
+    private func adaptiveCardStack<Content: View>(spacing: CGFloat,
+                                                  @ViewBuilder content: () -> Content) -> some View {
+        switch DayCardLayout.axis(for: typeSize) {
+        case .vertical:
+            VStack(alignment: .leading, spacing: spacing) { content() }
+        default:
+            HStack(alignment: .top, spacing: spacing) { content() }
+        }
+    }
 
     var body: some View {
         let summary = CalendarDaySummary(date: selectedDate, events: store.events(on: selectedDate))
@@ -18,17 +36,20 @@ struct SelectedDayCardView: View {
         let todaysEvents = summary.events
 
         return VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: AppTheme.Spacing.lg) {
+            adaptiveCardStack(spacing: AppTheme.Spacing.lg) {
                 VStack(spacing: 2) {
                     Text("\(selectedDate.day)")
                         .font(AppTheme.Font.numeralXL)
+                        // 保证数字用自己的固有宽度：不被父级压缩成截断（P3-4）
+                        .fixedSize(horizontal: true, vertical: false)
                         .foregroundStyle(Self.foregroundForDayNumber(selectedDate))
                         .id(selectedDate.day)
                         .transition(.opacity.combined(with: .move(edge: .top).combined(with: .scale(scale: 0.92))))
                     Text(selectedDate.weekdaySymbol)
                         .font(AppTheme.Font.caption).foregroundStyle(Color.secondaryLabel)
                 }
-                .frame(width: 92).padding(.vertical, AppTheme.Spacing.md)
+                // P3-4：minWidth 而不是固定 width —— 字调大时胶囊跟着变宽，而不是把数字裁掉
+                .frame(minWidth: 92).padding(.vertical, AppTheme.Spacing.md)
                 .animation(AppTheme.Motion.screen, value: selectedDate.day)
                 .background {
                     RoundedRectangle(cornerRadius: AppTheme.Radius.lg, style: .continuous)

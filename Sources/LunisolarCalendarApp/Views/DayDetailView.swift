@@ -7,6 +7,8 @@ struct DayDetailView: View {
     @Environment(EventStore.self) private var store
     @State private var showAdd: Bool = false
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    /// 辅助字号档位要重排（见 DayCardLayout）
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// 是否由本视图自行包一层 NavigationStack。
     /// iPhone push 进入 / iPad 右栏均复用外层导航上下文时传 false。
     private let embedsInNavigationStack: Bool
@@ -23,6 +25,22 @@ struct DayDetailView: View {
     private var accent: Color { dayAccent.decorative }
     private var controlTint: Color { dayAccent.controlTint }
     private var controlFill: Color { dayAccent.controlFill }
+
+    /// 辅助字号档位下把「胶囊 + 详情」从横排改成上下堆叠。
+    ///
+    /// 为什么需要它：数字的基准字号 56pt 会随 Dynamic Type 放大 2–3 倍，
+    /// 横排时它和右侧详情列争宽度 —— 只放开胶囊宽度会让详情被挤扁甚至重叠（P3-4）。
+    /// 方向由 `DayCardLayout.axis(for:)` 决定（纯函数，可单测）。
+    @ViewBuilder
+    private func adaptiveCardStack<Content: View>(spacing: CGFloat,
+                                                  @ViewBuilder content: () -> Content) -> some View {
+        switch DayCardLayout.axis(for: typeSize) {
+        case .vertical:
+            VStack(alignment: .leading, spacing: spacing) { content() }
+        default:
+            HStack(alignment: .top, spacing: spacing) { content() }
+        }
+    }
 
     var body: some View {
         if embedsInNavigationStack {
@@ -80,16 +98,19 @@ struct DayDetailView: View {
         let huangli = summary.huangli
         let accent = self.accent
         return VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
-            HStack(alignment: .top, spacing: AppTheme.Spacing.xl) {
+            adaptiveCardStack(spacing: AppTheme.Spacing.xl) {
                 VStack(spacing: 2) {
                     Text("\(date.day)")
                         .font(AppTheme.Font.numeralXL)
+                        // 保证数字用自己的固有宽度：不被父级压缩成截断（P3-4）
+                        .fixedSize(horizontal: true, vertical: false)
                         .foregroundStyle(date.isToday ? Color.systemRed : Color.label)
                     Text(date.formatted(.dateTime.year().month(.wide)))
                         .font(AppTheme.Font.caption).foregroundStyle(Color.secondaryLabel)
                         .contentTransition(.numericText())
                 }
-                .frame(width: 110).padding(.vertical, AppTheme.Spacing.lg)
+                // P3-4：minWidth 而不是固定 width（同上）
+                .frame(minWidth: 110).padding(.vertical, AppTheme.Spacing.lg)
                 .background {
                     RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous)
                         .fill(date.isToday ? Color.todayCapsule : Color.themeQuaternaryFill)
