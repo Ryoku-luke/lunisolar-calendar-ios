@@ -55,28 +55,16 @@ extension CalendarMonthView {
         cells.reserveCapacity(slots.count)
         for slot in slots {
             let d = slot.date
-            // 农历转换 → 节日查询（复用预计算 lunar）→ 颜色解析，每月只做一次
+            // 农历转换 → 节日查询（复用预计算 lunar）→ 派生一格，每月只做一次。
+            // 派生逻辑在 GridCellModel.derive（可单测：含选中态字色这条真实路径）
             let lunar = d.lunar
-            let festivals = FestivalManager.festivals(on: d, lunar: lunar)
-            // 节气与节日可同日并存（如清明既是节气也是祭祖日）：
-            // 节气 → 格内绿色"节气名"文字标注，不染色背景；
-            // 节日 → 格内节日名文字 + 节日色（不再浅染背景，除选中外无"选择框"）
-            let solarTermFest = festivals.first { $0.kind == .solarTerm }
-            let otherFest = festivals.first { $0.kind != .solarTerm }
-            let festivalTint = otherFest.map { Color(hex: $0.accentHex) }
-            let festivalName = otherFest?.localizedName
-            let solarTermName = solarTermFest?.localizedName
-            let solarTermTint = solarTermFest.map { Color(hex: $0.accentHex) }
             let stats = store.eventStats(on: d)
-            cells.append(GridCellModel(
+            cells.append(GridCellModel.derive(
                 date: d,
                 inCurrentMonth: slot.inCurrentMonth,
                 lunar: lunar,
                 huangli: HuangliGenerator.generate(for: d),
-                festivalTint: festivalTint,
-                festivalName: festivalName,
-                solarTermName: solarTermName,
-                solarTermTint: solarTermTint,
+                festivals: FestivalManager.festivals(on: d, lunar: lunar),
                 holidayType: HolidayProvider.info(for: d).type,
                 eventCount: stats.count,
                 eventPriorities: stats.priorities

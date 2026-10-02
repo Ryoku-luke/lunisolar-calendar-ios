@@ -77,6 +77,8 @@ struct DayCellView: View {
     let hasEvents: Bool, eventPriorities: [Priority], eventCount: Int
     /// 节日强调色（选中节日日的实心框颜色；常态不再染背景）
     var festivalTint: Color? = nil
+    /// 选中态格内文字色。由 `SelectedCellForeground.resolve` 决定（决策点在那里，便于单测）。
+    var selectedForeground: Color = .white
     var cellAccent: Color? = nil
     /// 节假日名（如"中秋节"）：节日当天格内只显示节日名，不显示农历
     var festivalName: String? = nil
@@ -125,14 +127,14 @@ struct DayCellView: View {
                         Text(festivalName == term ? term : festivalName)
                             .foregroundStyle(
                                 isSelected
-                                    ? Color.white.opacity(0.95)
+                                    ? selectedForeground
                                     : (festivalTint ?? Color.festiveRed)
                             )
                         if festivalName != term {
                             Text("·\(term)")
                                 .foregroundStyle(
                                     isSelected
-                                        ? Color.white.opacity(0.95)
+                                        ? selectedForeground
                                         : (solarTermTint ?? Color.systemGreen)
                                 )
                         }
@@ -145,7 +147,7 @@ struct DayCellView: View {
                         .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
                         .foregroundStyle(
                             isSelected
-                                ? Color.white.opacity(0.95)
+                                ? selectedForeground
                                 : (festivalTint ?? Color.festiveRed)
                         )
                         .lineLimit(1).minimumScaleFactor(0.6)
@@ -155,7 +157,7 @@ struct DayCellView: View {
                         .font(isRegular ? AppTheme.Font.caption : AppTheme.Font.caption2)
                         .foregroundStyle(
                             isSelected
-                                ? Color.white.opacity(0.95)
+                                ? selectedForeground
                                 : (solarTermTint ?? Color.systemGreen)
                         )
                         .lineLimit(1).minimumScaleFactor(0.6)
@@ -247,7 +249,7 @@ struct DayCellView: View {
         }
     }
     private var foregroundForDay: Color {
-        if isSelected { return .white }
+        if isSelected { return selectedForeground }
         guard isCurrentMonth else { return Color.tertiaryLabel }
         if let ft = festivalTint { return ft }
         if isToday { return Color.systemRed }
@@ -261,7 +263,7 @@ struct DayCellView: View {
     }
     private var foregroundForLunar: Color {
         guard isCurrentMonth else { return Color.quaternaryLabel }
-        if isSelected { return .white.opacity(0.9) }
+        if isSelected { return selectedForeground }
         if lunar.day == 1 { return Color.festiveRed.opacity(0.9) }
         if let ft = festivalTint { return ft.opacity(0.92) }
         return Color.tertiaryLabel
@@ -288,6 +290,7 @@ extension DayCellView: Equatable {
             && lhs.eventPriorities == rhs.eventPriorities
             && lhs.eventCount == rhs.eventCount
             && lhs.festivalTint == rhs.festivalTint
+            && lhs.selectedForeground == rhs.selectedForeground
             && lhs.cellAccent == rhs.cellAccent
             && lhs.solarTermTint == rhs.solarTermTint
             && lhs.holidayType == rhs.holidayType

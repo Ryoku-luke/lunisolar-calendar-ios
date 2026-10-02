@@ -20,6 +20,9 @@ struct GridCellModel: Identifiable {
     let lunar: LunarDate
     let huangli: HuangliDay
     let festivalTint: Color?
+    /// 选中该日时格内文字的颜色（`SelectedCellForeground.resolve` 的结果）。
+    /// 不用半透明白：透明度会把对比度拉低（实测 0.9 白字最差 3.94:1 < 4.5）。
+    let selectedForeground: Color
     /// 节假日名（如"中秋节"）：节日当天格内只显示节日名，不显示农历
     let festivalName: String?
     /// 节气名（如"秋分"）：节气日格内只显示节气名，不显示农历
@@ -31,6 +34,44 @@ struct GridCellModel: Identifiable {
     /// 当日全部事件优先级（按事件顺序），格子事件点逐个着色
     let eventPriorities: [Priority]
     var id: Date { date }
+}
+
+extension GridCellModel {
+    /// 由「日期 + 该日节日 + 事件统计」派生一格。
+    ///
+    /// 为什么抽出来：这段派生原先写在 `CalendarMonthView` 的扩展里（SwiftUI 视图），
+    /// 单测够不着 —— 而审查报告 P3-1 的验收恰恰要求「测试覆盖这条真实路径，
+    /// 而不是只测助手函数」。抽成工厂后，测试可以用真实节日（中秋 2026-09-25）
+    /// 断言"填充仍是节日原色、选中字色已按亮度切成黑"。
+    static func derive(date: Date,
+                       inCurrentMonth: Bool,
+                       lunar: LunarDate,
+                       huangli: HuangliDay,
+                       festivals: [Festival],
+                       holidayType: HolidayType,
+                       eventCount: Int,
+                       eventPriorities: [Priority]) -> GridCellModel {
+        // 节气与节日可同日并存（如清明既是节气也是祭祖日）：
+        // 节气 → 格内绿色"节气名"文字标注，不染色背景；
+        // 节日 → 格内节日名文字 + 节日色（不再浅染背景，除选中外无"选择框"）
+        let solarTermFest = festivals.first { $0.kind == .solarTerm }
+        let otherFest = festivals.first { $0.kind != .solarTerm }
+        return GridCellModel(
+            date: date,
+            inCurrentMonth: inCurrentMonth,
+            lunar: lunar,
+            huangli: huangli,
+            festivalTint: otherFest.map { Color(hex: $0.accentHex) },
+            // 决策点在 SelectedCellForeground（可单测），这里只取结果
+            selectedForeground: SelectedCellForeground.resolve(festivalHex: otherFest?.accentHex),
+            festivalName: otherFest?.localizedName,
+            solarTermName: solarTermFest?.localizedName,
+            solarTermTint: solarTermFest.map { Color(hex: $0.accentHex) },
+            holidayType: holidayType,
+            eventCount: eventCount,
+            eventPriorities: eventPriorities
+        )
+    }
 }
 
 /// 网格缓存键的**唯一定义**（读、写两侧共用，避免两处字符串拼接各自漂移）。

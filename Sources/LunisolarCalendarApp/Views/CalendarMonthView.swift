@@ -504,6 +504,7 @@ struct CalendarMonthView: View {
                                 eventPriorities: cell.eventPriorities,
                                 eventCount: cell.eventCount,
                                 festivalTint: cell.festivalTint,
+                                selectedForeground: cell.selectedForeground,
                                 cellAccent: cell.festivalTint
                                     ?? (d.isSameDay(as: selectedDate) ? controlFill : nil),
                                 festivalName: cell.festivalName,

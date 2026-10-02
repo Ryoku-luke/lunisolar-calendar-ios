@@ -629,12 +629,47 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 
 | 任务 | 做什么 | 验收 | 备注 |
 |---|---|---|---|
-| **P3-1 节日对比度** | `Views/CalendarMonthView.swift:507-508` 把未校验的 `festivalTint` 当填充色，`Views/CalendarComponents.swift:250` 强制白字 → 儿童节 1.40:1、中秋 1.97:1。改为按亮度选前景色（黑/白）或改用描边强调 | 新增测试覆盖**这条真实路径**（现有 `AccentContrastTests` 只测助手函数），而非仅助手 | 首屏问题，优先 |
+| ~~**P3-1 节日对比度**~~ ✅ 2026-10-02 | `Views/CalendarMonthView.swift:507-508` 把未校验的 `festivalTint` 当填充色，`Views/CalendarComponents.swift:250` 强制白字 → 儿童节 1.40:1、中秋 1.97:1。改为按亮度选前景色（黑/白）或改用描边强调 | 新增测试覆盖**这条真实路径**（现有 `AccentContrastTests` 只测助手函数），而非仅助手 | 首屏问题，优先 |
 | **P3-2 横屏根视图** | `App/LunisolarCalendarApp.swift:93` 用 `horizontalSizeClass == .regular` 切根视图 → Plus/Max iPhone 横屏变 iPad 三栏、TabBar 消失。改为按 `userInterfaceIdiom` 或同时判宽度 | iPhone 横屏保留 TabBar；iPad 仍三栏 | 项目自己的 `DEVICE_TEST_CHECKLIST.md:267` 标注未验证 |
 | **P3-3 修 3 处漏译** | `Views/WeatherCardView.swift:101`、`Views/SelectedDayCardView.swift:46`、`Views/CalendarMonthView.swift:381`（`Text(verbatim:)` 让英文界面显示「9月」） | 4 语言表 key 齐备；英文界面实测无中文 | 小改动 |
 | **P3-4 Dynamic Type 截断** | 大号数字（`numeralXL` 56pt）被限制在 `.frame(width: 92)` / `.frame(width: 110)`（`Views/SelectedDayCardView.swift:23-31`、`Views/DayDetailView.swift:85-92`）→ 辅助字号下截断 | 最大辅助字号下不截断、不重叠 | 无障碍硬缺口 |
 | **P3-5 性能** | ①`Views/AllEventsView.swift` 每次 body 约 10 轮 O(N) 全量扫描（`:337-341` 起），搜索逐键触发 → 改为算一次缓存；②`Views/YearOverviewView.swift:193-238` 主线程同步算 365 天 + 每日新建 `DateFormatter` + 约 440 个 `AnyView` → 移到后台/复用 formatter | 大库（数百事件）下横滑与搜索无卡顿 | 建议先加性能基线再改 |
 | **P3-6 无障碍覆盖** | 29 个视图文件中 23 个零 `accessibilityLabel/Hint`；年视图约 440 个可点格无标签/ID 且点击目标 16–20pt（低于 44pt HIG） | VoiceOver 能走通月历/年视图/日期跳转 | 可与 P4-1 合并 |
+
+### P3-1 节日对比度 ✅ 已完成（2026-10-02）
+
+**缺陷**：选中一个节日日时，格子填充用的是**装饰层**的节日原色
+（`CalendarMonthView` 把 `cell.festivalTint` 传给了 `cellAccent`），而格内文字固定白字
+→ 儿童节 `#FDD835` **1.40:1**、中秋 `#F9A825` **1.97:1**、劳动节 `#FB8C00` 2.37:1。
+
+**改法**（选「按亮度挑白/黑」，没有选「压暗填充」）：
+- 压暗会把儿童节黄、中秋金洗掉，而识别度正是这两个颜色的价值；
+- 挑色则有**数学保证**：任一填充色在白/黑里总有一支达标——两者相等的最坏点在
+  亮度 ≈0.179，此时 ≈4.58:1 > 门槛 4.5。
+- 填充仍是节日原色（装饰层逐字未动），只把选中格的文字色换成挑出来的那支。
+
+**顺带发现的第二个（更隐蔽的）问题**：选中格里的白字是**半透明**的
+（节日名 0.95、农历 0.9）。半透明白合成到填充色上会把对比度拉低——
+即便填充按「白字 ≥4.5」校验过，实测 0.95 白字只剩 **4.23:1**、0.9 白字只剩 **3.94:1**。
+所以选中格文字统一改为**不透明**（层次感交给字号/字重，不交给透明度）。
+
+**为满足「测试覆盖真实路径而不是只测助手」做的两处抽取**：
+1. 决策点抽成 `SelectedCellForeground.resolve(festivalHex:)`——原先写在 `DayCellView`
+   （SwiftUI 视图）里，单测够不着；
+2. 单格派生抽成 `GridCellModel.derive(...)`——原先在 `CalendarMonthView` 的扩展里（同样是视图）。
+   于是测试能用**真实节日**（中秋 2026-09-25、儿童节 2026-06-01）断言
+   「填充仍是原色 + 选中字色已切黑」。
+
+**验证**：389 用例 × 4 时区 0 失败（新增 `SelectedCellContrastTests` 10 条）；
+macOS + iOS SDK 构建；UI 测试 target 类型检查。
+**证伪**：3 种突变 3/3 被拦——①`resolve` 退回「一律白字」（原实现的 bug）→ 4 条红；
+②**接线断掉**（`derive` 不再把节日色传进决策点）→ 2 条接线用例红；
+③拾色反向（挑更差的那支）→ 6 条红。
+
+**遗留缺口 → D8**：`appTint`（`#4B6FF2`）当选中填充时，白字只有 **4.33:1**，本就低于 AA；
+不透明化之后农历行从 3.83 提到 4.33，但仍未达标。这条**没有**在本次动它——
+无节日日的选中格是品牌色填充 + 白字的既有视觉契约，改填充色或改黑字都属于视觉决策。
+现状已被 `testAppTintSelectedFillRemainsAKnownGap` 钉住（改了会红，提醒同步 D8）。
 
 ---
 
@@ -677,6 +712,7 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 | D4 | 节气是否改为运行时计算 | P2-4 | 可一次性消除 9 年窗口，但改动大 |
 | D5 | 通知权限是否改到「首次添加提醒时」请求 | 未排期 | 现在只在设置页请求（`SettingsView.swift:146-150`），从不打开设置的用户**永远收不到通知**，而 `NotificationManager.swift:56` 的注释说会请求 → 注释与实现矛盾 |
 | D6 | **是否恢复导出/备份入口** | P2-1 | 远端 `1cc0b7f` 说明导出 UI 是**被主动移除**的产品决策、三个 `export*` 函数有意留作测试镜像。所以这是产品决策而非代码缺陷（详见 `HANDOFF_REVIEW` §4 B5 的更正） |
+| D8 | **`appTint` 当选中填充 + 白字只有 4.33:1（低于 AA 4.5）怎么处理** | P3-1 遗留 | 两个备选：①把控件层的 appTint 也压暗到达标（品牌色会变深）；②选中日改用黑字（`black on #4B6FF2` = 4.85:1 达标，但每天都变黑字，视觉变化更大）。现状由 `SelectedCellContrastTests.testAppTintSelectedFillRemainsAKnownGap` 钉住 |
 | D7 | **存储只读时要不要在界面上告诉用户** | 未排期 | `EventStore.storageIsReadOnly`（磁盘格式比本 App 新 / 版本标记读不懂）目前只写日志：那段时间用户的增删改**不会落盘**。要提示就得加 4 语言文案（并过 `LocalizationParity` 类的 key 数校验），属于产品决策 |
 
 ---

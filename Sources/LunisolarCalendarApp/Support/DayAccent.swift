@@ -43,6 +43,18 @@ public enum AccentContrast {
     /// 该色压在深色页面底上的对比度（深色模式 tint 文字的判据）
     public static func onBlack(hex: String) -> Double { ratio("#000000", hex) }
 
+    /// 白 / 黑里对比度更高的那一支 —— 选中格文字色用它。
+    ///
+    /// 为什么是「挑色」而不是「把填充压暗到白字达标」：
+    /// - 压暗会把节日色洗掉（儿童节黄、中秋金正是最需要保住识别度的两个）；
+    /// - 而**任一填充色**在白/黑里至少有一支达标：两者相等的最坏点在亮度 ≈0.179，
+    ///   此时对比度 ≈4.58:1 > 门槛 4.5。也就是说这条路上不存在"选不出一支达标色"的情况。
+    public static func bestForeground(hex: String) -> (hex: String, ratio: Double) {
+        let asWhiteText = whiteOn(hex: hex)   // 白字压在该色上
+        let asBlackText = onBlack(hex: hex)   // 黑字压在该色上（= 该色对黑底的比值，对称）
+        return asWhiteText >= asBlackText ? ("#FFFFFF", asWhiteText) : ("#000000", asBlackText)
+    }
+
     /// 保留色相、向黑混合，直到白字达标（原色已达标则原样返回）
     public static func darkenedForWhiteText(hex: String) -> String {
         guard whiteOn(hex: hex) < threshold else { return hex }
@@ -113,6 +125,26 @@ extension Color {
         #else
         return Color(hex: AccentContrast.darkenedForWhiteText(hex: hex))
         #endif
+    }
+}
+
+/// 选中态格内文字色的**唯一决策点**。
+///
+/// 为什么单独抽出来：审查报告的验收要求「测试覆盖这条真实路径，而不只是助手函数」，
+/// 而这条路径原先写在 `DayCellView`（SwiftUI 视图）里 —— 视图本体在单测里够不着。
+/// 抽成纯函数后，`SelectedCellContrastTests` 能对**全部真实节日色**跑这条决策。
+///
+/// 规则：
+/// - 有节日色 → 按亮度在白/黑里挑对比度更高的一支（填充仍是节日原色，不压暗：
+///   压暗会把儿童节黄、中秋金洗掉，而识别度正是这些颜色的价值）；
+/// - 无节日色 → 白色（选中日是品牌色填充，沿用既有视觉契约，见计划里的 D8）。
+///
+/// ⚠️ 返回的颜色必须**不透明**：半透明白会把实际对比度拉到校验值以下
+/// （实测 0.9 白字最差 3.94:1，而门槛是 4.5）。
+enum SelectedCellForeground {
+    static func resolve(festivalHex: String?) -> Color {
+        guard let hex = festivalHex else { return .white }
+        return Color(hex: AccentContrast.bestForeground(hex: hex).hex)
     }
 }
 
