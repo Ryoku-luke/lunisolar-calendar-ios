@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# 一键验证：把本项目的「四通道」串成一条命令。
+# 一键验证：把本项目的五条通道串成一条命令。
 #
-# 为什么需要它：这个项目的验证一直是本机四通道 —— swift test（macOS 宿主）/
-# iOS SDK 构建 / iPhone UI 测试 / iPad UI 测试。此前每条都靠人手拼 xcodebuild 命令，
+# 为什么需要它：这个项目的验证一直是本机几条固定通道 —— swift test（macOS 宿主）/
+# iOS SDK 构建 / UI 测试 target 类型检查 / iPhone UI 测试 / iPad UI 测试。
+# 此前每条都靠人手拼 xcodebuild 命令，
 # 换个接手的人（或换台机器）就得重新推一遍参数：模拟器机型名、OS 版本、
 # -only-testing 的 target 路径、以及「不要并行跑两个 xcodebuild」这条踩过坑的纪律。
 #
@@ -12,7 +13,7 @@
 #   Tools/run_tests.sh "iPhone 16 Pro"          # 指定 iPhone 机型
 #   IPAD_SIM="iPad Air 13-inch (M4)" Tools/run_tests.sh
 #   OS_VER=27.0 Tools/run_tests.sh              # 指定模拟器 OS 版本（默认 26.5）
-#   SKIP_UI=1 Tools/run_tests.sh                # 只跑编译 + 单测（改文档时够用）
+#   SKIP_UI=1 Tools/run_tests.sh                # 跳过两条 UI 测试（类型检查仍跑；改文档时够用）
 #
 # 行为约定：
 # - **串行**执行。并行跑两个 xcodebuild 会互相干扰（本项目实测：模拟器克隆导致
@@ -58,7 +59,7 @@ channel() {
   fi
 }
 
-echo "项目四通道验证 —— iPhone: $IPHONE_SIM / iPad: $IPAD_SIM / iOS $OS_VER"
+echo "项目五通道验证 —— iPhone: $IPHONE_SIM / iPad: $IPAD_SIM / iOS $OS_VER"
 [[ "${SKIP_UI:-0}" == "1" ]] && echo "（SKIP_UI=1：跳过两条 UI 测试通道）"
 
 channel "swift test（macOS 宿主）" \
@@ -69,6 +70,13 @@ channel "iOS SDK 构建" \
   "Build complete" \
   swift build --triple arm64-apple-ios17.0-simulator \
     --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
+
+# 放在两条 UI 测试通道之前：UI 测试 target 不在 SwiftPM 包里，`swift test` 看不见它，
+# 副本漏同步这类问题只有这里能在几秒内拦住（2026-10-02 实测：本地 360 用例全绿，
+# 而 UI 测试 target 编译失败）。SKIP_UI=1 时也跑——它只是编译检查，不碰模拟器。
+channel "UI 测试 target 类型检查" \
+  "UITESTS_TYPECHECK_OK" \
+  Tools/typecheck_uitests.sh
 
 if [[ "${SKIP_UI:-0}" != "1" ]]; then
   channel "iPhone UI 测试（${IPHONE_SIM}）" \

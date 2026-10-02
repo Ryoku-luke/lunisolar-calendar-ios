@@ -161,6 +161,53 @@
 > **独立复现并通过**——见下方 P0-3。也就是说「本地绿」不是环境侥幸。
 > 仅剩两条 UI 测试通道（`Tools/run_tests.sh` 的后两条）从未跑过。
 
+> 🚨 **2026-10-02 实测：第一次真跑 UI 测试通道，炸的不是断言，是编译**
+>
+> 用户在正常终端执行 Flow 3d 用例（带 `-only-testing:`），`LunisolarCalendarUITests`
+> **编译失败**：
+>
+> ```
+> LunisolarCalendarUITests/LunisolarCalendarUITests.swift:363:39:
+>   error: type 'ID' has no member 'aiGoToCreatedDay'
+> ```
+>
+> 根因：UI 测试 target 没有链接 App 框架模块，`LunisolarCalendarUITests.swift` 里
+> 维护着一份 `AccessibilityID` 的**字面量副本**（`private enum ID`）。Flow 3d 提交
+> `ea51f25` 只在 App 侧加了 `aiGoToCreatedDay`，副本没跟。而 UI 测试 target **不在
+> SwiftPM 包里**，`swift test` 根本看不见它——所以当时「356 用例 × 4 时区全绿」
+> 与这次编译失败**可以同时成立**。
+>
+> 这也推翻了副本注释里「失配不会静默」的假设：它不静默，但它只对 `xcodebuild` 出声。
+>
+> **本次新增的两道防线（已实证）**
+>
+> 1. **UI 测试 target 的类型检查**（`Tools/typecheck_uitests.sh`，秒级、不需要 DerivedData、
+>    不碰模拟器，已接进 `Tools/run_tests.sh` 作为第 3 条通道）：
+>
+>    ```bash
+>    Tools/typecheck_uitests.sh        # 成功打印 UITESTS_TYPECHECK_OK
+>    ```
+>
+>    内部就是一次 `swiftc -typecheck`。关键点是 `-Isystem …/Developer/usr/lib`——Swift 版
+>    XCTest 断言（`XCTAssertTrue` 等）来自那里的 `XCTest.swiftmodule`，不是
+>    `XCTest.framework` 的头文件（头文件里只有 C 宏，Swift 会报
+>    「function like macros not supported」，看起来像环境坏了，其实是少这一条路径）。
+>    **证伪**：删掉副本里那行 → 脚本 `EXIT=1` 并复现用户看到的同一条报错；加回 → `EXIT=0`。
+>
+> 2. **`Tests/LunisolarCalendarTests/UITestIDMirrorTests.swift`**（4 项，随 `swift test` 跑）：
+>    从源码解析那份副本，对照 `AccessibilityID.all` 检查
+>    ①引用到但没定义的 `ID.*` ②副本字面量不在 App 侧目录 ③副本内重名重值
+>    ④`monthDay` 格式与 App 侧逐位一致。
+>    **证伪**：四种人为漂移各造一次，分别被对应的那一条拦住（4/4）。
+>
+> **提醒**：`xcodebuild` 在会话内仍然不可用，这次又确认了一条新死路——
+> `CFFIXED_USER_HOME` 重定向家目录后 SwiftPM 会调 `sandbox-exec`，而嵌套沙箱
+> 被拒（`sandbox-exec: sandbox_apply: Operation not permitted`）。
+> 所以**两条 UI 测试通道依然必须在正常终端跑**：`Tools/run_tests.sh`。
+>
+> **教训（写给下一个接手的人）**：只要改了 `AccessibilityID.swift`，就必须同步
+> 副本；`swift test` 绿 **不等于** UI 测试 target 能编译。
+
 ### P0-3 让 CI 真正转绿 ✅ 已完成（2026-09-30）
 
 > **结果**：`main` 分支 `50ab407` 的 CI **全绿**（用户截图证实）：
@@ -489,6 +536,7 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 | 部分损坏（vs 整文件损坏）、`importJSON` 畸形输入、缺 DTSTART、不可解析 TZID | P2-1 |
 | 喜神/财神 vs 日干规则、农历表穷举 oracle（现有只覆盖 5 个年份）、节气 vs 星历 | P1-2 / P4-2 |
 | UI 测试盲区：编辑/删除、全天、重复规则、提醒、倒数日增删、导入、深色模式、Dynamic Type、en/ja、VoiceOver | P3 各项 |
+| **UI 测试 target 本身能否编译**：它不在 SwiftPM 包里，`swift test` 看不见，改 `AccessibilityID` 漏同步副本时会静默到 `xcodebuild` 才炸 | ✅ 已补（2026-10-02）：`UITestIDMirrorTests` + 单文件 `swiftc -typecheck` 通道，见 P0-2 |
 | `xcodebuild test` 补一个单元测试 target（可选） | P4 |
 
 ---
