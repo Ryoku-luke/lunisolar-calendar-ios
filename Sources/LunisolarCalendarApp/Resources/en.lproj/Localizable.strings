@@ -503,3 +503,9 @@
 /* D7 存储只读提示 */
 "存储当前为只读" = "Storage is read-only";
 "改动暂时无法保存。可能是设备可用空间不足，或数据迁移未完成；请清理空间后重启 App。" = "Changes can't be saved right now. The device may be low on space, or a data migration didn't finish. Free up space and relaunch the app.";
+
+/* D6 导出入口 */
+"导出 / 备份数据" = "Export / Back up";
+"导出为 .ics 日历文件" = "Export as .ics calendar";
+"导出为 .json 备份" = "Export as .json backup";
+"导出为 .csv 表格" = "Export as .csv spreadsheet";

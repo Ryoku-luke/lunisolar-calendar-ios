@@ -706,6 +706,24 @@ final class LunisolarCalendarUITests: XCTestCase {
                        "「设置」不应在菜单里重复——底部「我的」Tab 已承担")
     }
 
+    // MARK: - Flow 16：导出入口（D6）
+
+    /// 断言到「三种格式都在」为止：再往下是系统文件面板（系统 UI），
+    /// UI 测试里点不稳、也不该由我们点——真正要守的是"入口存在且格式没漏"。
+    func testFlow16_exportEntryOffersEveryFormat() throws {
+        let app = launchApp()
+        app.tabBars.buttons["我的"].tap()
+
+        let row = app.buttons["导出 / 备份数据"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "设置页应有「导出 / 备份数据」入口（D6）")
+        row.tap()
+
+        for format in ["导出为 .ics 日历文件", "导出为 .json 备份", "导出为 .csv 表格"] {
+            XCTAssertTrue(app.buttons[format].waitForExistence(timeout: 5),
+                          "导出应提供「\(format)」（三种格式一个都不能少）")
+        }
+    }
+
     // MARK: - Flow 15：存储只读提示（D7）
 
     /// 两个状态都要验：

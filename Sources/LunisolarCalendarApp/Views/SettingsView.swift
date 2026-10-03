@@ -27,6 +27,11 @@ struct SettingsView: View {
     @State var showConflictPolicy = false
     /// 导入 / 恢复的「先选格式」对话框（P3-6：原先用嵌套 Menu，见 SettingsDataSections 注释）
     @State var showImportSourceDialog = false
+    /// 导出（D6）：格式选择对话框、待导出文档、系统文件面板开关
+    @State var showExportDialog = false
+    @State var exportFormat: ExportFormat?
+    @State var exportDocument: DataExportDocument?
+    @State var showExporter = false
     // 系统导入
     @State var isImportingSystem = false
     @State var importingSystemSource: SystemImportSource = .systemCalendar

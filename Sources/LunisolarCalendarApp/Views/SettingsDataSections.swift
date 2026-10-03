@@ -59,6 +59,30 @@ extension SettingsView {
                 Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
             }
 
+            // D6：导出 / 备份入口。与导入对称——先选格式，再由系统的文件面板决定存到哪。
+            Button {
+                showExportDialog = true
+            } label: {
+                Label(NSLocalizedString("导出 / 备份数据", comment: "设置页：导出入口"), systemImage: "square.and.arrow.up")
+            }
+            .confirmationDialog(NSLocalizedString("导出 / 备份数据", comment: ""),
+                                isPresented: $showExportDialog, titleVisibility: .visible) {
+                ForEach(ExportFormat.allCases) { format in
+                    Button(format.localizedTitle) {
+                        let text = format.makeText(from: store.events)
+                        exportDocument = DataExportDocument(data: Data(text.utf8))
+                        exportFormat = format
+                        showExporter = true
+                    }
+                }
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+            }
+            // 系统文件面板：导出落点交给用户（存到「文件」、iCloud、AirDrop 到别处）
+            .fileExporter(isPresented: $showExporter,
+                          document: exportDocument,
+                          contentType: exportFormat?.contentType ?? .data,
+                          defaultFilename: exportFormat?.defaultFilename() ?? "qinghe-events") { _ in }
+
             Button {
                 importingSystemSource = .systemCalendar
                 Task { await performSystemImport(source: .systemCalendar) }
