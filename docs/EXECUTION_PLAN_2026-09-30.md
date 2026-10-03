@@ -666,6 +666,34 @@ iPhone 通道 15 条（3 skip）/ iPad 通道 15 条（10 skip）**全绿**；�
 **仍待做（P3-6 其余部分）**：`SettingsView`、`QingheUIComponents`、小组件/灵动活动视图等
 约 15 个 UI 文件仍是零无障碍修饰符；下一条按「纯图标控件给文本替代 + 关键控件 ≥44pt」推进。
 
+> 🔍 **2026-10-03 续：改为「审计运行中的界面」而不是按 grep 加标签，抓到 2 处真缺陷**
+>
+> 新增 `testFlow13_allVisibleButtonsHaveReadableLabels`（第 16 条 UI 测试）：走遍四个 Tab，
+> 把**标签为空**的按钮全部报出来，并顺带发现「AX 遍历时崩溃」。
+> 为什么用审计：**零无障碍修饰符 ≠ 不可读**——`Toggle("显示农历")`、`Button("完成")`
+> 本来就朗读正常；真正要修的是「图标控件没有文本替代」，只有问运行中的界面才知道。
+> （顺带纠正：`SettingsView` 等 18 个「零修饰符」文件里多数控件是自描述的标准控件，
+> 这条启发式误导性很大。）
+>
+> **实测到的 2 处缺陷（均未修，已记入测试的精确白名单）**：
+> 1. **日历工具栏图标菜单**：AX 里按钮元素无标签，名字掉在子 `Image` 上（`label: '编辑'`）；
+> 2. **设置页「导入 / 恢复数据」菜单**：同样无标签，且 AX 外框只有 **154.7×20.3pt**（HIG 要 44pt 高）。
+>
+> **两条修法都试过，都失败（细节值得记住）**：
+> - 日历处：把 `.accessibilityLabel` 从 `.pressableFeedback()` 之前挪到之后 + 加
+>   `.accessibilityElement(children: .combine)` → **实测无效**（按钮仍无标签），已回退，不留无效改动；
+> - 设置处：在 `Menu` 上挂 `.accessibilityLabel` → **app 崩溃**
+>   （`EXC_BAD_ACCESS`，栈：`initializeWithCopy for Button/Menu` ← `Section` ← `SettingsView.body`，
+>   发生在 XCUITest 抓 AX 快照时）。`children: .combine`、以及 label 内 `.frame`/`.contentShape`
+>   同样崩。**对照实验定性**：源码回 HEAD、只留测试 → 不崩；加回改动 → 必崩。
+>   即崩溃由该改动引入，不是先天性问题。→ 需要**改结构**（例如把嵌套 `Menu` 换成
+>   `NavigationLink` + 选择页）才能修，记为待办。
+>
+> **白名单的写法**：按「子元素的 accessibilityIdentifier」精确匹配（SF Symbol 名稳定唯一，
+> 不会像 frame 那样随字号/机型变、也不会像文案那样随语言变），并且反断言
+> 「已知项必须恰好各命中一次」——**某条被修好时那条断言会提醒你去删白名单**。
+> 除这两条外，任何新增的无标签控件都会让测试变红。
+
 ### P3-4 Dynamic Type 截断 ✅ 已完成（2026-10-02）
 
 **缺陷**：日期胶囊里的数字用 `AppTheme.Font.numeralXL`（基准 56pt，经 `UIFontMetrics`

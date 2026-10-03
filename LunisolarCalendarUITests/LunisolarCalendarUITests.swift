@@ -704,6 +704,100 @@ final class LunisolarCalendarUITests: XCTestCase {
                        "「设置」不应在菜单里重复——底部「我的」Tab 已承担")
     }
 
+    // MARK: - Flow 13：全屏按钮标签审计（P3-6）
+
+    /// 走遍四个 Tab，把**标签为空**的按钮全部报出来。
+    ///
+    /// 为什么用审计而不是「按 grep 逐个加标签」：零无障碍修饰符 ≠ 不可读——
+    /// `Toggle("显示农历", isOn:)`、`Button("完成")` 本身就朗读正常。
+    /// 真正需要修的是「图标按钮没有文本替代」这类，而这类只有**问运行中的界面**才知道。
+    ///
+    /// 判定：可见按钮（`exists && !label.isEmpty` 之外）的 `label` 不得为空，
+    /// 且不得等于 SF Symbol 名（`Image(systemName:)` 被系统拿去当标签时就是这个样子，
+    /// 例如「plus」「gearshape」——朗读出来是英文符号名，等于没有替代文本）。
+    /// 已知**未修**的无标签控件：按「子元素的 accessibilityIdentifier」精确匹配。
+    ///
+    /// 为什么用子元素标识而不是 frame/文案：frame 会随字号与机型变，文案随语言变；
+    /// 而 SF Symbol 名（`slider.horizontal.3` / `square.and.arrow.down`）稳定且唯一。
+    ///
+    /// 两条都是 2026-10-03 审计实测发现、并尝试修过的：
+    /// 1. `square.and.arrow.down`（设置页「导入 / 恢复数据」Menu）：文字留在子 StaticText 上、
+    ///    控件本身无名字，AX 外框还只有 20pt 高（HIG 要 44pt）。**给这个 Menu 挂任何
+    ///    accessibility 修饰符都会让 SwiftUI 崩溃**：`.accessibilityLabel`、
+    ///    `.accessibilityElement(children: .combine)`，以及 label 内 `.frame`/`.contentShape`
+    ///    都试过，全部 EXC_BAD_ACCESS（`initializeWithCopy for Button/Menu` ← `Section` ←
+    ///    `SettingsView.body`）。对照实验（源码回 HEAD、只留本测试）确认**崩溃由该改动引入**，
+    ///    不是先天性。→ 需要改结构（例如换成 NavigationLink + 选择页）才能修。
+    /// 2. `slider.horizontal.3`（日历工具栏图标菜单）：把 `.accessibilityLabel` 从
+    ///    `.pressableFeedback()` 之前挪到之后、并加 `children: .combine`，**实测无效**
+    ///    （按钮元素仍然无标签），已回退，不留无效改动。
+    ///
+    /// 这两条若被修好，删掉对应条目即可；届时本测试会立刻开始保护它。
+    private static let knownUnlabeledControls: [String: String] = [
+        "slider.horizontal.3": "日历工具栏菜单：标签挂在子 Image 上（已试过的修法无效，见注释）",
+        "square.and.arrow.down": "设置页导入菜单：挂修饰符会崩 SwiftUI（见注释），需改结构",
+    ]
+
+    func testFlow13_allVisibleButtonsHaveReadableLabels() throws {
+        let app = launchApp()
+        let knownSymbolNames = ["plus", "minus", "gearshape", "chevron.left", "chevron.right",
+                                "chevron.up", "chevron.down", "ellipsis", "xmark", "checkmark",
+                                "square.and.arrow.up", "arrow.clockwise", "trash", "line.3.horizontal"]
+
+        var offenders: [String] = []
+        var audited = 0
+        var knownSkipped = 0
+
+        for tab in ["日历", "黄历", "AI 助手", "我的"] {
+            let tabButton = app.tabBars.buttons[tab]
+            XCTAssertTrue(tabButton.waitForExistence(timeout: 10), "应有「\(tab)」Tab")
+            tabButton.tap()
+            // 等首屏稳定（AI/我的页有异步内容）
+            _ = app.buttons.firstMatch.waitForExistence(timeout: 5)
+
+            for button in app.buttons.allElementsBoundByIndex {
+                guard button.exists else { continue }
+                audited += 1
+                let labelText = button.label
+                if labelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // 已知未修项：按子元素标识精确放过（见 knownUnlabeledControls）
+                    let childIDs = Set(button.descendants(matching: .any).allElementsBoundByIndex
+                        .map(\.identifier).filter { !$0.isEmpty })
+                    if childIDs.contains(where: { Self.knownUnlabeledControls[$0] != nil }) {
+                        knownSkipped += 1
+                        continue
+                    }
+                    // 诊断信息：把肇事元素本身的描述与它在树里的邻居一起报出来，
+                    // 否则只凭 frame 猜不出是哪一个控件（项目里踩过"按 frame 猜"的坑）。
+                    let dump = button.debugDescription
+                        .split(separator: "\n")
+                        .prefix(6)
+                        .joined(separator: " | ")
+                    offenders.append("[\(tab)] 按钮无标签: frame=\(button.frame) 详情: \(dump)")
+                } else if knownSymbolNames.contains(labelText) {
+                    offenders.append("[\(tab)] 按钮标签是 SF Symbol 名「\(labelText)」: frame=\(button.frame)")
+                }
+            }
+        }
+
+        // 诊断：把「日历」屏全部按钮列出来。肇事元素不能靠 frame 猜——
+        // 第一版就猜错过（以为是「+」或工具栏菜单，实际两者代码里都已有标签）。
+        app.tabBars.buttons["日历"].tap()
+        var calendarDump: [String] = []
+        for button in app.buttons.allElementsBoundByIndex where button.exists {
+            calendarDump.append("label='\(button.label)' id='\(button.identifier)' frame=\(button.frame)")
+        }
+
+        XCTAssertGreaterThan(audited, 20, "审计到的按钮太少（\(audited)），可能没真的走完四个 Tab")
+        XCTAssertEqual(knownSkipped, Self.knownUnlabeledControls.count,
+                       "已知未修项应恰好各命中一次（当前 \(knownSkipped)/\(Self.knownUnlabeledControls.count)）——"
+                       + "若某条被修好，请从 knownUnlabeledControls 里删掉它，否则这条会提醒你")
+        let report = "日历屏全部按钮：\n" + calendarDump.joined(separator: "\n")
+            + "\n---\n以下按钮缺少可读标签（VoiceOver 只会读出「按钮」或英文符号名）：\n"
+            + offenders.joined(separator: "\n")
+        XCTAssertTrue(offenders.isEmpty, report)
+    }
+
     // MARK: - Flow 12：年视图月卡的无障碍（P3-6）
 
     /// 年视图原先用 `.contentShape(Rectangle()) + onTapGesture` 点整张月卡：
