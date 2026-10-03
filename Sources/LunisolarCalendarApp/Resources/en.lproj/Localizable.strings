@@ -495,3 +495,7 @@
 "在此与 AI 对话，安排日程与倒数日" = "Chat with AI to schedule events and countdowns";
 "所有事件按时间线汇集于此" = "All events, gathered on a timeline";
 "外观、同步、数据与关于信息" = "Appearance, sync, data and about";
+
+/* P3-6 年视图：月卡无障碍标签与提示 */
+"%@，%d 项日程" = "%@, %d events";
+"选择该月份" = "Select this month";

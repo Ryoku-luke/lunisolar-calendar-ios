@@ -634,7 +634,37 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 | ~~**P3-3 修 3 处漏译**~~ ✅ 2026-10-02 | `Views/WeatherCardView.swift:101`、`Views/SelectedDayCardView.swift:46`、`Views/CalendarMonthView.swift:381`（`Text(verbatim:)` 让英文界面显示「9月」） | 4 语言表 key 齐备；英文界面实测无中文 | 小改动 |
 | ~~**P3-4 Dynamic Type 截断**~~ ✅ 2026-10-02 | 大号数字（`numeralXL` 56pt）被限制在 `.frame(width: 92)` / `.frame(width: 110)`（`Views/SelectedDayCardView.swift:23-31`、`Views/DayDetailView.swift:85-92`）→ 辅助字号下截断 | 最大辅助字号下不截断、不重叠 | 无障碍硬缺口 |
 | **P3-5 性能** | ①`Views/AllEventsView.swift` 每次 body 约 10 轮 O(N) 全量扫描（`:337-341` 起），搜索逐键触发 → 改为算一次缓存；②`Views/YearOverviewView.swift:193-238` 主线程同步算 365 天 + 每日新建 `DateFormatter` + 约 440 个 `AnyView` → 移到后台/复用 formatter | 大库（数百事件）下横滑与搜索无卡顿 | 建议先加性能基线再改 |
-| **P3-6 无障碍覆盖** | 29 个视图文件中 23 个零 `accessibilityLabel/Hint`；年视图约 440 个可点格无标签/ID 且点击目标 16–20pt（低于 44pt HIG） | VoiceOver 能走通月历/年视图/日期跳转 | 可与 P4-1 合并 |
+| **P3-6 无障碍覆盖**（年视图 ✅ 2026-10-03；其余待做）| 29 个视图文件中 23 个零 `accessibilityLabel/Hint`；年视图约 440 个可点格无标签/ID 且点击目标 16–20pt（低于 44pt HIG） | VoiceOver 能走通月历/年视图/日期跳转 | 可与 P4-1 合并 |
+
+### P3-6 无障碍覆盖 · 年视图 ✅ 已完成（2026-10-03）
+
+**先纠正计划里的描述**：「年视图约 440 个可点格、点击目标 16–20pt」不准确——
+月卡的**命中区域是整张卡**（`.contentShape + onTapGesture`，远大于 44pt），16–20pt 的日期格
+只是装饰、本来就不可点。真正的缺口是另外两条：
+
+1. **用 gesture 而不是 `Button`**：VoiceOver 拿不到「按钮」特征与激活语义，
+   等于一张读不出用途的图；
+2. **整卡没有任何标签**，而卡内 43 个迷你日期格会**逐个**被朗读。
+
+**改法**（视觉与语义拆开）：
+- 视觉月卡在外面并 `.accessibilityHidden(true)`；`Button` 只承载语义，
+  用 `Color.clear + contentShape` 覆盖整卡命中区；
+- 标签 = 月份名（有日程时补「，N 项日程」）+ 提示「选择该月份」（两条新 key × 4 语言）。
+
+**踩到并值得记住的 SwiftUI 行为**：**`Button` 会丢弃 label 内部的 accessibility 修饰符**。
+我先试了「Button { miniMonthCard } 里加 `.accessibilityElement(children: .ignore)`」和
+「label 内两个网格加 `.accessibilityHidden(true)`」，两种写法实测**卡内 43 个迷你日期格
+仍逐个暴露**（UI 测试断言 `card.staticTexts.count == 0` 直接量到 43）。
+只有把视觉内容移到 Button **外面**再隐藏才有效——这条已写进代码注释。
+
+**验证**：新增 `testFlow12_...`（第 15 条 UI 测试）——12 张月卡都是按钮、宽高 ≥44pt、
+卡内 0 个暴露子元素；并额外断言**点月卡仍会跳月**（结构从手势换成覆盖层按钮，
+必须证明点击行为没被破坏）。
+iPhone 通道 15 条（3 skip）/ iPad 通道 15 条（10 skip）**全绿**；本地 412 用例 × 4 时区 0 失败。
+**证伪**：改回 `onTapGesture` → 测试以「年视图应有名为「一月」的月卡按钮」变红。
+
+**仍待做（P3-6 其余部分）**：`SettingsView`、`QingheUIComponents`、小组件/灵动活动视图等
+约 15 个 UI 文件仍是零无障碍修饰符；下一条按「纯图标控件给文本替代 + 关键控件 ≥44pt」推进。
 
 ### P3-4 Dynamic Type 截断 ✅ 已完成（2026-10-02）
 

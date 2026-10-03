@@ -79,9 +79,27 @@ struct YearOverviewView: View {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 14) {
                     ForEach(1...12, id: \.self) { month in
-                        miniMonthCard(month)
-                            .contentShape(Rectangle())
-                            .onTapGesture { selectMonth(month) }
+                        // P3-6：原先用 `.contentShape + onTapGesture` —— VoiceOver 拿不到
+                        // 「按钮」特征、也没有激活语义，等于一张读不出用途的图。
+                        //
+                        // 结构上刻意把「视觉」与「语义」拆开：视觉月卡在外面并
+                        // `accessibilityHidden`，Button 只承载语义、用透明层覆盖整卡命中区。
+                        // 原因是 SwiftUI **会丢弃 Button label 内部的 accessibility 修饰符**——
+                        // 把 `.accessibilityHidden` / `.accessibilityElement(children: .ignore)`
+                        // 写在 label 里时，实测卡内 43 个迷你日期格仍逐个暴露（两种写法都试过）。
+                        ZStack {
+                            miniMonthCard(month)
+                                .accessibilityHidden(true)   // 装饰：信息由按钮标签承载
+
+                            Button {
+                                selectMonth(month)
+                            } label: {
+                                Color.clear.contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(monthCardAccessibilityLabel(month))
+                            .accessibilityHint(NSLocalizedString("选择该月份", comment: "年视图：轻点某月卡片跳到该月"))
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -107,6 +125,19 @@ struct YearOverviewView: View {
         .presentationDragIndicator(.visible)
     }
 
+    /// 月卡的无障碍标签：月份名（有日程时补一句数量）。
+    ///
+    /// 卡内是迷你网格（几十个小字号日期格），VoiceOver 逐格朗读毫无意义且极其冗长，
+    /// 所以整卡合成一个元素（见 `.accessibilityElement(children: .ignore)`），
+    /// 信息量由这一个标签承载。
+    private func monthCardAccessibilityLabel(_ month: Int) -> String {
+        let name = monthName(month)
+        let eventDayCount = marks[month]?.eventDays.count ?? 0
+        guard eventDayCount > 0 else { return name }
+        return String(format: NSLocalizedString("%@，%d 项日程", comment: "年视图：月卡无障碍标签（月份 + 有日程的天数）"),
+                      name, eventDayCount)
+    }
+
     // MARK: - 月卡
 
     private func miniMonthCard(_ month: Int) -> some View {
@@ -128,12 +159,14 @@ struct YearOverviewView: View {
                         .foregroundStyle(Color.secondary)
                 }
             }
+            .accessibilityHidden(true)   // 装饰：信息由月卡标签承载
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 3) {
                 ForEach(0..<cellsCount(m), id: \.self) { i in
                     miniDayCell(index: i, marks: m, month: month)
                 }
             }
+            .accessibilityHidden(true)   // 装饰：信息由月卡标签承载（一张卡一个元素）
         }
         .padding(8)
         .background(

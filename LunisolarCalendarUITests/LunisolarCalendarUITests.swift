@@ -704,6 +704,73 @@ final class LunisolarCalendarUITests: XCTestCase {
                        "「设置」不应在菜单里重复——底部「我的」Tab 已承担")
     }
 
+    // MARK: - Flow 12：年视图月卡的无障碍（P3-6）
+
+    /// 年视图原先用 `.contentShape(Rectangle()) + onTapGesture` 点整张月卡：
+    /// **VoiceOver 拿不到「按钮」特征与激活语义**，卡内几十个迷你日期格还会被逐个朗读，
+    /// 而整张卡没有任何标签。改法：`Button` + 整卡一个标签 + 装饰网格 `accessibilityHidden`。
+    ///
+    /// 这条测试把「可量化」的部分钉住：12 张月卡都是**按钮**、命中区域 ≥44pt（HIG）、
+    /// 卡内不再暴露独立文本元素（已合成为一个元素）。
+    func testFlow12_yearOverviewMonthCardsAreAccessibleButtons() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "iPhone 上从月历菜单进年视图；iPad 的入口在侧栏（可后续补一条）")
+        let app = launchApp()
+
+        let menu = element(app, ID.monthMenu)
+        XCTAssertTrue(menu.waitForExistence(timeout: 10), "日历页应有工具栏入口菜单")
+        menu.tap()
+        let dateJump = app.buttons["跳转到日期"]
+        XCTAssertTrue(dateJump.waitForExistence(timeout: 5))
+        dateJump.tap()
+
+        let yearEntry = app.buttons["全年视图"]
+        XCTAssertTrue(yearEntry.waitForExistence(timeout: 5), "跳转面板应有「全年视图」入口")
+        yearEntry.tap()
+
+        // 年视图的 12 张月卡：标签就是本地化后的月份名（空数据下不带日程数）。
+        // 测试进程自己按 zh-Hans 算出期望名，顺带钉住「月卡标题确实本地化」。
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.setLocalizedDateFormatFromTemplate("MMMM")
+        let calendar = Calendar(identifier: .gregorian)
+        let year = calendar.component(.year, from: Date())
+
+        for month in 1...12 {
+            var dc = DateComponents(); dc.year = year; dc.month = month; dc.day = 1
+            let date = try XCTUnwrap(calendar.date(from: dc), "\(year) 年 \(month) 月 应能算出一个日期")
+            let expectedName = formatter.string(from: date)
+            let card = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", expectedName)).firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 3),
+                          "年视图应有名为「\(expectedName)」的月卡按钮（原先它是 onTapGesture，不是按钮）")
+            XCTAssertGreaterThanOrEqual(card.frame.width, 44,
+                                        "「\(expectedName)」月卡命中宽度应 ≥44pt（HIG）")
+            XCTAssertGreaterThanOrEqual(card.frame.height, 44,
+                                        "「\(expectedName)」月卡命中高度应 ≥44pt（HIG）")
+            XCTAssertEqual(card.staticTexts.count, 0,
+                           "「\(expectedName)」卡内几十个迷你日期格是装饰，不应作为独立元素暴露")
+        }
+
+        // 结构从 `onTapGesture` 换成了「透明覆盖层 Button」，所以必须证明
+        // **点击行为本身没被破坏**：点某个月的卡，年视图收起、日历跳到该月。
+        let monthHeaderFormatter = DateFormatter()
+        monthHeaderFormatter.locale = Locale(identifier: "zh_Hans_CN")
+        monthHeaderFormatter.calendar = Calendar(identifier: .gregorian)
+        monthHeaderFormatter.setLocalizedDateFormatFromTemplate("MMM")
+        var marchDC = DateComponents(); marchDC.year = year; marchDC.month = 3; marchDC.day = 1
+        let marchDate = try XCTUnwrap(calendar.date(from: marchDC))
+        let marchCardName = formatter.string(from: marchDate)          // 年视图卡片：三月
+        let marchHeaderName = monthHeaderFormatter.string(from: marchDate)  // 月历表头：3月
+
+        let marchCard = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", marchCardName)).firstMatch
+        XCTAssertTrue(marchCard.waitForExistence(timeout: 3))
+        marchCard.tap()
+        XCTAssertTrue(app.staticTexts[marchHeaderName].waitForExistence(timeout: 5),
+                      "点「\(marchCardName)」卡应跳到该月（月历表头显示「\(marchHeaderName)」）——"
+                      + "换成覆盖层 Button 后点击行为必须仍然有效")
+    }
+
     // MARK: - Flow 9：iPad 侧栏的两处结构变更（批次 3）
 
     /// 两件事：
