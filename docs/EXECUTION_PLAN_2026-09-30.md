@@ -1417,6 +1417,6 @@ test plan 时会重写 `TestableReference`，而 `parallelizable` 在新格式�
 `testSelectedFillMeetsAAWithWhiteText`（守住达标）：断言新填充白字 ≥4.5、原 `appTint` 确实 <4.5、
 且两者不同。**谁把填充改回 `appTint`，它会红。**
 
-**验证**：428 用例 × 4 时区 0 失败；macOS + iOS SDK 构建 0 警告。
+**验证**：427 用例 × 4 时区 0 失败（数量未变：一条测试被替换而非新增）；macOS + iOS SDK 构建 0 警告。
 UI 两通道未重跑：这是**纯色值改动**，而 UI 用例只断言结构/文案、不断言颜色，
 重跑无法提供额外信息（视觉确认可用截图）。
