@@ -856,6 +856,29 @@ iPhone 通道 15 条（3 skip）/ iPad 通道 15 条（10 skip）**全绿**；�
 
 **P3-5 只剩**：`AllEventsView` 每次 body 约 10 轮 O(N) 扫描（照年视图那套：先建基线再改）。
 
+**2026-10-04 读了码，把扫描清单钉下来**（`Views/AllEventsView.swift`，454 行）——
+计划说「约 10 轮 O(N) 扫描」，读下来确实如此，具体来源是**计算属性被反复求值**：
+
+| 位置 | 扫描 |
+|---|---|
+| `filteredEvents`（339-340）| **2 遍**（两个链式 `filter`）|
+| `pastEvents`（348）| 1 遍（对 `filteredEvents`）|
+| `upcomingGroups`（353）| 1 遍 + 分组 |
+| `visibleEvents`（364）| 1 遍 |
+| `allSelected`（368）| 1 遍 |
+| a11y 文案（430）| 又访问一次 `filteredEvents` → **又 2 遍** |
+
+关键点：`filteredEvents` 是**计算属性**，被 `pastEvents` / `upcomingGroups` / `visibleEvents` /
+无障碍文案各访问一次 → 每次都重新跑那 2 遍 filter。所以实际扫描次数 ≈ 6–10 遍，
+且随事件数线性增长（全量日程页对重度用户最明显）。
+
+**下一步（未开工，建议单开一轮做）**：把这套派生抽成**一次遍历**的纯函数
+（如 `AllEventsDerived.compute(events:typeFilter:showCompleted:showPast:now:)`，
+单趟分出 filtered/past/upcoming/groups），配一条 `measure` 基线（不同 N：
+100 / 1,000 / 10,000 条），然后像年视图那次一样给出改前/改后数字。
+**为什么这轮不动手**：这是 454 行视图的派生重构，要改视图取值方式、跑 UI 两通道，
+而本轮上下文已接近尾声——半成品比不动更糟。扫描清单与做法留在这里，下轮可直接开工。
+
 ### P3-4 Dynamic Type 截断 ✅ 已完成（2026-10-02）
 
 **缺陷**：日期胶囊里的数字用 `AppTheme.Font.numeralXL`（基准 56pt，经 `UIFontMetrics`
