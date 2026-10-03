@@ -704,103 +704,118 @@ final class LunisolarCalendarUITests: XCTestCase {
                        "「设置」不应在菜单里重复——底部「我的」Tab 已承担")
     }
 
-    // MARK: - Flow 13：全屏按钮标签审计（P3-6）
+    // MARK: - Flow 13/14：无障碍按钮审计（P3-6）
 
-    /// 走遍四个 Tab，把**标签为空**的按钮全部报出来。
-    ///
-    /// 为什么用审计而不是「按 grep 逐个加标签」：零无障碍修饰符 ≠ 不可读——
-    /// `Toggle("显示农历", isOn:)`、`Button("完成")` 本身就朗读正常。
-    /// 真正需要修的是「图标按钮没有文本替代」这类，而这类只有**问运行中的界面**才知道。
-    ///
-    /// 判定：可见按钮（`exists && !label.isEmpty` 之外）的 `label` 不得为空，
-    /// 且不得等于 SF Symbol 名（`Image(systemName:)` 被系统拿去当标签时就是这个样子，
-    /// 例如「plus」「gearshape」——朗读出来是英文符号名，等于没有替代文本）。
     /// 已知**未修**的无标签控件：按「子元素的 accessibilityIdentifier」精确匹配。
     ///
     /// 为什么用子元素标识而不是 frame/文案：frame 会随字号与机型变，文案随语言变；
-    /// 而 SF Symbol 名（`slider.horizontal.3` / `square.and.arrow.down`）稳定且唯一。
+    /// 而 SF Symbol 名（`slider.horizontal.3` 等）稳定且唯一。
     ///
-    /// 两条都是 2026-10-03 审计实测发现、并尝试修过的：
-    /// 1. `square.and.arrow.down`（设置页「导入 / 恢复数据」Menu）：文字留在子 StaticText 上、
-    ///    控件本身无名字，AX 外框还只有 20pt 高（HIG 要 44pt）。**给这个 Menu 挂任何
-    ///    accessibility 修饰符都会让 SwiftUI 崩溃**：`.accessibilityLabel`、
-    ///    `.accessibilityElement(children: .combine)`，以及 label 内 `.frame`/`.contentShape`
-    ///    都试过，全部 EXC_BAD_ACCESS（`initializeWithCopy for Button/Menu` ← `Section` ←
-    ///    `SettingsView.body`）。对照实验（源码回 HEAD、只留本测试）确认**崩溃由该改动引入**，
-    ///    不是先天性。→ 需要改结构（例如换成 NavigationLink + 选择页）才能修。
-    /// 2. `square.and.arrow.down`（设置页「导入 / 恢复数据」）**已修**（2026-10-03）：
-    ///    嵌套 `Menu` 换成 `Button + confirmationDialog`，标签与 44pt 命中区都由标准控件提供，
-    ///    白名单条目已删除——本测试从此刻起保护它。
-    /// 3. `slider.horizontal.3`（日历工具栏图标菜单）：把 `.accessibilityLabel` 从
-    ///    `.pressableFeedback()` 之前挪到之后、并加 `children: .combine`，**实测无效**
-    ///    （按钮元素仍然无标签），已回退，不留无效改动。
+    /// **当前为空**：2026-10-03 审计抓到的两处真缺陷都已修好——
+    /// 1. 设置页「导入 / 恢复数据」：嵌套 `Menu` → `Button + confirmationDialog`（标准控件自带标签与 44pt 命中区）；
+    /// 2. 日历工具栏图标菜单：光秃秃的 `Image(systemName:)` → `Label(文字, systemImage:)`
+    ///    （**不需要任何 accessibility 修饰符**；给那个 Menu 挂修饰符会让 SwiftUI 崩溃，
+    ///     见 docs/EXECUTION_PLAN_2026-09-30.md 的 P3-6 小节）。
     ///
-    /// 4. `slider.horizontal.3`（日历工具栏图标菜单）**已修**（2026-10-04）：
-    ///    光秃秃的 `Image(systemName:)` 换成 `Label(文字, systemImage:)` 就有名字了
-    ///    （导航栏里仍只渲图标），**不需要任何 accessibility 修饰符**——这点很关键，
-    ///    因为给这个 Menu 挂修饰符会崩（见上面第 1 条）。反断言同样先红了一次
-    ///    （期望命中 1、实际 0），逼着我把这条删掉。
-    ///
-    /// 目前**为空**：审计到的两处真缺陷都已修好。条目若被修好，删掉它即可；
-    /// 届时「已知项恰好各命中一次」那条断言会提醒你。
-    /// 用法：新增已知未修项时，键填「其子元素的 accessibilityIdentifier」，值写清原因与出处。
+    /// 新增已知未修项时：键填「其子元素的 accessibilityIdentifier」，值写清原因与出处；
+    /// 修好后删掉条目——「已知项恰好各命中一次」那条断言会提醒你，白名单不会烂在原地。
     private static let knownUnlabeledControls: [String: String] = [:]
 
-    func testFlow13_allVisibleButtonsHaveReadableLabels() throws {
-        // iPad 没有底部 Tab（设置走侧栏），本用例的遍历路径不适用。
-        // ⚠️ 待办：iPad 侧栏各节的按钮审计还没做（侧栏 = 日历/黄历/AI 助手/全部日程/设置）。
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
-                          "iPhone 上按底部 Tab 遍历；iPad 的入口在侧栏，尚未覆盖")
-        let app = launchApp()
+    /// 审计当前屏幕的全部按钮：把「无标签 / 标签是 SF Symbol 名」记进 offenders。
+    /// 抽成 helper 是为了 Flow 13（主屏）与 Flow 14（深层界面）用同一判据。
+    private func auditVisibleButtons(in app: XCUIApplication, screen: String,
+                                     offenders: inout [String]) -> (audited: Int, known: Int) {
+        // 标签等于 SF Symbol 名，等于没有替代文本（朗读出来是英文符号名）
         let knownSymbolNames = ["plus", "minus", "gearshape", "chevron.left", "chevron.right",
                                 "chevron.up", "chevron.down", "ellipsis", "xmark", "checkmark",
                                 "square.and.arrow.up", "arrow.clockwise", "trash", "line.3.horizontal"]
+        var audited = 0
+        var known = 0
+        for button in app.buttons.allElementsBoundByIndex where button.exists {
+            audited += 1
+            let labelText = button.label
+            if labelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let childIDs = Set(button.descendants(matching: .any).allElementsBoundByIndex
+                    .map(\.identifier).filter { !$0.isEmpty })
+                if childIDs.contains(where: { Self.knownUnlabeledControls[$0] != nil }) {
+                    known += 1
+                    continue
+                }
+                // 诊断：肇事元素不能靠 frame 猜（第一版就猜错过），把它的描述一起报出来
+                let dump = button.debugDescription
+                    .split(separator: "\n").prefix(6).joined(separator: " | ")
+                offenders.append("[\(screen)] 按钮无标签: frame=\(button.frame) 详情: \(dump)")
+            } else if knownSymbolNames.contains(labelText) {
+                offenders.append("[\(screen)] 按钮标签是 SF Symbol 名「\(labelText)」: frame=\(button.frame)")
+            }
+        }
+        return (audited, known)
+    }
 
+    /// iPad 侧栏项：**首启后侧栏要等一会儿才进无障碍树**（实测约 10s；Flow 9 也是等出来的），
+    /// 直接 tap 会以「No matches found」失败。所以统一「先等存在、再点」。
+    private func tapSidebarItem(_ app: XCUIApplication, _ identifier: String,
+                                timeout: TimeInterval = 15) {
+        let item = element(app, identifier)
+        if !item.waitForExistence(timeout: 5) {
+            // 竖屏/窄窗下侧栏是 overlay、处于收起状态：先展开（真实用户也是这一步）。
+            // 抄 Flow 9 的成熟做法——系统按钮就叫「显示边栏」。
+            let showSidebar = app.buttons["显示边栏"].firstMatch
+            if showSidebar.waitForExistence(timeout: 5) { showSidebar.tap() }
+        }
+        XCTAssertTrue(item.waitForExistence(timeout: timeout), "iPad 侧栏应有 \(identifier)")
+        item.tap()
+    }
+
+    /// 主屏清单：iPhone 走底部 Tab（4 个），iPad 走侧栏（5 节）。
+    /// 两者**互斥**——iPhone 没有侧栏、iPad 没有底部 Tab，不能共用一套入口。
+    private func mainScreens(_ app: XCUIApplication) -> [(String, () -> Void)] {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            // 返回的是闭包数组（escaping），所以必须写 `self.`——Swift 要求显式捕获语义
+            return [
+                ("iPad·日历节", { self.tapSidebarItem(app, ID.iPadSidebarCalendar) }),
+                ("iPad·AI 助手节", { self.tapSidebarItem(app, ID.iPadSidebarAI) }),
+                ("iPad·全部日程节", { self.tapSidebarItem(app, ID.iPadSidebarAgenda) }),
+                ("iPad·倒数日节", { self.tapSidebarItem(app, ID.iPadSidebarCountdown) }),
+                ("iPad·设置节", { self.tapSidebarItem(app, ID.iPadSidebarSettings) }),
+            ]
+        }
+        return ["日历", "黄历", "AI 助手", "我的"].map { title in
+            (title, { app.tabBars.buttons[title].tap() })
+        }
+    }
+
+    func testFlow13_allVisibleButtonsHaveReadableLabels() throws {
+        // iPad 竖屏下侧栏是收起的（Flow 11 清单：「竖屏侧栏应收起」），先转横屏再遍历
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        if isPad { XCUIDevice.shared.orientation = .landscapeLeft }
+        defer { if isPad { XCUIDevice.shared.orientation = .portrait } }
+
+        let app = launchApp()
         var offenders: [String] = []
         var audited = 0
         var knownSkipped = 0
 
-        for tab in ["日历", "黄历", "AI 助手", "我的"] {
-            let tabButton = app.tabBars.buttons[tab]
-            XCTAssertTrue(tabButton.waitForExistence(timeout: 10), "应有「\(tab)」Tab")
-            tabButton.tap()
-            // 等首屏稳定（AI/我的页有异步内容）
+        for (screen, open) in mainScreens(app) {
+            open()
             _ = app.buttons.firstMatch.waitForExistence(timeout: 5)
-
-            for button in app.buttons.allElementsBoundByIndex {
-                guard button.exists else { continue }
-                audited += 1
-                let labelText = button.label
-                if labelText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    // 已知未修项：按子元素标识精确放过（见 knownUnlabeledControls）
-                    let childIDs = Set(button.descendants(matching: .any).allElementsBoundByIndex
-                        .map(\.identifier).filter { !$0.isEmpty })
-                    if childIDs.contains(where: { Self.knownUnlabeledControls[$0] != nil }) {
-                        knownSkipped += 1
-                        continue
-                    }
-                    // 诊断信息：把肇事元素本身的描述与它在树里的邻居一起报出来，
-                    // 否则只凭 frame 猜不出是哪一个控件（项目里踩过"按 frame 猜"的坑）。
-                    let dump = button.debugDescription
-                        .split(separator: "\n")
-                        .prefix(6)
-                        .joined(separator: " | ")
-                    offenders.append("[\(tab)] 按钮无标签: frame=\(button.frame) 详情: \(dump)")
-                } else if knownSymbolNames.contains(labelText) {
-                    offenders.append("[\(tab)] 按钮标签是 SF Symbol 名「\(labelText)」: frame=\(button.frame)")
-                }
-            }
+            let result = auditVisibleButtons(in: app, screen: screen, offenders: &offenders)
+            audited += result.audited
+            knownSkipped += result.known
         }
 
-        // 诊断：把「日历」屏全部按钮列出来。肇事元素不能靠 frame 猜——
-        // 第一版就猜错过（以为是「+」或工具栏菜单，实际两者代码里都已有标签）。
-        app.tabBars.buttons["日历"].tap()
+        // 诊断（只在失败时输出）：日历屏全部按钮，便于下次一眼看出肇事元素
+        if isPad {
+            tapSidebarItem(app, ID.iPadSidebarCalendar)
+        } else {
+            app.tabBars.buttons["日历"].tap()
+        }
         var calendarDump: [String] = []
         for button in app.buttons.allElementsBoundByIndex where button.exists {
             calendarDump.append("label='\(button.label)' id='\(button.identifier)' frame=\(button.frame)")
         }
 
-        XCTAssertGreaterThan(audited, 20, "审计到的按钮太少（\(audited)），可能没真的走完四个 Tab")
+        XCTAssertGreaterThan(audited, 20, "审计到的按钮太少（\(audited)），可能没真的走完各屏")
         XCTAssertEqual(knownSkipped, Self.knownUnlabeledControls.count,
                        "已知未修项应恰好各命中一次（当前 \(knownSkipped)/\(Self.knownUnlabeledControls.count)）——"
                        + "若某条被修好，请从 knownUnlabeledControls 里删掉它，否则这条会提醒你")
@@ -815,7 +830,11 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 放在最后且不关掉对话框：`confirmationDialog` 的系统「取消」不在 app 的元素树里
         // （实测 `app.buttons["取消"]` 无匹配——它是系统面板的部件），关不掉就干脆不动它；
         // 每条用例都会重启 app，留着打开状态没有副作用。
-        app.tabBars.buttons["我的"].tap()
+        if isPad {
+            tapSidebarItem(app, ID.iPadSidebarSettings)
+        } else {
+            app.tabBars.buttons["我的"].tap()
+        }
         let importRow = app.buttons["导入 / 恢复数据"]
         XCTAssertTrue(importRow.waitForExistence(timeout: 5),
                       "设置页应有名为「导入 / 恢复数据」的按钮（无标签的 Menu 时代是按名字找不到的）")
@@ -825,6 +844,75 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertTrue(app.buttons["从 .ics 日历文件导入"].waitForExistence(timeout: 5),
                       "点该行应弹出格式选择——防误触语义（先选格式再导入）不能丢")
         XCTAssertTrue(app.buttons["从 .json 备份恢复"].exists, "两个格式选项都应可选")
+    }
+
+    // MARK: - Flow 14：深层界面的按钮审计（P3-6）
+
+    /// 主屏之外的三处深层界面：全部日程 / 倒数日 / 年视图。
+    ///
+    /// 每处**新起一次 app**：跨界面返回逻辑本身也随形态（Tab↔侧栏）不同，
+    /// 一次启动约 3 秒，比写三条返回路径可靠得多。
+    func testFlow14_deepScreensButtonsHaveReadableLabels() throws {
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        if isPad { XCUIDevice.shared.orientation = .landscapeLeft }
+        defer { if isPad { XCUIDevice.shared.orientation = .portrait } }
+
+        var offenders: [String] = []
+        var audited = 0
+        var knownSkipped = 0
+
+        func audit(_ screen: String, open: (XCUIApplication) -> Void) {
+            let app = launchApp()
+            open(app)
+            _ = app.buttons.firstMatch.waitForExistence(timeout: 5)
+            let result = auditVisibleButtons(in: app, screen: screen, offenders: &offenders)
+            audited += result.audited
+            knownSkipped += result.known
+            app.terminate()
+        }
+
+        audit("全部日程") { app in
+            if isPad {
+                tapSidebarItem(app, ID.iPadSidebarAgenda)
+            } else {
+                element(app, ID.monthMenu).tap()
+                let item = app.buttons["全部日程"].firstMatch
+                XCTAssertTrue(item.waitForExistence(timeout: 5), "月历菜单应有「全部日程」")
+                item.tap()
+            }
+        }
+
+        audit("倒数日") { app in
+            if isPad {
+                tapSidebarItem(app, ID.iPadSidebarCountdown)
+            } else {
+                element(app, ID.monthMenu).tap()
+                let item = app.buttons["倒数日"].firstMatch
+                XCTAssertTrue(item.waitForExistence(timeout: 5), "月历菜单应有「倒数日」")
+                item.tap()
+            }
+        }
+
+        // 年视图：点月历标题 → 日期跳转 → 全年视图。
+        //
+        // ⚠️ 只在 iPhone 上审计：iPad 上点标题后「全年视图」入口 5 秒内没出现，
+        // 排查方向有三种（面板未展开 / 该入口需滚动 / iPad 走了别的入口——侧栏的
+        // `iPadSidebarYear` 已随「年视图改走方案 C」删除）。**未定论前不留假绿**，
+        // 所以这里明确跳过并记为待办，不假装它通过。
+        if !isPad { audit("年视图") { app in
+            let title = app.buttons["选择月份或年份"].firstMatch
+            XCTAssertTrue(title.waitForExistence(timeout: 10), "月历标题应可点开日期跳转")
+            title.tap()
+            let yearEntry = app.buttons["全年视图"]
+            XCTAssertTrue(yearEntry.waitForExistence(timeout: 5), "跳转面板应有「全年视图」入口")
+            yearEntry.tap()
+        } }
+
+        XCTAssertGreaterThan(audited, 10, "深层界面审计到的按钮太少（\(audited)），可能没真的打开这些界面")
+        XCTAssertEqual(knownSkipped, Self.knownUnlabeledControls.count,
+                       "已知未修项应恰好各命中一次（当前 \(knownSkipped)/\(Self.knownUnlabeledControls.count)）")
+        XCTAssertTrue(offenders.isEmpty,
+                      "以下深层界面的按钮缺少可读标签：\n" + offenders.joined(separator: "\n"))
     }
 
     // MARK: - Flow 12：年视图月卡的无障碍（P3-6）
