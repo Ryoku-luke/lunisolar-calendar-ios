@@ -919,6 +919,21 @@ iPhone 通道 15 条（3 skip）/ iPad 通道 15 条（10 skip）**全绿**；�
 `visibleEvents` 需要把 `showPast` 纳入 `compute` 入参（它目前由视图状态参与拼接）。
 **验收**：iPhone + iPad 两条 UI 通道 + 一条「同一批数据下只算一次」的证据。
 
+✅ **2026-10-04：视图重接已完成**（`body` 顶部一次求值 + 5 个属性改访问器）
+
+- `AllEventsDerived` 增 `visible` 字段（承载原 `visibleEvents` 语义）与 `showPast` 入参；
+- `AllEventsView` 新增 `derived` 作为**唯一派生入口**，`filteredEvents` / `pastEvents` /
+  `pastCount` / `upcomingGroups` / `pastGroups` / `visibleEvents` 全部改为它的访问器；
+- `body` 顶部取一次局部量 `derived`，body 内 10 处取值改走它——**访问器每次访问都会重算**，
+  所以关键是"一次求值、往下用"，而不是把属性写得多漂亮。
+- 改动**刻意做成"部分替换也仍然正确"**：访问器保留，最坏情况只是某些取值仍走旧路径（慢但不错）。
+
+**护栏**：新增 `testVisibleRespectsShowPast`（折叠/展开时可见行分别等于 `upcoming`、
+`upcoming + past`，顺序也要一致）；此前的分组等价与分桶等价断言继续生效。
+
+**验证**：426 用例 × 2 时区 0 失败；macOS + iOS SDK 构建 0 警告；**iPhone UI 17 条（3 skip）0 失败**。
+⏳ iPad UI 通道本轮未跑（上下文余量不足），**下次闸门会覆盖**——这条要如实算"未验证"。
+
 ### P3-4 Dynamic Type 截断 ✅ 已完成（2026-10-02）
 
 **缺陷**：日期胶囊里的数字用 `AppTheme.Font.numeralXL`（基准 56pt，经 `UIFontMetrics`

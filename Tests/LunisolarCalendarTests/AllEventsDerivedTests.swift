@@ -26,7 +26,7 @@ final class AllEventsDerivedTests: XCTestCase {
 
     func testSinglePassPartitionMatchesNaiveImplementation() {
         let events = makeEvents(500)
-        let derived = AllEventsDerived.compute(events: events, isIncluded: isIncluded, todayStart: todayStart)
+        let derived = AllEventsDerived.compute(events: events, isIncluded: isIncluded, todayStart: todayStart, showPast: true)
 
         let naivePast = events.filter { AllEventsGrouping.isPast($0, todayStart: todayStart) }
         let naiveUpcoming = events.filter { !AllEventsGrouping.isPast($0, todayStart: todayStart) }
@@ -43,7 +43,7 @@ final class AllEventsDerivedTests: XCTestCase {
         let events = makeEvents(100)
         let derived = AllEventsDerived.compute(events: events,
                                                isIncluded: { _ in false },
-                                               todayStart: todayStart)
+                                               todayStart: todayStart, showPast: true)
         XCTAssertTrue(derived.filtered.isEmpty)
         XCTAssertTrue(derived.past.isEmpty)
         XCTAssertTrue(derived.upcoming.isEmpty)
@@ -56,7 +56,7 @@ final class AllEventsDerivedTests: XCTestCase {
     /// （组头日期、每组事件 id 序列都要一致；ClampingTo 的差别也是语义的一部分。）
     func testGroupsMatchDirectGroupingCalls() {
         let events = makeEvents(300)
-        let derived = AllEventsDerived.compute(events: events, isIncluded: isIncluded, todayStart: todayStart)
+        let derived = AllEventsDerived.compute(events: events, isIncluded: isIncluded, todayStart: todayStart, showPast: true)
 
         let expectedUpcoming = AllEventsGrouping.groups(from: derived.upcoming, clampingTo: todayStart)
         let expectedPast = AllEventsGrouping.groups(from: derived.past)
@@ -71,10 +71,27 @@ final class AllEventsDerivedTests: XCTestCase {
 
     /// 空输入不得产生任何组（视图用 `upcomingGroups.isEmpty` 判空态，这条守住它）
     func testEmptyInputProducesNoGroups() {
-        let derived = AllEventsDerived.compute(events: [], isIncluded: isIncluded, todayStart: todayStart)
+        let derived = AllEventsDerived.compute(events: [], isIncluded: isIncluded, todayStart: todayStart, showPast: true)
         XCTAssertTrue(derived.filtered.isEmpty)
         XCTAssertTrue(derived.upcomingGroups.isEmpty)
         XCTAssertTrue(derived.pastGroups.isEmpty)
+    }
+
+    /// 视图的 `visibleEvents` 语义现在由这个入口承载：`showPast == false` 时可见行只有未过去，
+    /// `true` 时把已过去拼在后面（与原实现 `upcoming + (showPast ? past : [])` 同义）。
+    /// 重接视图后这条就是"可见行没变"的护栏。
+    func testVisibleRespectsShowPast() {
+        let events = makeEvents(200)
+        let withoutPast = AllEventsDerived.compute(events: events, isIncluded: isIncluded,
+                                                   todayStart: todayStart, showPast: false)
+        let withPast = AllEventsDerived.compute(events: events, isIncluded: isIncluded,
+                                                todayStart: todayStart, showPast: true)
+
+        XCTAssertEqual(withoutPast.visible.map(\.id), withoutPast.upcoming.map(\.id),
+                       "折叠已过去时，可见行 == 未过去")
+        XCTAssertEqual(withPast.visible.map(\.id), withPast.upcoming.map(\.id) + withPast.past.map(\.id),
+                       "展开时可见行 == 未过去 + 已过去（顺序也要一致）")
+        XCTAssertGreaterThan(withPast.visible.count, withoutPast.visible.count)
     }
 
     // MARK: 基线（旧多趟 vs 新单趟）
@@ -101,7 +118,7 @@ final class AllEventsDerivedTests: XCTestCase {
         let events = makeEvents(10_000)
         measure {
             for _ in 0..<5 {
-                _ = AllEventsDerived.compute(events: events, isIncluded: isIncluded, todayStart: todayStart)
+                _ = AllEventsDerived.compute(events: events, isIncluded: isIncluded, todayStart: todayStart, showPast: true)
             }
         }
     }

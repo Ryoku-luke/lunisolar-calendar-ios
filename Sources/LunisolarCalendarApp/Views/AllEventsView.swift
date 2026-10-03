@@ -64,6 +64,8 @@ struct AllEventsView: View {
     }
 
     var body: some View {
+        // 一次求值：body 内所有取值都走这个局部量（访问器每次访问都会重算）
+        let derived = self.derived
         List {
             Section {
                 Picker(NSLocalizedString("类型", comment: ""), selection: $typeFilter) {
@@ -81,10 +83,10 @@ struct AllEventsView: View {
                 Text(summaryText)
             }
 
-            if filteredEvents.isEmpty {
+            if derived.filtered.isEmpty {
                 // 空态由 overlay 呈现，这里不占位
                 EmptyView()
-            } else if upcomingGroups.isEmpty {
+            } else if derived.upcomingGroups.isEmpty {
                 Section {
                     Label(NSLocalizedString("没有即将到来的日程。", comment: ""), systemImage: "checkmark.circle")
                         .foregroundStyle(Color.secondaryLabel)
@@ -92,7 +94,7 @@ struct AllEventsView: View {
                 }
             }
 
-            ForEach(upcomingGroups, id: \.day) { group in
+            ForEach(derived.upcomingGroups, id: \.day) { group in
                 Section {
                     rows(group.events)
                 } header: {
@@ -101,16 +103,16 @@ struct AllEventsView: View {
             }
 
             // 已过去（一次性且早于今天）：默认折叠，避免历史日程把当前安排压到屏幕外
-            if pastCount > 0 {
+            if derived.past.count > 0 {
                 Section {
                     Toggle(isOn: $showPast) {
-                        Label(String(format: NSLocalizedString("显示已过去（%d 条）", comment: ""), pastCount),
+                        Label(String(format: NSLocalizedString("显示已过去（%d 条）", comment: ""), derived.past.count),
                               systemImage: "clock.arrow.circlepath")
                     }
                     .tint(Color.appTint)
                 }
                 if showPast {
-                    ForEach(pastGroups, id: \.day) { group in
+                    ForEach(derived.pastGroups, id: \.day) { group in
                         Section {
                             rows(group.events)
                         } header: {
@@ -158,7 +160,7 @@ struct AllEventsView: View {
                            : NSLocalizedString("全选", comment: "")) {
                         withAnimation(AppTheme.Motion.pressInOut) { toggleSelectAll() }
                     }
-                    .disabled(visibleEvents.isEmpty)
+                    .disabled(derived.visible.isEmpty)
                 }
                 Button(isSelecting
                        ? NSLocalizedString("完成", comment: "")
@@ -169,9 +171,9 @@ struct AllEventsView: View {
                         revealedByScroll = false   // 下次进入多选仍从"隐藏 → 滚动/勾选淡入"开始
                     }
                 }
-                // 用 visibleEvents 而不是 filteredEvents：若筛选结果全是"已过去"且当前处于
+                // 用 derived.visible 而不是 derived.filtered：若筛选结果全是"已过去"且当前处于
                 // 折叠状态，进多选后一个可勾选的行都没有（「全选」也灰着），只能再点「完成」退出。
-                .disabled(visibleEvents.isEmpty)
+                .disabled(derived.visible.isEmpty)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -189,7 +191,7 @@ struct AllEventsView: View {
             }
         )
         .overlay {
-            if filteredEvents.isEmpty {
+            if derived.filtered.isEmpty {
                 // 统一空态（四要素）。第四项是「清除筛选」：搜索/筛选把列表清空时，
                 // 只给一句说明，用户得自己逐项还原条件。
                 QingheEmptyView(
@@ -334,35 +336,40 @@ struct AllEventsView: View {
         QingheCalendarContext.userCalendar.startOfDay(for: Date())
     }
 
-    private var filteredEvents: [CalendarEvent] {
-        store.search(query: query)
-            .filter { typeFilter.matches($0.type) }
-            .filter { showCompleted || !$0.isCompleted }
+    /// 派生的**唯一入口**：一次遍历出「过滤 / 分桶 / 分组 / 可见行」（P3-5）。
+    ///
+    /// ⚠️ 下面 5 个属性都只是它的访问器，而**访问器每次访问都会重算**；
+    /// 所以 `body` 顶部先取一次局部量 `derived` 再往下用，避免同一批数据扫十几遍。
+    private var derived: AllEventsDerived {
+        AllEventsDerived.compute(
+            events: store.search(query: query),
+            isIncluded: { typeFilter.matches($0.type) && (showCompleted || !$0.isCompleted) },
+            todayStart: todayStart,
+            showPast: showPast
+        )
     }
+
+    private var filteredEvents: [CalendarEvent] { derived.filtered }
 
     /// 已过去：一次性、开始日早于今天，且今天已不再发生（规则见 AllEventsGrouping）
     private func isPast(_ event: CalendarEvent) -> Bool {
         AllEventsGrouping.isPast(event, todayStart: todayStart)
     }
 
-    private var pastEvents: [CalendarEvent] { filteredEvents.filter(isPast) }
-    private var pastCount: Int { pastEvents.count }
+    private var pastEvents: [CalendarEvent] { derived.past }
+    private var pastCount: Int { derived.past.count }
     private var upcomingGroups: [(day: Date, events: [CalendarEvent])] {
         // 组头从「今天」起算：跨天与重复日程的 startDate 可能早于今天（重复日程的锚点
         // 甚至在半年前），直接拿它当组头会显示历史日期，与「今天起优先」的承诺矛盾
-        AllEventsGrouping.groups(from: filteredEvents.filter { !isPast($0) }, clampingTo: todayStart)
+        derived.upcomingGroups
     }
-    private var pastGroups: [(day: Date, events: [CalendarEvent])] {
-        AllEventsGrouping.groups(from: pastEvents)
-    }
+    private var pastGroups: [(day: Date, events: [CalendarEvent])] { derived.pastGroups }
 
     // MARK: - 多选操作
 
     /// 当前可见行（已过去折叠时不计入）：全选只作用于此集合，
     /// 与"筛选变化即退出多选"一致——不让操作触及看不见的行
-    private var visibleEvents: [CalendarEvent] {
-        filteredEvents.filter { !isPast($0) } + (showPast ? pastEvents : [])
-    }
+    private var visibleEvents: [CalendarEvent] { derived.visible }
 
     private var isAllSelected: Bool {
         !visibleEvents.isEmpty && visibleEvents.allSatisfy { selection.contains($0.id) }

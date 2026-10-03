@@ -15,10 +15,13 @@ struct AllEventsDerived {
     let past: [CalendarEvent]
     let upcoming: [CalendarEvent]
     let upcomingGroups: [(day: Date, events: [CalendarEvent])]
+    /// 当前可见行（已过去折叠时不计入）——与原视图 `visibleEvents` 同义，
+    /// 由 `showPast` 决定是否把已过去拼在后面
+    let visible: [CalendarEvent]
     let pastGroups: [(day: Date, events: [CalendarEvent])]
 
     static let empty = AllEventsDerived(filtered: [], past: [], upcoming: [],
-                                        upcomingGroups: [], pastGroups: [])
+                                        upcomingGroups: [], visible: [], pastGroups: [])
 
     /// - Parameters:
     ///   - events: 已由 `store.search(query:)` 过滤过的候选集
@@ -27,6 +30,7 @@ struct AllEventsDerived {
     static func compute(events: [CalendarEvent],
                         isIncluded: (CalendarEvent) -> Bool,
                         todayStart: Date,
+                        showPast: Bool,
                         calendar: Calendar = QingheCalendarContext.userCalendar) -> AllEventsDerived {
         var filtered: [CalendarEvent] = []
         var past: [CalendarEvent] = []
@@ -48,6 +52,7 @@ struct AllEventsDerived {
             past: past,
             upcoming: upcoming,
             upcomingGroups: AllEventsGrouping.groups(from: upcoming, clampingTo: todayStart),
+            visible: showPast ? upcoming + past : upcoming,
             pastGroups: AllEventsGrouping.groups(from: past)
         )
     }
