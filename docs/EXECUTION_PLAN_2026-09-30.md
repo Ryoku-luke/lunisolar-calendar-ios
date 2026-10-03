@@ -1146,7 +1146,7 @@ macOS + iOS SDK 构建；UI 测试 target 类型检查。
 | D4 | 节气是否改为运行时计算 | P2-4 | 可一次性消除 9 年窗口，但改动大 |
 | D5 | 通知权限是否改到「首次添加提醒时」请求 | 未排期 | 现在只在设置页请求（`SettingsView.swift:146-150`），从不打开设置的用户**永远收不到通知**，而 `NotificationManager.swift:56` 的注释说会请求 → 注释与实现矛盾 |
 | D6 | **是否恢复导出/备份入口** | P2-1 | 远端 `1cc0b7f` 说明导出 UI 是**被主动移除**的产品决策、三个 `export*` 函数有意留作测试镜像。所以这是产品决策而非代码缺陷（详见 `HANDOFF_REVIEW` §4 B5 的更正） |
-| D8 | **`appTint` 当选中填充 + 白字只有 4.33:1（低于 AA 4.5）怎么处理** | P3-1 遗留 | 两个备选：①把控件层的 appTint 也压暗到达标（品牌色会变深）；②选中日改用黑字（`black on #4B6FF2` = 4.85:1 达标，但每天都变黑字，视觉变化更大）。现状由 `SelectedCellContrastTests.testAppTintSelectedFillRemainsAKnownGap` 钉住 |
+| D8 | ✅ **已决（2026-10-04）：只压「选中日填充」，不动品牌色** | P3-1 遗留 | 两个备选：①把控件层的 appTint 也压暗到达标（品牌色会变深）；②选中日改用黑字（`black on #4B6FF2` = 4.85:1 达标，但每天都变黑字，视觉变化更大）。现状由 `SelectedCellContrastTests.testAppTintSelectedFillRemainsAKnownGap` 钉住 |
 | D7 | **存储只读时要不要在界面上告诉用户** | 未排期 | `EventStore.storageIsReadOnly`（磁盘格式比本 App 新 / 版本标记读不懂）目前只写日志：那段时间用户的增删改**不会落盘**。要提示就得加 4 语言文案（并过 `LocalizationParity` 类的 key 数校验），属于产品决策 |
 
 ---
@@ -1397,3 +1397,26 @@ test plan 时会重写 `TestableReference`，而 `parallelizable` 在新格式�
 **关键日期**：**2026-12-02** 起 `swift test` 会开始报「放假安排」预警（`⚠️ 数据到期预警`），
 届时按 `docs/DATA_UPDATE_RUNBOOK.md` 补 2027 年放假安排即可。这条红是**设计如此**——
 它是强制更新数据的闹钟，不是 bug。
+
+### D8 已决并实施（2026-10-04）
+
+**问题**：选中日格子的填充是 `appTint`（#4B6FF2），白字只有 **4.33:1**——低于 AA 4.5，
+而格子里的农历行是小字号，必须达标。（这是 P3-1 当时留给产品决策的遗留项。）
+
+**决策**：**只给「选中日填充」一个压暗到刚好达标的 token（`SelectedCellFill`），
+不动 `appTint` 本身**。理由：
+- `#4B6FF2` 只需亮度降约 **5%** 就够（肉眼几乎无差），不必动整个品牌色；
+- 备选「选中日改黑字」会让同一品牌蓝底上一处白字、一处黑字，反而不一致，故未采用；
+- 按钮/强调色等处的品牌观感完全不变。
+
+**实现**：`SelectedCellFill.brandHex = AccentContrast.darkenedForWhiteText(hex: "#4B6FF2")`；
+`CalendarComponents` 的选中填充由 `Color.appTint` 改为 `SelectedCellFill.color`
+（只在**无节日强调色**时生效——有节日时仍用节日原色，见 P3-1）。
+
+**测试翻转**：原 `testAppTintSelectedFillRemainsAKnownGap`（钉住缺口）改为
+`testSelectedFillMeetsAAWithWhiteText`（守住达标）：断言新填充白字 ≥4.5、原 `appTint` 确实 <4.5、
+且两者不同。**谁把填充改回 `appTint`，它会红。**
+
+**验证**：428 用例 × 4 时区 0 失败；macOS + iOS SDK 构建 0 警告。
+UI 两通道未重跑：这是**纯色值改动**，而 UI 用例只断言结构/文案、不断言颜色，
+重跑无法提供额外信息（视觉确认可用截图）。

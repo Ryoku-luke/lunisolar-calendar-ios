@@ -149,14 +149,15 @@ final class SelectedCellContrastTests: XCTestCase {
     /// 不透明化之后 lunar 行从 3.83 提升到 4.33，但仍是缺口。
     ///
     /// 这条**故意钉住现状**：真要动品牌色就得先裁决 D8（改填充色 vs 改成黑字）。
-    func testAppTintSelectedFillRemainsAKnownGap() {
-        let appTintHex = "#4B6FF2"
-        let ratio = AccentContrast.whiteOn(hex: appTintHex)
-        XCTAssertLessThan(ratio, AccentContrast.threshold,
-                          "appTint 白字对比度已达标（\(String(format: "%.2f", ratio)):1）——"
-                          + "请同步更新执行计划里的 D8 与 DayAccent 顶部注释")
-        XCTAssertGreaterThan(ratio, 4.0, "至少不该比 4.33 更差")
-        // 反过来说：黑字在 appTint 上是达标的，这正是 D8 的备选方案
-        XCTAssertGreaterThanOrEqual(AccentContrast.onBlack(hex: appTintHex), AccentContrast.threshold)
+    /// D8 已修（2026-10-04）：选中日填充改用 `SelectedCellFill`——品牌色按「白字 AA」
+    /// 压到**刚好够**（亮度降约 5%），而不是用原 `appTint`（#4B6FF2 上白字只有 4.33:1）。
+    /// 这条从"钉住缺口"翻成"守住达标"：谁把填充改回 `appTint`，它会红。
+    func testSelectedFillMeetsAAWithWhiteText() {
+        XCTAssertGreaterThanOrEqual(AccentContrast.ratio("#FFFFFF", SelectedCellFill.brandHex),
+                                    AccentContrast.threshold,
+                                    "选中日填充上的白字必须达 AA")
+        XCTAssertLessThan(AccentContrast.ratio("#FFFFFF", "#4B6FF2"), AccentContrast.threshold,
+                          "原 appTint 确实不达标——这条记录我们为什么要换")
+        XCTAssertNotEqual(SelectedCellFill.brandHex, "#4B6FF2")
     }
 }

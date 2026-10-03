@@ -168,3 +168,17 @@ public struct DayAccent {
 }
 
 #endif
+
+/// 选中日格子的**填充色**（D8，2026-10-04）。
+///
+/// 为什么不能直接用 `appTint`（#4B6FF2）：白字在它上面只有 **4.33:1**，低于 AA 的 4.5——
+/// 而格子里那行农历是小字号，必须达标。
+///
+/// 取舍：**只压到刚好够**（亮度降约 5%，肉眼几乎无差），而不是把整个品牌色改暗——
+/// 按钮、强调色等处的 `appTint` 一点不动，品牌观感不变。备选方案（选中日改黑字）
+/// 会让同一品牌的蓝底上一处白字一处黑字，反而不一致，故未采用。
+public enum SelectedCellFill {
+    /// `#4B6FF2` 压到「白字 ≥4.5:1」的最小压暗结果
+    public static let brandHex = AccentContrast.darkenedForWhiteText(hex: "#4B6FF2")
+    public static var color: Color { Color(hex: brandHex) }
+}

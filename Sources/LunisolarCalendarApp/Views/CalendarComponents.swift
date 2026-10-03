@@ -100,7 +100,8 @@ struct DayCellView: View {
     /// 底色：仅「选中」实心填充；今日态红描边区分；**节日/节气不再浅染背景**
     /// （用户要求：除点击选择的日期外都不要"选择框"式展示）
     private var fillTint: Color? {
-        if isSelected { return cellAccent ?? Color.appTint }
+        // D8：无节日强调色时的选中填充走 SelectedCellFill（品牌色按白字 AA 压到刚好够）
+        if isSelected { return cellAccent ?? SelectedCellFill.color }
         return nil
     }
     var body: some View {
