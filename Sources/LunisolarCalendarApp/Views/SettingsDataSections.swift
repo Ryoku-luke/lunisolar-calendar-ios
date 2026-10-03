@@ -4,6 +4,32 @@ import SwiftUI
 extension SettingsView {
     // MARK: - 3. 数据（导入 / 恢复 + 系统数据导入）
 
+    /// 「存储当前为只读」提示（D7）。
+    ///
+    /// 为什么需要：只读时改动**静默不保存**，用户会以为「保存坏了」或「App 有 bug」。
+    /// 这里把状态直接说出来，并给出可操作的方向（清空间 + 重启）。只在只读时出现。
+    @ViewBuilder
+    var storageReadOnlySection: some View {
+        if store.storageIsReadOnly {
+            Section {
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(NSLocalizedString("存储当前为只读", comment: "设置页：存储只读提示标题"))
+                            .font(AppTheme.Font.bodyBold)
+                            .foregroundStyle(Color.systemOrange)
+                        Text(NSLocalizedString("改动暂时无法保存。可能是设备可用空间不足，或数据迁移未完成；请清理空间后重启 App。",
+                                               comment: "设置页：存储只读提示说明"))
+                            .font(AppTheme.Font.caption)
+                            .foregroundStyle(Color.secondaryLabel)
+                    }
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.systemOrange)
+                }
+            }
+        }
+    }
+
     var dataSection: some View {
         Section {
             // 误触优化：整行点击 = 先选格式（不再"点行主体直接走 .ics"，

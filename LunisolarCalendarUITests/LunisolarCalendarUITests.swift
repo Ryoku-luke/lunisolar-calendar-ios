@@ -62,7 +62,8 @@ final class LunisolarCalendarUITests: XCTestCase {
     // MARK: - 基础工具
 
     @discardableResult
-    private func launchApp() -> XCUIApplication {
+    /// - Parameter extra: 额外的启动参数（如 `-uitest-readonly-store`），默认不影响既有用例
+    private func launchApp(extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         // 固定语言/地区：否则英文模拟器下界面走 en.lproj，文案断言全部失配。
         // shots.sh --tour --lang 用 SHOTS_LANG 覆盖（截图巡游按指定语言出图）；
@@ -75,6 +76,7 @@ final class LunisolarCalendarUITests: XCTestCase {
         }
         // §7.1 数据隔离：空库启动，「空态 / 首次使用 / 无数据」类断言与真实容器无关
         app.launchArguments += ["-uitest-empty-store"]
+        app.launchArguments += extra
         app.launch()
         dismissSystemPermissionPromptIfNeeded()
         return app
@@ -702,6 +704,31 @@ final class LunisolarCalendarUITests: XCTestCase {
                        "「回到今天」不应在菜单里重复——工具栏「今天」按钮已是唯一入口")
         XCTAssertFalse(app.buttons["设置"].exists,
                        "「设置」不应在菜单里重复——底部「我的」Tab 已承担")
+    }
+
+    // MARK: - Flow 15：存储只读提示（D7）
+
+    /// 两个状态都要验：
+    /// 1. 正常启动 → **不得**出现只读提示（否则健康用户会被误吓）；
+    /// 2. `-uitest-readonly-store` 启动 → 必须出现，且文案说明「改动不会保存」。
+    ///
+    /// 为什么用启动参数：只读在真实环境里要求「目录不可写」，UI 测试造不出来；
+    /// 这与仓库既有的 `-uitest-empty-store` 是同一套注入机制。
+    func testFlow15_readOnlyStorageIsSurfacedOnlyWhenReadOnly() throws {
+        let healthy = launchApp()
+        healthy.tabBars.buttons["我的"].tap()
+        XCTAssertFalse(healthy.staticTexts["存储当前为只读"].waitForExistence(timeout: 3),
+                       "正常状态下不该出现只读提示——误报会让健康用户以为数据坏了")
+        healthy.terminate()
+
+        let readOnly = launchApp(extra: ["-uitest-readonly-store"])
+        readOnly.tabBars.buttons["我的"].tap()
+        let notice = readOnly.staticTexts["存储当前为只读"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5),
+                      "只读时必须把状态说出来——否则改动静默不保存，用户以为「保存坏了」")
+        XCTAssertTrue(readOnly.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "改动暂时无法保存")).firstMatch.exists,
+                      "提示还要说明「改动不会保存」并给出方向，不能只丢一个状态词")
     }
 
     // MARK: - Flow 13/14：无障碍按钮审计（P3-6）

@@ -499,3 +499,7 @@
 /* P3-6 年视图：月卡无障碍标签与提示 */
 "%@，%d 项日程" = "%@, %d events";
 "选择该月份" = "Select this month";
+
+/* D7 存储只读提示 */
+"存储当前为只读" = "Storage is read-only";
+"改动暂时无法保存。可能是设备可用空间不足，或数据迁移未完成；请清理空间后重启 App。" = "Changes can't be saved right now. The device may be low on space, or a data migration didn't finish. Free up space and relaunch the app.";

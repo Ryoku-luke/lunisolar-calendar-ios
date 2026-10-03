@@ -198,6 +198,12 @@ public final class EventStore {
 
     /// 内部指定构造：storageBaseDir = nil → 走系统 Documents + /tmp 回退（生产环境默认）
     private init(storageBaseDir: URL?) {
+        // UI 测试注入（D7）：只读在真实环境里要求「目录不可写」，UI 测试造不出来，
+        // 所以给一个显式开关，用来验证「存储只读」的界面提示确实会长出来。
+        // 不放在 #if DEBUG 里：与 `-uitest-empty-store` 同一套机制，生产环境不会有这个参数。
+        if ProcessInfo.processInfo.arguments.contains("-uitest-readonly-store") {
+            storageIsReadOnly = true
+        }
         let baseDir: URL
         if let custom = storageBaseDir {
             baseDir = custom

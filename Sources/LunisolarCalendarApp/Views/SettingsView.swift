@@ -62,6 +62,7 @@ struct SettingsView: View {
                 .listRowBackground(Color.clear)
             }
 
+            storageReadOnlySection
             appearanceSection
             notificationSection
             calendarLinkSection
