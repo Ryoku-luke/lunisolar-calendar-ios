@@ -6,23 +6,31 @@ extension SettingsView {
 
     var dataSection: some View {
         Section {
-            // 误触优化：整行点击 = 弹出格式选择菜单（不再"点行主体直接走 .ics"，
+            // 误触优化：整行点击 = 先选格式（不再"点行主体直接走 .ics"，
             // 避免想恢复 .json 却误触行主体进入错误导入流程）。
-            Menu {
-                Button {
-                    importingFileType = .ics
-                    showConflictPolicy = true
-                } label: {
-                    Label(NSLocalizedString("从 .ics 日历文件导入", comment: ""), systemImage: "calendar.badge.plus")
-                }
-                Button {
-                    importingFileType = .json
-                    showConflictPolicy = true
-                } label: {
-                    Label(NSLocalizedString("从 .json 备份恢复", comment: ""), systemImage: "externaldrive.badge.plus")
-                }
+            //
+            // P3-6：这里原先是嵌套 `Menu`。审计实测它在无障碍树里**按钮元素没有标签**
+            // （文字留在子 StaticText 上），AX 外框也只有 154.7×20.3pt（HIG 要 44pt 高）；
+            // 而给那个 Menu 挂任何 accessibility 修饰符都会让 SwiftUI 崩溃
+            // （EXC_BAD_ACCESS in `initializeWithCopy for Menu`，`SettingsView.body`，
+            //   对照实验确认由该修饰符引入）。改用「Button + confirmationDialog」：
+            // 标准控件自带标签与整行命中区，防误触语义不变（仍是两选一后才导入）。
+            Button {
+                showImportSourceDialog = true
             } label: {
                 Label(NSLocalizedString("导入 / 恢复数据", comment: ""), systemImage: "square.and.arrow.down")
+            }
+            .confirmationDialog(NSLocalizedString("导入 / 恢复数据", comment: "导入/恢复：格式选择对话框标题"),
+                                isPresented: $showImportSourceDialog, titleVisibility: .visible) {
+                Button(NSLocalizedString("从 .ics 日历文件导入", comment: "")) {
+                    importingFileType = .ics
+                    showConflictPolicy = true
+                }
+                Button(NSLocalizedString("从 .json 备份恢复", comment: "")) {
+                    importingFileType = .json
+                    showConflictPolicy = true
+                }
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
             }
 
             Button {

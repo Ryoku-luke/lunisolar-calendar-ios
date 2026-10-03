@@ -25,6 +25,8 @@ struct SettingsView: View {
     @State var toast: ToastMessage? = nil
     @State var conflictPolicy: ImportConflictPolicy = .keepLatest
     @State var showConflictPolicy = false
+    /// 导入 / 恢复的「先选格式」对话框（P3-6：原先用嵌套 Menu，见 SettingsDataSections 注释）
+    @State var showImportSourceDialog = false
     // 系统导入
     @State var isImportingSystem = false
     @State var importingSystemSource: SystemImportSource = .systemCalendar

@@ -728,17 +728,23 @@ final class LunisolarCalendarUITests: XCTestCase {
     ///    都试过，全部 EXC_BAD_ACCESS（`initializeWithCopy for Button/Menu` ← `Section` ←
     ///    `SettingsView.body`）。对照实验（源码回 HEAD、只留本测试）确认**崩溃由该改动引入**，
     ///    不是先天性。→ 需要改结构（例如换成 NavigationLink + 选择页）才能修。
-    /// 2. `slider.horizontal.3`（日历工具栏图标菜单）：把 `.accessibilityLabel` 从
+    /// 2. `square.and.arrow.down`（设置页「导入 / 恢复数据」）**已修**（2026-10-03）：
+    ///    嵌套 `Menu` 换成 `Button + confirmationDialog`，标签与 44pt 命中区都由标准控件提供，
+    ///    白名单条目已删除——本测试从此刻起保护它。
+    /// 3. `slider.horizontal.3`（日历工具栏图标菜单）：把 `.accessibilityLabel` 从
     ///    `.pressableFeedback()` 之前挪到之后、并加 `children: .combine`，**实测无效**
     ///    （按钮元素仍然无标签），已回退，不留无效改动。
     ///
-    /// 这两条若被修好，删掉对应条目即可；届时本测试会立刻开始保护它。
+    /// 条目若被修好，删掉它即可；届时「已知项恰好各命中一次」那条断言会提醒你。
     private static let knownUnlabeledControls: [String: String] = [
         "slider.horizontal.3": "日历工具栏菜单：标签挂在子 Image 上（已试过的修法无效，见注释）",
-        "square.and.arrow.down": "设置页导入菜单：挂修饰符会崩 SwiftUI（见注释），需改结构",
     ]
 
     func testFlow13_allVisibleButtonsHaveReadableLabels() throws {
+        // iPad 没有底部 Tab（设置走侧栏），本用例的遍历路径不适用。
+        // ⚠️ 待办：iPad 侧栏各节的按钮审计还没做（侧栏 = 日历/黄历/AI 助手/全部日程/设置）。
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "iPhone 上按底部 Tab 遍历；iPad 的入口在侧栏，尚未覆盖")
         let app = launchApp()
         let knownSymbolNames = ["plus", "minus", "gearshape", "chevron.left", "chevron.right",
                                 "chevron.up", "chevron.down", "ellipsis", "xmark", "checkmark",
@@ -796,6 +802,23 @@ final class LunisolarCalendarUITests: XCTestCase {
             + "\n---\n以下按钮缺少可读标签（VoiceOver 只会读出「按钮」或英文符号名）：\n"
             + offenders.joined(separator: "\n")
         XCTAssertTrue(offenders.isEmpty, report)
+
+        // 结构从「嵌套 Menu」换成「Button + confirmationDialog」，必须证明点击行为没坏：
+        // 这一行现在应当**按名字就能找到**（无标签的 Menu 时代找不到），点开应给出两个格式选项。
+        //
+        // 放在最后且不关掉对话框：`confirmationDialog` 的系统「取消」不在 app 的元素树里
+        // （实测 `app.buttons["取消"]` 无匹配——它是系统面板的部件），关不掉就干脆不动它；
+        // 每条用例都会重启 app，留着打开状态没有副作用。
+        app.tabBars.buttons["我的"].tap()
+        let importRow = app.buttons["导入 / 恢复数据"]
+        XCTAssertTrue(importRow.waitForExistence(timeout: 5),
+                      "设置页应有名为「导入 / 恢复数据」的按钮（无标签的 Menu 时代是按名字找不到的）")
+        XCTAssertGreaterThanOrEqual(importRow.frame.height, 44,
+                                    "该行命中高度应 ≥44pt（HIG）；Menu 时代实测只有 20.3pt")
+        importRow.tap()
+        XCTAssertTrue(app.buttons["从 .ics 日历文件导入"].waitForExistence(timeout: 5),
+                      "点该行应弹出格式选择——防误触语义（先选格式再导入）不能丢")
+        XCTAssertTrue(app.buttons["从 .json 备份恢复"].exists, "两个格式选项都应可选")
     }
 
     // MARK: - Flow 12：年视图月卡的无障碍（P3-6）

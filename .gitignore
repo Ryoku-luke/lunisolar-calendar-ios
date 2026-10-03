@@ -33,9 +33,14 @@ calendar_events.json
 # 开发期 AI 工具目录（不应进入产品仓库；如需保留请放到仓库外）
 .trae/
 # iOS 开发插件（同样属于 Agent 工具，不是产品代码）
+# 2026-10-03：插件已独立成 git 仓库（Tools/ios-dev-helper/.git，随其自身
+# .github/workflows/ci.yml 单独 CI）。这里恢复整目录忽略，避免产品仓库把它
+# 当作 embedded repo 收进来。
 Tools/ios-dev-helper/
 # 会话级临时目录（截图、隔离构建沙箱等）；2026-10-03 曾误提交进仓库一次
 .dsh-*/
+# ios-dev-helper 的工作区临时目录（simulator_screenshot 的截图、derivedDataPath 等）
+.dsh/
 
 # 日志
 *.log
