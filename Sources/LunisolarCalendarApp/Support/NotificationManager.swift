@@ -114,9 +114,21 @@ public final class NotificationManager {
     ///   （见 `LunisolarHostApp/HostApp.swift:23-31`），直接读单例会把 isNotified
     ///   写到真实库上，测试隔离失效。
     @MainActor
-    public func scheduleNotification(for event: CalendarEvent, in store: EventStore) async {
+    /// - Parameter requestPermissionIfNeeded: **只有用户自己创建/编辑出带提醒的日程时**才传 `true`（D5）。
+    ///
+    ///   为什么必须由调用方显式打开：启动时的 `rescheduleAllReminders` 会对**所有**事件重排，
+    ///   若在这里无条件请求，有提醒的老用户一启动就会看到权限弹窗——那是 Apple 明确反对的冷问。
+    ///   已拒绝(`.denied`)时不再打扰，设置页保留手动入口。
+    public func scheduleNotification(for event: CalendarEvent, in store: EventStore,
+                                     requestPermissionIfNeeded: Bool = false) async {
         #if canImport(UserNotifications)
         guard Self.shouldScheduleNotification(for: event) else { return }
+
+        // D5：就地问权限。放在这个 guard 之后——只为「确实要挂提醒的事件」问，
+        // 不为一个纯日程去打扰用户；且只在未决定时问（已拒绝/已授权都不问）。
+        if requestPermissionIfNeeded, await authorizationStatusAsync() == .notDetermined {
+            _ = await requestAuthorization()
+        }
 
         let rule = event.repeatRule
         // 单次提醒必须在未来（过去的一次性提醒不可能再响）

@@ -57,7 +57,12 @@ public final class EventService {
     public func refreshNotification(for event: CalendarEvent) {
         #if canImport(UserNotifications)
         NotificationManager.shared.cancelNotification(for: event)
-        Task { await NotificationManager.shared.scheduleNotification(for: event, in: store) }
+        // D5：这是「用户自己新建/编辑了一个事件」之后的那次调度 → 就地问权限。
+        // （启动重排走 rescheduleAllReminders，那边保持默认 false，永不冷问。）
+        Task {
+            await NotificationManager.shared.scheduleNotification(for: event, in: store,
+                                                                 requestPermissionIfNeeded: true)
+        }
         #endif
     }
 

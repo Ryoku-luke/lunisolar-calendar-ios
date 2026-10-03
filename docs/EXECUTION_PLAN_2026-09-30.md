@@ -1507,3 +1507,29 @@ P2-4 到期防线 / **导出入口**）。
 **验证要求（这类改动只能真跑）**：系统弹窗的**时机与次数**在单测里看不见，必须
 UI 运行观察；测试侧的 `dismissSystemPermissionPromptIfNeeded` 已覆盖「不允许」按钮
 （第 96 行），所以弹窗不会卡住既有用例——但"弹在哪一步"是新行为，要专门看一眼。
+
+### D5 已实施并验收（2026-10-04）
+
+**改动（两处，最小面）**：
+1. `NotificationManager.scheduleNotification(for:in:requestPermissionIfNeeded:)` 新增该参数，
+   默认 `false`；**只有在 `shouldScheduleNotification` 通过（确实要挂提醒）且状态为
+   `.notDetermined` 时**才请求——纯日程不会打扰用户，已拒绝/已授权都不再问；
+2. `EventService.refreshNotification(for:)`（用户新建/编辑单个事件后的那次调度）传 `true`。
+   **启动重排（`rescheduleAllReminders`）保持默认 `false`，永不冷问**；
+   设置页的手动入口保留（已拒绝的用户不该被反复打扰）。
+
+**验收证据（运行日志，这类改动单测看不见）**：跑 AI 提醒用例，日志显示——
+
+```
+t=15.93s Tap "ai.preview.confirm"                    ← 用户确认创建「带提醒」的日程
+t=16.99s Find the "“清和日历”想给你发送通知" Alert     ← 权限弹窗此刻才出现
+t=17.12s Default interruption handler … tapping "允许"
+```
+
+即**弹窗由「用户创建带提醒日程」触发、而不是启动触发** ✓；用例 22.0s 通过。
+（XCUITest 的默认中断处理器会自行处理系统弹窗，所以既有用例不会被卡住；
+一旦授权，后续用例不会再弹。）
+
+**验证**：431 用例 × 2 时区 0 失败；macOS 构建通过；UI target 类型检查 OK。
+⏳ 全量 UI 两通道本轮未重跑（改动只影响"何时弹权限"，且已通过运行日志确认时机），
+建议下次闸门一并覆盖。
