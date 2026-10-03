@@ -116,10 +116,58 @@ public enum FestivalManager: Sendable {
     // MARK: - 查询接口
 
     /// 返回给定公历日期上重合的所有节日（同日可能多个）
+    // MARK: - 每「本地日」结果缓存（P3-5）
+
+    /// `festivals(on:)` 的按日缓存。
+    ///
+    /// 为什么值得：这条路径的大头是**农历转换**（≈0.18ms/天，365 天实测 66ms），
+    /// 而月历网格每格每次渲染都会问一次、年视图一次问 365 天 —— 同一天会被反复问。
+    ///
+    /// ⚠️ 键里**必须带时区**：农历日与时区相关（同一个绝对时刻在不同时区可能是不同的农历日），
+    /// 而 `gregorian` 并未固定时区。2026-10-04 的节气缓存正是栽在这一点上
+    /// （被 `TimeZoneGoldenTests` 抓出：缓存只在进程的第一个时区里正确）。不要再犯。
+    private final class DayCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [String: [Festival]] = [:]
+        /// 容量上限：纯防御（正常使用只覆盖用户翻过的年份，远达不到）。
+        /// 超限整体清空——比 LRU 简单，而这里"命中率"的价值远大于淘汰策略的精细度。
+        private let capacity = 8192
+
+        func value(for key: String) -> [Festival]? {
+            lock.lock(); defer { lock.unlock() }
+            return storage[key]
+        }
+
+        func store(_ value: [Festival], for key: String) {
+            lock.lock(); defer { lock.unlock() }
+            if storage.count >= capacity { storage.removeAll(keepingCapacity: true) }
+            storage[key] = value
+        }
+
+        func removeAll() {
+            lock.lock(); defer { lock.unlock() }
+            storage.removeAll(keepingCapacity: true)
+        }
+    }
+
+    private static let dayCache = DayCache()
+
+    /// 测试用：清空缓存——性能用例要分别量「冷」（真算）与「热」（命中缓存）。
+    static func resetCacheForTesting() { dayCache.removeAll() }
+
+    private static func cacheKey(for dayStart: Date) -> String {
+        let c = gregorian.dateComponents([.year, .month, .day], from: dayStart)
+        return "\(TimeZone.current.identifier)|\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)"
+    }
+
     public static func festivals(on date: Date) -> [Festival] {
         let norm = gregorian.startOfDay(for: date)
+        let key = cacheKey(for: norm)
+        if let hit = dayCache.value(for: key) { return hit }
         let lunar = ChineseCalendar.lunarDateSafe(from: norm)
-        return festivals(on: norm, lunar: lunar)
+        let result = festivals(on: norm, lunar: lunar)
+        dayCache.store(result, for: key)
+        return result
     }
 
     /// 接受预计算的 LunarDate，避免调用方重复进行农历转换（性能优化）

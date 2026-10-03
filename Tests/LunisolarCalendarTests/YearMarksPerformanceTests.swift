@@ -4,54 +4,60 @@ import LunarCore
 
 // MARK: - 年视图数据构建的性能基线（执行计划 P3-5）
 //
-// 计划里写的是「主线程算 365 天 + 每日新建 DateFormatter」——**前半句对、后半句不对**：
-// 读代码可见 `buildMarks()` 只建了一个 DateFormatter（`en_US_POSIX` + `yyyyMMdd` 做分桶键），
-// 事件也只 filter 一遍。真正的成本是 **365 天 × (节气查询 + 节日查询)**，而且它在
-// `onAppear` 里同步跑在主线程上 —— 年视图弹出时的那一下卡顿就来自这里。
+// 量的是 `YearOverviewView.buildMarks()` 的两块真实成本：365 天 × (节气查询 + 节日查询)。
 //
-// 所以基线专门量这一段（与 `buildMarks()` 内层循环同构），用来判断"要不要为此改代码"，
-// 以及改完是否真的更快。用 `measure` 而不是断言阈值：阈值型的性能测试会随机变红。
+// ⚠️ 写这类微基准踩过的坑（都体现在下面的写法里）：
+// 1. **不要把冷热混在一次测量里**：初版有一条"不清缓存"的用例，首轮流冷（66ms）、
+//    其余流热（1ms）→ 双峰分布、相对标准差 161%，而 `measure` 对相对标准差有容差
+//    （默认 10%），会**偶发判红**（实测遇到过一次：某时区 421 条里挂 1 条，重跑又绿）。
+//    现在冷/热分开量。
+// 2. **工作量要放大到毫秒级以上**：1–3ms 的微基准噪声占比过大；每次采样跑多遍压噪声。
+// 3. 结论只认量出来的数：改前 365 天全扫 **216ms**（节气 79 + 节日 141）。
 
 final class YearMarksPerformanceTests: XCTestCase {
 
-    /// 与 `YearOverviewView.buildMarks()` 内层循环同构：365 天，每天查节气 + 节日
-    func testYearScanBaseline() {
-        let cal = Calendar(identifier: .gregorian)
-        var dc = DateComponents(); dc.year = 2026; dc.month = 1; dc.day = 1
-        guard let start = cal.date(from: dc) else { return XCTFail("构造不出 2026-01-01") }
+    private let cal = Calendar(identifier: .gregorian)
 
+    /// 2026 年 365 天（与年视图看到的范围一致）
+    private var days2026: [Date] {
+        var dc = DateComponents(); dc.year = 2026; dc.month = 1; dc.day = 1
+        guard let start = cal.date(from: dc) else { return [] }
+        return (0..<365).compactMap { cal.date(byAdding: .day, value: $0, to: start) }
+    }
+
+    /// 节气查询：O(log n) 二分、无缓存 → 确定性最好的一条
+    /// （每次采样 200 遍，把 1–3ms 级放大到几百毫秒以压低相对标准差——抖动 >10% 会偶发判红）
+    func testSolarTermScan() {
+        let days = days2026
+        XCTAssertEqual(days.count, 365)
         measure {
-            for offset in 0..<365 {
-                guard let date = cal.date(byAdding: .day, value: offset, to: start) else { continue }
-                _ = SolarTermProvider.termOn(date)
-                _ = FestivalManager.festivals(on: date).first
+            for _ in 0..<200 {
+                for date in days { _ = SolarTermProvider.termOn(date) }
             }
         }
     }
 
-    /// 拆开量，看两半各自占多少——优化时才知道该动哪边
-    func testSolarTermScanBaseline() {
-        let cal = Calendar(identifier: .gregorian)
-        var dc = DateComponents(); dc.year = 2026; dc.month = 1; dc.day = 1
-        guard let start = cal.date(from: dc) else { return XCTFail("构造不出 2026-01-01") }
-
+    /// 节日查询 · **冷**：每次采样先清缓存，量的是"真算"的成本（大头是农历转换）
+    func testFestivalScanCold() {
+        let days = days2026
         measure {
-            for offset in 0..<365 {
-                guard let date = cal.date(byAdding: .day, value: offset, to: start) else { continue }
-                _ = SolarTermProvider.termOn(date)
+            for _ in 0..<10 {
+                FestivalManager.resetCacheForTesting()
+                for date in days { _ = FestivalManager.festivals(on: date).first }
             }
         }
     }
 
-    func testFestivalScanBaseline() {
-        let cal = Calendar(identifier: .gregorian)
-        var dc = DateComponents(); dc.year = 2026; dc.month = 1; dc.day = 1
-        guard let start = cal.date(from: dc) else { return XCTFail("构造不出 2026-01-01") }
+    /// 节日查询 · **热**：缓存已填——真实使用中的常见情形
+    /// （月历网格每格每次渲染都会问一次，年视图一次问 365 天）
+    func testFestivalScanWarm() {
+        let days = days2026
+        FestivalManager.resetCacheForTesting()
+        for date in days { _ = FestivalManager.festivals(on: date) }   // 预热
 
         measure {
-            for offset in 0..<365 {
-                guard let date = cal.date(byAdding: .day, value: offset, to: start) else { continue }
-                _ = FestivalManager.festivals(on: date).first
+            for _ in 0..<200 {
+                for date in days { _ = FestivalManager.festivals(on: date).first }
             }
         }
     }
