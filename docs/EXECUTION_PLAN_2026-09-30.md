@@ -906,6 +906,19 @@ iPhone 通道 15 条（3 skip）/ iPad 通道 15 条（10 skip）**全绿**；�
 > （**误判失败**）——同一个薄弱点、两种错法。判定不要自己拼 `tail`/`grep`：
 > 直接核对 **`Executed N tests, with 0 failures`** 那条总计行，或用插件的解析结论。
 
+**视图重接的取值点清单（2026-10-04 量清，下轮直接用）**：
+- `body`（66–192）内各访问一次：`filteredEvents` 在 84 / 87 / 192（**3 次**）、
+  `upcomingGroups` 在 87 / 95、`pastCount` 在 104 / 107、`pastGroups` 在 113、
+  `isAllSelected` 在 156、`visibleEvents` 在 161 / 172 / 174（**4 次**）；
+- 工具栏 280–289 在 `rows(_:)`（233）内部；
+- 动作路径（非 body，频率低可保持原样）：`toggleSelectAll` 372–375、
+  无障碍文案 430 的 `filteredEvents`。
+
+改法：`body` 顶部 `let derived = AllEventsDerived.compute(...)` 一次求值，body 内引用改走它，
+`rows(_:)` 加参数（2 个调用点）；5 个计算属性改为 `derived` 的访问器，让动作路径继续可用。
+`visibleEvents` 需要把 `showPast` 纳入 `compute` 入参（它目前由视图状态参与拼接）。
+**验收**：iPhone + iPad 两条 UI 通道 + 一条「同一批数据下只算一次」的证据。
+
 ### P3-4 Dynamic Type 截断 ✅ 已完成（2026-10-02）
 
 **缺陷**：日期胶囊里的数字用 `AppTheme.Font.numeralXL`（基准 56pt，经 `UIFontMetrics`
