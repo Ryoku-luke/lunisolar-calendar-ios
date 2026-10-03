@@ -313,13 +313,32 @@ public enum SolarTermProvider: Sendable {
     }
 
     /// 返回给定日期所属的节气（如果当天正好是节气交节日）。
+    /// 当前设备时区下，`date` 所在的**本地日**是否有交节，返回节气名。
+    ///
+    /// 性能（P3-5 基线）：原先是「遍历整表 + 逐条 `isDate(_:inSameDayAs:)`」，
+    /// 年视图 365 天累计 **79ms**（`entries` ≈ 216 条），而 `festivals(on:)` 第 3 步还会再调一次。
+    /// 现在用 `sortedEntries`（按交节**时刻**升序）**二分定位**，O(log n)。
+    ///
+    /// ⚠️ 为什么不是「`yyyyMMdd` → 节气名」的静态字典缓存：**节气是绝对时刻，
+    /// 而它"落在哪一天"取决于设备时区**——缓存会在时区变化后失效。
+    /// 这个坑不是我推理出来的，是本项目的 `TimeZoneGoldenTests` 抓出来的：
+    /// 它逐时区在**同一进程**里跑，第一版缓存刚好在第一个时区建好、之后全错。
+    /// 二分既快（约 8 次比较）又与时区无关。
     public static func termOn(_ date: Date) -> String? {
         let cal = Calendar(identifier: .gregorian)
-        let day = cal.startOfDay(for: date)
-        for entry in entries where cal.isDate(entry.date, inSameDayAs: day) {
-            return entry.name
+        let dayStart = cal.startOfDay(for: date)
+        guard let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) else { return nil }
+
+        // 二分：找第一个 `date >= dayStart` 的条目
+        var low = 0
+        var high = sortedEntries.count
+        while low < high {
+            let mid = (low + high) / 2
+            if sortedEntries[mid].date < dayStart { low = mid + 1 } else { high = mid }
         }
-        return nil
+        guard low < sortedEntries.count else { return nil }
+        let candidate = sortedEntries[low]
+        return candidate.date < dayEnd ? candidate.name : nil
     }
 
     /// 指定年份、指定节气序号（0-23）的精确时刻；无数据返回 nil。
