@@ -55,8 +55,10 @@ struct YearOverviewView: View {
     // 一次性构建全年标注数据
     @State private var marks: [Int: MonthMarks] = [:]
     @State private var built = false
+    /// 后台构建进行中（防重复触发）
+    @State private var isBuilding = false
 
-    struct MonthMarks {
+    struct MonthMarks: Sendable {
         var todayDay: Int?
         var eventDays: Set<Int> = []
         var termDays: [Int: String] = [:]
@@ -118,7 +120,7 @@ struct YearOverviewView: View {
                 }
             }
             .onAppear {
-                if !built { buildMarks() }
+                if !built { buildMarksIfNeeded() }
             }
         }
         .presentationDetents([.large])
@@ -228,9 +230,42 @@ struct YearOverviewView: View {
 
     // MARK: - 数据构建
 
-    private func buildMarks() {
+    /// 年视图的数据构建放到**后台**跑。
+    ///
+    /// 为什么（P3-5 基线，`YearMarksPerformanceTests`）：内层是 365 天 × (节气查询 + 节日查询)，
+    /// 实测 **216ms**（节气 79ms + 节日 141ms）。原先在 `onAppear` 里同步跑主线程，
+    /// 用户看到的就是「点开年视图卡一下」。
+    ///
+    /// 分工：`store.events` 必须**在主线程**取值（store 是主线程隔离的），
+    /// 拿到快照后交给 `nonisolated` 的 `computeMarks`（跑在协作线程池），算完回主线程赋值。
+    private func buildMarksIfNeeded() {
+        guard !built, !isBuilding else { return }
+        isBuilding = true
+        let year = year
+        let events = store.events
+        let now = Date()
+        let calendar = cal
+        Task { @MainActor in
+            let result = await Self.computeMarks(year: year, events: events, now: now, cal: calendar)
+            marks = result
+            built = true
+            isBuilding = false
+        }
+    }
+
+    /// 纯计算、不依赖视图状态 → 与调用者（主线程）解耦。
+    ///
+    /// ⚠️ **必须写 `@concurrent`**：Swift 6.2 起 `nonisolated async` 默认**继承调用者的隔离**
+    /// （SE-0461 `nonisolated(nonsending)`），也就是"看起来挪到后台、其实还在主线程上跑"，
+    /// 这个优化会**静默失效**。`@concurrent` 才是"保证在协作线程池上执行"的显式写法。
+    /// - Note: 参数都是值类型/Sendable，正是为了能安全跨隔离域；测试会直接调用它（故为 internal）。
+    @concurrent
+    nonisolated static func computeMarks(year: Int,
+                                        events: [CalendarEvent],
+                                        now: Date,
+                                        cal: Calendar) async -> [Int: MonthMarks] {
         var result: [Int: MonthMarks] = [:]
-        let today = cal.startOfDay(for: Date())
+        let today = cal.startOfDay(for: now)
         let todayComps = cal.dateComponents([.year, .month, .day], from: today)
 
         for month in 1...12 {
@@ -257,12 +292,12 @@ struct YearOverviewView: View {
             result[month] = m
         }
         // 事件：一次性取全年所有事件，按日分桶
-        let events = store.events.filter { cal.component(.year, from: $0.startDate) == year }
+        let yearEvents = events.filter { cal.component(.year, from: $0.startDate) == year }
         var eventBuckets: [Int: Set<Int>] = [:]
         let fmt = DateFormatter()
         fmt.locale = Locale(identifier: "en_US_POSIX")
         fmt.dateFormat = "yyyyMMdd"
-        for e in events {
+        for e in yearEvents {
             let key = fmt.string(from: e.startDate)
             guard key.count == 8, let month = Int(key.dropFirst(4).prefix(2)), let day = Int(key.suffix(2)) else { continue }
             if eventBuckets[month] == nil { eventBuckets[month] = [] }
@@ -271,8 +306,7 @@ struct YearOverviewView: View {
         for (month, days) in eventBuckets {
             result[month]?.eventDays = days
         }
-        marks = result
-        built = true
+        return result
     }
 
     // MARK: - 交互

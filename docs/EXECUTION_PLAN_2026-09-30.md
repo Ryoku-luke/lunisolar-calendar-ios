@@ -760,11 +760,30 @@ iPhone 通道 15 条（3 skip）/ iPad 通道 15 条（10 skip）**全绿**；�
 用 `measure` 而不是断言阈值：阈值型性能测试会随机变红（本项目已经因为"环境相关断言"
 踩过一次）。这个文件的作用是**回答"值不值得为它改代码"**以及改完是否真的更快。
 
-**下一步（尚未实施）**：把 `buildMarks()` 挪到后台——`store.events` 在主线程快照，
-计算过程 `nonisolated`，算完回主线程赋值。预期把年视图弹出时的 216ms 主线程占用降到
-接近 0（标记晚约 0.2s 出现，视觉上无感）。`MonthMarks` 需要 `Sendable`。
-风险点已识别：`SolarTermProvider` / `FestivalManager` 里的惰性静态缓存是
-`dispatch_once`，跨线程读安全，但这条要实测确认。
+✅ **2026-10-04：已挪到后台（`@concurrent`）**
+
+改法：`buildMarks()` 拆成三段——`store.events` 在**主线程快照**（store 是主线程隔离的）；
+计算体抽成**纯函数** `YearOverviewView.computeMarks(year:events:now:cal:)`；算完在
+`Task { @MainActor in … }` 里赋值。`MonthMarks` 补 `Sendable`（跨隔离域回传）。
+
+**这里有个会让优化静默失效的语言细节，值得单独记**：Swift 6.2 起
+`nonisolated async` **默认继承调用者的隔离**（SE-0461 `nonisolated(nonsending)`）——
+只写 `nonisolated` 的话，这个函数依然在主线程上跑，"挪到后台"变成一句空话且**没有任何报错**。
+必须写 **`@concurrent`** 才是"保证在协作线程池上执行"的显式语义。
+（本项目的目标是 iOS 17+/Swift 6.2 工具链，这条适用。）
+
+**验证**：
+- 新增 `YearMarksBuilderTests`（4 条）——`computeMarks` 抽成纯函数后可直接测，
+  正好当这次挪线程的安全网：12 个月的天数、首日星期（表头错位老 bug 的语义）、
+  `todayDay` 的年份作用域、中秋 2026-09-25 与霜降 2026-10-23 的落位；
+- 419 用例 × 2 时区 0 失败；macOS + iOS SDK 构建 0 警告；iPhone UI（Flow 12 年视图 + Flow 14）通过。
+
+**诚实的边界**：①216ms 的**总计算量没变**，变的是它不再占主线程——年视图弹出时不再卡；
+标记晚约 0.2s 出现（Flow 12 用的是前缀匹配断言，不受影响）。
+②"确实不在主线程"由**编译器保证**（`@concurrent` 的语义就是不在调用者执行器上跑），
+而不是靠一条会抖的计时断言——计时型的并发断言在本项目属于"随机变红"那一类。
+③**查询本身还没变快**（节日 141ms / 365 天 ≈ 0.39ms 一天，对查表偏慢，可能还有可省的分支），
+属于下一步；计划的另一半（`AllEventsView` 每次 body 约 10 轮 O(N) 扫描）也仍未做。
 
 ### P3-4 Dynamic Type 截断 ✅ 已完成（2026-10-02）
 
