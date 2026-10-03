@@ -201,13 +201,17 @@ struct CalendarMonthView: View {
                         NavigationLink { CountdownView() } label: { Label("倒数日", systemImage: "hourglass") }
                     }
                 } label: {
-                    Image(systemName: "slider.horizontal.3")
+                    // P3-6：这里原先是光秃秃的 `Image(systemName:)`，实测**控件在无障碍树里
+                    // 没有名字**（名字落在子 Image 上），而给它挂 `.accessibilityLabel` 也不生效
+                    // （挪到 `.pressableFeedback()` 之后、加 `children: .combine` 都试过，见计划）。
+                    // 换成 `Label`（文字给无障碍、导航栏里仍只渲图标，与工具栏里的 `Label` 一致），
+                    // 不再依赖任何 accessibility 修饰符。
+                    Label(NSLocalizedString("功能菜单", comment: "月历工具栏入口菜单"),
+                          systemImage: "slider.horizontal.3")
                         .font(.title3).foregroundStyle(Color.secondaryLabel)
                         .symbolRenderingMode(.hierarchical)
                         .touchTarget(min: AppTheme.Touch.minTarget)
                 }
-                // VoiceOver：图标按钮补读名（accessibilityIdentifier 只是测试锚点，不会被朗读）
-                .accessibilityLabel(NSLocalizedString("功能菜单", comment: "月历工具栏入口菜单"))
                 .pressableFeedback()
                 // 稳定标识：菜单标题来自 SF Symbol，随界面语言变化，UI 测试不能按文案找
                 .accessibilityIdentifier(AccessibilityID.monthMenu)

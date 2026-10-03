@@ -735,10 +735,16 @@ final class LunisolarCalendarUITests: XCTestCase {
     ///    `.pressableFeedback()` 之前挪到之后、并加 `children: .combine`，**实测无效**
     ///    （按钮元素仍然无标签），已回退，不留无效改动。
     ///
-    /// 条目若被修好，删掉它即可；届时「已知项恰好各命中一次」那条断言会提醒你。
-    private static let knownUnlabeledControls: [String: String] = [
-        "slider.horizontal.3": "日历工具栏菜单：标签挂在子 Image 上（已试过的修法无效，见注释）",
-    ]
+    /// 4. `slider.horizontal.3`（日历工具栏图标菜单）**已修**（2026-10-04）：
+    ///    光秃秃的 `Image(systemName:)` 换成 `Label(文字, systemImage:)` 就有名字了
+    ///    （导航栏里仍只渲图标），**不需要任何 accessibility 修饰符**——这点很关键，
+    ///    因为给这个 Menu 挂修饰符会崩（见上面第 1 条）。反断言同样先红了一次
+    ///    （期望命中 1、实际 0），逼着我把这条删掉。
+    ///
+    /// 目前**为空**：审计到的两处真缺陷都已修好。条目若被修好，删掉它即可；
+    /// 届时「已知项恰好各命中一次」那条断言会提醒你。
+    /// 用法：新增已知未修项时，键填「其子元素的 accessibilityIdentifier」，值写清原因与出处。
+    private static let knownUnlabeledControls: [String: String] = [:]
 
     func testFlow13_allVisibleButtonsHaveReadableLabels() throws {
         // iPad 没有底部 Tab（设置走侧栏），本用例的遍历路径不适用。
