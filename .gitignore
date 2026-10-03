@@ -32,6 +32,10 @@ calendar_events.json
 
 # 开发期 AI 工具目录（不应进入产品仓库；如需保留请放到仓库外）
 .trae/
+# iOS 开发插件（同样属于 Agent 工具，不是产品代码）
+Tools/ios-dev-helper/
+# 会话级临时目录（截图、隔离构建沙箱等）；2026-10-03 曾误提交进仓库一次
+.dsh-*/
 
 # 日志
 *.log
