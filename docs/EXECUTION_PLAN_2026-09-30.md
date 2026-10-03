@@ -843,6 +843,19 @@ iPhone 通道 15 条（3 skip）/ iPad 通道 15 条（10 skip）**全绿**；�
 > 脚本写法教训：判定必须看**最后那条总计行**（`Executed N tests, with 0 failures`）
 > 且 `N` 要对得上，不能用 `grep -q` 在全量输出里找子串。
 
+✅ **2026-10-04 五通道由我本人跑完**（借 iOS 开发插件，不必再请你代跑）：
+
+| 通道 | 结果 |
+|---|---|
+| swift test | 419 用例 × 4 时区 0 失败（曾偶发 1 条、随后连跑 5 次未复现，见上面的更正）|
+| iOS SDK 构建 | Build complete，**0 警告** |
+| UI 测试 target 类型检查 | `UITESTS_TYPECHECK_OK` |
+| iPhone UI | 17 条（3 skip）**0 失败** |
+| iPad UI | 17 条（10 skip）**0 失败** |
+| xcodebuild（app target）| 0 error / 0 warning |
+
+**P3-5 只剩**：`AllEventsView` 每次 body 约 10 轮 O(N) 扫描（照年视图那套：先建基线再改）。
+
 ### P3-4 Dynamic Type 截断 ✅ 已完成（2026-10-02）
 
 **缺陷**：日期胶囊里的数字用 `AppTheme.Font.numeralXL`（基准 56pt，经 `UIFontMetrics`
