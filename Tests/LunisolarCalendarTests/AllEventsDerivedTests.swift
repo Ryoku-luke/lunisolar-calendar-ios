@@ -50,6 +50,33 @@ final class AllEventsDerivedTests: XCTestCase {
         XCTAssertTrue(derived.upcomingGroups.isEmpty)
     }
 
+    /// 分组语义：`upcomingGroups` 必须与「先取未过去、再分组」等价，
+    /// `pastGroups` 必须与「先取已过去、再分组」等价——下轮视图重接只依赖这一个入口，
+    /// 所以这里把它与独立调用 `AllEventsGrouping` 的结果逐组对齐。
+    /// （组头日期、每组事件 id 序列都要一致；ClampingTo 的差别也是语义的一部分。）
+    func testGroupsMatchDirectGroupingCalls() {
+        let events = makeEvents(300)
+        let derived = AllEventsDerived.compute(events: events, isIncluded: isIncluded, todayStart: todayStart)
+
+        let expectedUpcoming = AllEventsGrouping.groups(from: derived.upcoming, clampingTo: todayStart)
+        let expectedPast = AllEventsGrouping.groups(from: derived.past)
+
+        XCTAssertEqual(derived.upcomingGroups.map(\.day), expectedUpcoming.map(\.day))
+        XCTAssertEqual(derived.upcomingGroups.map { $0.events.map(\.id) },
+                       expectedUpcoming.map { $0.events.map(\.id) })
+        XCTAssertEqual(derived.pastGroups.map(\.day), expectedPast.map(\.day))
+        XCTAssertEqual(derived.pastGroups.map { $0.events.map(\.id) },
+                       expectedPast.map { $0.events.map(\.id) })
+    }
+
+    /// 空输入不得产生任何组（视图用 `upcomingGroups.isEmpty` 判空态，这条守住它）
+    func testEmptyInputProducesNoGroups() {
+        let derived = AllEventsDerived.compute(events: [], isIncluded: isIncluded, todayStart: todayStart)
+        XCTAssertTrue(derived.filtered.isEmpty)
+        XCTAssertTrue(derived.upcomingGroups.isEmpty)
+        XCTAssertTrue(derived.pastGroups.isEmpty)
+    }
+
     // MARK: 基线（旧多趟 vs 新单趟）
 
     private func oldMultiPass(_ events: [CalendarEvent]) {
