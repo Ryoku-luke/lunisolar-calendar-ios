@@ -115,6 +115,10 @@ struct DayCellView: View {
                 Text("\(date.day)")
                     .font(numeralFont)
                     .foregroundStyle(foregroundForDay)
+                    // P3-4 续：最大辅助字号下格宽约 50pt，而缩放后的数字远超它——
+                    // 没有 lineLimit 时 SwiftUI 会把「27」折成「2」/「7」两行，整片网格错行。
+                    // 与下面的农历行一致：单行 + 允许缩到 60%，宁可小也不许折行。
+                    .lineLimit(1).minimumScaleFactor(0.6)
                 if lunar.isUnsupported {
                     // 越界（1900 前 / 2100 后）：不显示农历，避免假农历误导
                     Color.clear.frame(height: isRegular ? 14 : 12)

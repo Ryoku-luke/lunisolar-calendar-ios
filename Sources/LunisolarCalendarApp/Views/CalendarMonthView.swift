@@ -387,9 +387,14 @@ struct CalendarMonthView: View {
                     Text(verbatim: MonthLabel.name(for: currentMonth))
                         .font(AppTheme.Font.hero).foregroundStyle(Color.label)
                         .contentTransition(.numericText())
+                        // P3-4 续：最大辅助字号下 hero(38pt) 会缩放到 ~90pt，
+                        // 不限制就会把「10月」和年份挤到折行（实测年份被折成「202」/「6」）。
+                        // 单行 + 允许缩到 60%：宁可字小，也不让日期信息读不出来。
+                        .lineLimit(1).minimumScaleFactor(0.6)
                     Text(verbatim: "\(currentMonth.year)")
                         .font(AppTheme.Font.title3).foregroundStyle(Color.tertiaryLabel)
                         .contentTransition(.numericText())
+                        .lineLimit(1).minimumScaleFactor(0.6)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Color.tertiaryLabel)
