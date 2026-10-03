@@ -109,7 +109,20 @@ final class DataExpiryTests: XCTestCase {
     // MARK: - 到期检查
 
     func testDatasetsDoNotExpireSilently() {
-        let now = Date()
+        let report = expiryReport(now: Date())
+        for warning in report.warnings {
+            print("⚠️ 数据到期预警 —— \(warning)")
+        }
+        XCTAssertTrue(report.failures.isEmpty, """
+        内置数据即将到期（或已过期），且到期后是**静默**降级：用户看不到报错，只会发现功能不对。
+        """ + "\n" + report.failures.joined(separator: "\n") + "\n\n补数据流程：docs/DATA_UPDATE_RUNBOOK.md")
+    }
+
+    /// 到期报告的**可注入时间**版本。
+    ///
+    /// 为什么抽出来：原来这段逻辑直接写在测试里、时间取 `Date()`——那条断言在今天永远绿，
+    /// 也就是说**"闹钟到底会不会响"从来没被验证过**。抽出后可显式注入未来时间点自检（见下条）。
+    func expiryReport(now: Date) -> (warnings: [String], failures: [String]) {
         var warnings: [String] = []
         var failures: [String] = []
 
@@ -127,14 +140,33 @@ final class DataExpiryTests: XCTestCase {
                 warnings.append(line)
             }
         }
+        return (warnings, failures)
+    }
 
-        for warning in warnings {
-            print("⚠️ 数据到期预警 —— \(warning)")
-        }
+    /// **警报自检**：证明到期告警**真的会响**，而不是"看起来会响"。
+    ///
+    /// 三个时间点各自钉一件事：悬崖之后必硬失败且点名数据集、悬崖前必须已进入预警、
+    /// 今天必须干净（不提前误响）。这条自身也会在真到期时变红——那正是它该做的事。
+    func testExpiryAlarmActuallyFires() throws {
+        let holiday = holidayTrustedThrough()
+        let cliff = try XCTUnwrap(holiday.end, "应能推导出放假安排的可信边界")
+        let oneDayPast = try XCTUnwrap(cal.date(byAdding: .day, value: 1, to: cliff))
 
-        XCTAssertTrue(failures.isEmpty, """
-        内置数据即将到期（或已过期），且到期后是**静默**降级：用户看不到报错，只会发现功能不对。
-        """ + "\n" + failures.joined(separator: "\n") + "\n\n补数据流程：docs/DATA_UPDATE_RUNBOOK.md")
+        // ① 悬崖之后一天 → 必须硬失败，并点名「放假安排」（severity == .correctness）
+        let after = expiryReport(now: oneDayPast)
+        XCTAssertTrue(after.failures.contains { $0.contains("放假安排") },
+                      "过了悬崖必须硬失败并点名放假安排；实际 failures=\(after.failures)")
+
+        // ② 提前量 → 悬崖前 10 天就该出现在报告里（窗口应 ≥10 天，否则来不及补数据）
+        XCTAssertGreaterThan(Self.warnDays, 10, "预警窗口应 ≥10 天——放假安排通常 11 月底才公布")
+        let tenDaysBefore = try XCTUnwrap(cal.date(byAdding: .day, value: -10, to: cliff))
+        let lead = expiryReport(now: tenDaysBefore)
+        XCTAssertTrue((lead.warnings + lead.failures).contains { $0.contains("放假安排") },
+                      "悬崖前 10 天就该提示放假安排；实际 =\(lead.warnings + lead.failures)")
+
+        // ③ 今天必须干净 → 警报不能提前误响（这条若红，说明真到期了：按 RUNBOOK 补数据）
+        let today = expiryReport(now: Date())
+        XCTAssertTrue(today.failures.isEmpty, "今天不该有硬失败；实际 =\(today.failures)")
     }
 
     // MARK: - 边界与推导自身的守卫
