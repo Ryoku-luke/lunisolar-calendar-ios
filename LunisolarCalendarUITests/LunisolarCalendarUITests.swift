@@ -711,11 +711,17 @@ final class LunisolarCalendarUITests: XCTestCase {
     /// 断言到「三种格式都在」为止：再往下是系统文件面板（系统 UI），
     /// UI 测试里点不稳、也不该由我们点——真正要守的是"入口存在且格式没漏"。
     func testFlow16_exportEntryOffersEveryFormat() throws {
+        // 同上：iPad 走侧栏设置节（无 TabBar）
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        if isPad { XCUIDevice.shared.orientation = .landscapeLeft }
+        defer { if isPad { XCUIDevice.shared.orientation = .portrait } }
+
         let app = launchApp()
-        app.tabBars.buttons["我的"].tap()
+        openSettings(app)
 
         let row = app.buttons["导出 / 备份数据"]
-        XCTAssertTrue(row.waitForExistence(timeout: 5), "设置页应有「导出 / 备份数据」入口（D6）")
+        // 先滚到可见：List 懒渲染，iPad 上这一行不会自动进无障碍树
+        XCTAssertTrue(scrollUntilVisible(row, in: app), "设置页应有「导出 / 备份数据」入口（D6）")
         row.tap()
 
         for format in ["导出为 .ics 日历文件", "导出为 .json 备份", "导出为 .csv 表格"] {
@@ -733,14 +739,19 @@ final class LunisolarCalendarUITests: XCTestCase {
     /// 为什么用启动参数：只读在真实环境里要求「目录不可写」，UI 测试造不出来；
     /// 这与仓库既有的 `-uitest-empty-store` 是同一套注入机制。
     func testFlow15_readOnlyStorageIsSurfacedOnlyWhenReadOnly() throws {
+        // iPad 竖屏侧栏是收起的，且设置走侧栏（无 TabBar）→ 先转横屏，入口交给 openSettings
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        if isPad { XCUIDevice.shared.orientation = .landscapeLeft }
+        defer { if isPad { XCUIDevice.shared.orientation = .portrait } }
+
         let healthy = launchApp()
-        healthy.tabBars.buttons["我的"].tap()
+        openSettings(healthy)
         XCTAssertFalse(healthy.staticTexts["存储当前为只读"].waitForExistence(timeout: 3),
                        "正常状态下不该出现只读提示——误报会让健康用户以为数据坏了")
         healthy.terminate()
 
         let readOnly = launchApp(extra: ["-uitest-readonly-store"])
-        readOnly.tabBars.buttons["我的"].tap()
+        openSettings(readOnly)
         let notice = readOnly.staticTexts["存储当前为只读"]
         XCTAssertTrue(notice.waitForExistence(timeout: 5),
                       "只读时必须把状态说出来——否则改动静默不保存，用户以为「保存坏了」")
@@ -810,6 +821,35 @@ final class LunisolarCalendarUITests: XCTestCase {
         }
         XCTAssertTrue(item.waitForExistence(timeout: timeout), "iPad 侧栏应有 \(identifier)")
         item.tap()
+    }
+
+    /// 滚动直到元素出现（最多 `maxSwipes` 次）。
+    ///
+    /// 为什么需要：SwiftUI 的 `List` **懒渲染**——设置页里靠下的行在滚动到之前
+    /// 根本不在无障碍树里，`waitForExistence` 会直接判失败（iPad 上导出行就是这样红的）。
+    /// 已经存在时立刻返回，所以对 iPhone 那条路径零影响。
+    @discardableResult
+    private func scrollUntilVisible(_ element: XCUIElement, in app: XCUIApplication,
+                                    maxSwipes: Int = 8) -> Bool {
+        var swipes = 0
+        while !element.exists && swipes < maxSwipes {
+            app.swipeUp()
+            swipes += 1
+        }
+        return element.exists
+    }
+
+    /// 进「设置」页：iPhone 走底部「我的」Tab，**iPad 没有 TabBar**、要走侧栏「设置」节。
+    ///
+    /// ⚠️ 涉及设置页的新用例请一律走这里。Flow 15/16 最初直接点 TabBar，
+    /// iPad 通道因此红了两条——而 Flow 13 早就踩过同一个坑（同一类错误犯了两次，
+    /// 所以这次把它固化成唯一入口，而不是再写一遍 if）。
+    private func openSettings(_ app: XCUIApplication) {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            tapSidebarItem(app, ID.iPadSidebarSettings)
+        } else {
+            app.tabBars.buttons["我的"].tap()
+        }
     }
 
     /// 主屏清单：iPhone 走底部 Tab（4 个），iPad 走侧栏（5 节）。

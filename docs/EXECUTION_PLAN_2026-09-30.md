@@ -1533,3 +1533,29 @@ t=17.12s Default interruption handler … tapping "允许"
 **验证**：431 用例 × 2 时区 0 失败；macOS 构建通过；UI target 类型检查 OK。
 ⏳ 全量 UI 两通道本轮未重跑（改动只影响"何时弹权限"，且已通过运行日志确认时机），
 建议下次闸门一并覆盖。
+
+### 全量五通道结账（2026-10-04）
+
+| 通道 | 结果 |
+|---|---|
+| swift test | **431 用例 × 4 时区 0 失败** |
+| iOS SDK 构建 | Build complete，**0 警告** |
+| UI target 类型检查 | `UITESTS_TYPECHECK_OK` |
+| iPhone UI | **19 条（3 skip）0 失败** |
+| iPad UI | 首轮 **红 2 条** → 修好后两条各自复验通过（见下）|
+
+> 🚨 **首轮 iPad 暴露的问题：我又把「iPad 没有 TabBar」踩了第二次**
+>
+> Flow 15（D7 只读提示）与 Flow 16（D6 导出入口）里直接写 `app.tabBars.buttons["我的"]`，
+> iPad 通道因此红两条——**而 Flow 13 早就因为同一个坑修过一次**。
+> 全量跑的价值就在这里：定向跑（我只跑了 iPhone）看不见这类形态差异。
+>
+> 修法（**结构性，不再写内联 if**）：
+> 1. 新增 `openSettings(_:)` 统一入口——iPhone 走「我的」Tab、iPad 走侧栏「设置」节
+>    （并复用 `tapSidebarItem` 的横屏 + 「显示边栏」兜底）；新用例一律走它；
+> 2. 新增 `scrollUntilVisible(_:in:)`——SwiftUI `List` **懒渲染**，设置页靠下的行
+>    （导出行）在滚动到之前**根本不在无障碍树里**，`waitForExistence` 会直接判失败。
+>    已存在时立即返回，对 iPhone 路径零影响。
+>
+> 复验：Flow 15、Flow 16 在 iPad 上分别通过（日志可见 `Swipe up` → 命中 → 三种格式齐全）。
+> 其余 17 条在同一次全量 iPad 运行中本就绿，且此后只改了测试辅助函数，未触及它们。
