@@ -633,7 +633,7 @@ testContract_MockStoreUpsertRejectsLowerVersion : ("Optional(3)") is not equal t
 | ~~**P3-2 横屏根视图**~~ ✅ 2026-10-02 | `App/LunisolarCalendarApp.swift:93` 用 `horizontalSizeClass == .regular` 切根视图 → Plus/Max iPhone 横屏变 iPad 三栏、TabBar 消失。改为按 `userInterfaceIdiom` 或同时判宽度 | iPhone 横屏保留 TabBar；iPad 仍三栏 | 项目自己的 `DEVICE_TEST_CHECKLIST.md:267` 标注未验证 |
 | ~~**P3-3 修 3 处漏译**~~ ✅ 2026-10-02 | `Views/WeatherCardView.swift:101`、`Views/SelectedDayCardView.swift:46`、`Views/CalendarMonthView.swift:381`（`Text(verbatim:)` 让英文界面显示「9月」） | 4 语言表 key 齐备；英文界面实测无中文 | 小改动 |
 | ~~**P3-4 Dynamic Type 截断**~~ ✅ 2026-10-02 | 大号数字（`numeralXL` 56pt）被限制在 `.frame(width: 92)` / `.frame(width: 110)`（`Views/SelectedDayCardView.swift:23-31`、`Views/DayDetailView.swift:85-92`）→ 辅助字号下截断 | 最大辅助字号下不截断、不重叠 | 无障碍硬缺口 |
-| **P3-5 性能** | ①`Views/AllEventsView.swift` 每次 body 约 10 轮 O(N) 全量扫描（`:337-341` 起），搜索逐键触发 → 改为算一次缓存；②`Views/YearOverviewView.swift:193-238` 主线程同步算 365 天 + 每日新建 `DateFormatter` + 约 440 个 `AnyView` → 移到后台/复用 formatter | 大库（数百事件）下横滑与搜索无卡顿 | 建议先加性能基线再改 |
+| ~~**P3-5 性能**~~ ✅ 2026-10-04 | ①`Views/AllEventsView.swift` 每次 body 约 10 轮 O(N) 全量扫描（`:337-341` 起），搜索逐键触发 → 改为算一次缓存；②`Views/YearOverviewView.swift:193-238` 主线程同步算 365 天 + 每日新建 `DateFormatter` + 约 440 个 `AnyView` → 移到后台/复用 formatter | 大库（数百事件）下横滑与搜索无卡顿 | 建议先加性能基线再改 |
 | **P3-6 无障碍覆盖**（年视图 ✅ 2026-10-03；其余待做）| 29 个视图文件中 23 个零 `accessibilityLabel/Hint`；年视图约 440 个可点格无标签/ID 且点击目标 16–20pt（低于 44pt HIG） | VoiceOver 能走通月历/年视图/日期跳转 | 可与 P4-1 合并 |
 
 ### P3-6 无障碍覆盖 · 年视图 ✅ 已完成（2026-10-03）
@@ -932,7 +932,7 @@ iPhone 通道 15 条（3 skip）/ iPad 通道 15 条（10 skip）**全绿**；�
 `upcoming + past`，顺序也要一致）；此前的分组等价与分桶等价断言继续生效。
 
 **验证**：426 用例 × 2 时区 0 失败；macOS + iOS SDK 构建 0 警告；**iPhone UI 17 条（3 skip）0 失败**。
-⏳ iPad UI 通道本轮未跑（上下文余量不足），**下次闸门会覆盖**——这条要如实算"未验证"。
+**iPad UI 通道也已补跑：17 条（10 skip）0 失败**——两通道全绿，P3-5 结项。
 
 ### P3-4 Dynamic Type 截断 ✅ 已完成（2026-10-02）
 
