@@ -35,34 +35,17 @@ struct AIAssistantView: View {
     @State private var inlineError: String?
     @State private var inputFocused: Bool = false
 
+    /// 把三个提示相关的 @State 映射成一个状态（P4-2 ②：让提示条只依赖一个入参）
+    private var inlineNoticeState: AIInlineNoticeState {
+        if let inlineError { return .error(inlineError) }
+        if let completedMessage { return .success(completedMessage, offDay: completedOffDay) }
+        return .none
+    }
     var body: some View {
         NavigationStack {
             List {
                 // 行内提示区：成功与失败同一位置，替代模态 alert（少两次点击，也不打断连续输入）
-                if let inlineError {
-                    Section {
-                        QingheToast(icon: "xmark.circle.fill", message: inlineError, tint: .systemRed)
-                    }
-                } else if let completedMessage {
-                    // 统一行内提示（报告 §42：同一件事不要既 Toast 又 Alert）
-                    Section {
-                        QingheToast(message: completedMessage)
-                        // 真机反馈（2026-09-30）：说「明天上午10点」时日程建到**明天**，
-                        // 而用户人还在「今天」的日历页 → 今天列表毫无变化，看起来像"没反应"，
-                        // 直到切日期/再操作一次才看见。根因不是刷新（实测 observation 与重绘都正常），
-                        // 而是**反馈没有说明加到了哪一天、也没有去路**。
-                        // 因此：仅当落点不是今天时，补一个「去看看」跳到该日。
-                        if let offDay = completedOffDay {
-                            Button {
-                                NavigationCoordinator.shared.openEventDate(offDay)
-                            } label: {
-                                Label(NSLocalizedString("去看看", comment: "AI助手：日程建在别的日子时跳过去"), systemImage: "arrow.right.circle")
-                            }
-                            .buttonStyle(SecondaryActionButtonStyle(accent: Color.appTint))
-                            .accessibilityIdentifier(AccessibilityID.aiGoToCreatedDay)
-                        }
-                    }
-                }
+                AIInlineNotice(state: inlineNoticeState)
 
                 Section {
                     #if canImport(UIKit)
