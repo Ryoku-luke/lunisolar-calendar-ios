@@ -1183,6 +1183,34 @@ final class LunisolarCalendarUITests: XCTestCase {
     /// 环境变量会被 xcodebuild 转发到模拟器上的测试进程（即 `TEST_RUNNER_SHOTS=1` → 这里看到 `SHOTS=1`）。
     ///
     /// 不 sleep：每一站的同步都靠「等一个该页独有的元素」，既准又快（目标 ≤ 40 秒）。
+    /// 回归守卫（真机 bug 2026-10-04）：月历**横滑必须能翻月**。
+    ///
+    /// 为什么单独立一条：这个功能曾在 P4-1 抽取中**完全失效**（`swipeMonthGesture` 搬走后
+    /// 没挂回去），而当时 436 个单测 + 19 条 UI 用例**全绿**——没有任何断言看过它。
+    ///
+    /// **断言必须盯住「月份标题」本身**。第一版比较"整页文案"→ 把手势摘掉后**依然通过**
+    /// （任何无关变化都能满足它）✗ 是**假守卫**；改为：
+    /// 用 `^[0-9]+月$` 精确定位月份标题（能排除"10月1日"与农历"八月"），只比它是否变化。
+    func testFlow17_monthGridSwipeTurnsTheMonth() throws {
+        let app = launchApp()
+        XCTAssertTrue(app.buttons["选择月份或年份"].firstMatch.waitForExistence(timeout: 10),
+                      "月历标题应存在（主页已就绪）")
+
+        func monthLabels() -> [String] {
+            app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^[0-9]+月$"))
+                .allElementsBoundByIndex.map(\.label)
+        }
+        let before = monthLabels()
+        XCTAssertFalse(before.isEmpty, "应能定位到月份标题（形如「10月」）")
+
+        app.swipeLeft()
+
+        var after = monthLabels()
+        let deadline = Date().addingTimeInterval(5)
+        while after == before && Date() < deadline { after = monthLabels() }
+        XCTAssertNotEqual(after, before, "在月历上横滑应翻月：月份标题必须变化")
+    }
+
     func testScreenshotTour() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["SHOTS"] == "1",
                           "截图巡游：由 Tools/shots.sh --tour 通过 TEST_RUNNER_SHOTS=1 开启")
