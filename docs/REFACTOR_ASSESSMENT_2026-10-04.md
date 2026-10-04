@@ -239,3 +239,32 @@ CalendarMonthColumn(interaction: MonthGridInteraction,   // ← 单一来源，�
 
 下一步：把 `monthColumn` + `calendarShell` 整体搬进 `CalendarMonthColumn.swift`
 （含 `swipeMonthGesture` 随交互模型走），同样两条 UI 通道验证。
+
+### ✅ 5b-2 之一：抽出 `CalendarMonthGridShell`（2026-10-04，两通道验证）
+
+**按依赖方向先搬下游**：`monthColumn → calendarShell` 是单向依赖，先搬 `calendarShell`
+不会产生循环依赖（这也是为什么没有把它们当一个簇硬搬）。
+
+新增 `Views/CalendarMonthGridShell.swift`；接口：
+`grid`（父视图用 `gridModel(for:)` 取好再传入——**网格缓存的持有者没变**）+
+`month/accent/controlFill/selectedDate/weekStart/isIPadSplit/columnHeight/chromeHeight`
++ 三个回调 `onSelectDay` / `onNewEvent` / `onCopyDate`。
+
+**过程中三次被自己的脚本纠正**（都值得记）：
+1. 第一次匹配失败：`elasticCellHeight` 上一步已被抽到 `MonthGridMetrics`，模式写的是旧文本；
+2. 调用点断言写了 2 处、实际 **3 处**（预览月 + UIKit 分支 + `#else` 回退分支）——
+   脚本在写文件前就断言失败，所以没有留下半成品（断言放在写之前是有意的）；
+3. 替换必须排除**实参标签**形态（`columnHeight:`），否则会把调用语法改坏。
+
+**结果**：`CalendarMonthView` 490 → **433 行**（本会话从 592 起算 **-27%**）；
+构建 0 警告 · **436 用例 0 失败** · **iPhone UI 19 条（3 skip）0 失败** ·
+**iPad UI 19 条（10 skip）0 失败**。
+
+**诚实标注**：`onNewEvent` / `onCopyDate` 只在**长按上下文菜单**里触发，UI 用例不覆盖
+（本步对它们只做到"编译期正确 + 接线正确"）；`onSelectDay` 由既有日期点选用例覆盖。
+
+### 5b-2 之二（最后一步）
+
+搬 `monthColumn`（拖拽/翻月/预渲染相邻月，持有 `interaction`）→ 完成后 **P4-1 收口**。
+它现在的依赖已大幅变薄：`interaction` + `accent` + 上述回调，`calendarShell` 调用点
+已改为 `CalendarMonthGridShell` ✓。
