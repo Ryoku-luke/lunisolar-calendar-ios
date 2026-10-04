@@ -308,3 +308,34 @@ CalendarMonthColumn(interaction: MonthGridInteraction,   // ← 单一来源，�
 **验收标准（评估里定的）**：不是"文件变小"，而是"同一个改动需要打开的文件数下降"。
 现在改月份头部只要开 `CalendarMonthHeader.swift`、改网格卡只要开 `CalendarMonthGridShell.swift`
 ——**下次真实需求时检验这条**。
+
+---
+
+## P4-2 `AIAssistantView.swift`（657 行）
+
+**实测结构是三段**（不是一坨）：
+
+| 段 | 内容 | 行数 |
+|---|---|---:|
+| ① | `#if canImport(UIKit)` 包着的两个自包含类型（`AutoFocusTextView: UIViewRepresentable` + `TapOutsideKeyboardDismisser: NSObject`）| 144 |
+| ② | `@State` ×10 + `body` | ~250 |
+| ③ | 解析 / 校验 / 执行逻辑（`parse` / `create` / `showSuccess` / `present` …）| ~220 |
+
+**变更频率**：8 次 / 60 提交（低于 `SettingsView` 与 `App` 的 9 次，更远低于 `CalendarMonthView` 的 26 次）
+——所以它当初被列为「第 2 顺位」是合理的。
+
+### ✅ 第一步：抽出 `AIInputTextView`（2026-10-04，两通道验证）
+
+搬移单元 = ①整段（一个完整的 `#if` 块，含两个类型）——**这是本会话唯一零替换的抽取**
+（两个类型都自包含，不需要任何参数化）。
+
+`AIAssistantView` 657 → **513 行**；新增 `AIInputTextView.swift`（147 行）。
+验证：构建 0 警告 · **436 用例 0 失败** · **iPhone UI 19 条（3 skip）0 失败** ·
+**iPad UI 19 条（10 skip）0 失败**（AI 输入框正是 Flow 3/3b/3c/3d 覆盖的对象）。
+
+### 后续两步（未做）
+
+1. **② 拆 `body`**：输入条 / 预览卡 / 结果列表拆成子视图
+   （同 P4-1 的"整块搬运或窄接口"两类手法，视依赖面而定）；
+2. **③ 逻辑方法移入模型**：`parse` / `create` / `showSuccess` / `present` 与 10 个 `@State`
+   缠在一起，属**状态所有权重构**（同 P4-1 的 5b）——先设计模型再动手，别硬搬。
