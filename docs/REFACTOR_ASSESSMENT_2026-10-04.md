@@ -203,3 +203,39 @@ CalendarMonthHeader(monthName: MonthLabel.name(for: currentMonth),
 3. 新视图 `CalendarMonthColumn(interaction:month:selectedDate:accent:weekStart:isIPadSplit:onSelectDay:onNewEvent:onCopyDate:onChangeMonth:onTapDateJump:)`
    —— 输入数会从 13 降到约 7，且**手势不再作为参数传递**（它随交互模型走）；
 4. 每步都要**两通道**验证；尤其 iPad，因为弹性行高分支只在那里生效。
+
+### ✅ 5b 第 1 小步：交互态集中到 `MonthGridInteraction`（2026-10-04，两通道验证）
+
+新增 `Views/MonthGridInteraction.swift`（`@Observable final class`），收纳 7 个交互/测量态：
+`monthSlideEdge` / `dragOffsetX` / `isDragging` / `previewMonth` / `monthWidth` /
+`columnHeight` / `chromeHeight`；视图改为 `@State var interaction` 持有。
+数据态（`selectedDate` / `currentMonth` / `auxiliaryPage` / `eventEditSheet` / `gridCache`）**不动**。
+
+**过程中撞到两个真实约束（都已写进提交信息，供后续参考）**：
+
+1. **带 setter 的转发计算属性在 `View` 的逃逸闭包里不可赋值**（"self is immutable"）——
+   `@State` 之所以能赋值，是因为它用 `nonmutating set` 绕开了结构体不可变。
+   所以正确做法是让使用点**直接走 `interaction.<字段>`**（对 class 字段赋值在任何上下文都允许），
+   而不是把它包装回视图属性。
+2. **机械重命名会误伤**：一次全局 `\bname\b → interaction.name` 把
+   `MonthGridMetrics` 的**形参名**、以及调用点的**实参标签**（`columnHeight:` / `chromeHeight:`）
+   一起改了。已回退该文件、并改成只替换"非标签"用法（`(?<![\w.])name\b(?!\s*:)`）。
+
+**验证**：构建 0 警告 · **436 用例 0 失败** · **iPhone UI 19 条（3 skip）0 失败** ·
+**iPad UI 19 条（10 skip）0 失败**。
+
+### 5b 剩余：把视图搬过去（接口现在可行了）
+
+状态已集中，`CalendarMonthColumn` 的接口从"13 输入 + 6 回调 + 手势类型"退化为：
+
+```swift
+CalendarMonthColumn(interaction: MonthGridInteraction,   // ← 单一来源，含手势算法
+                    month: Date, selectedDate: Date, accent: DayAccent,
+                    weekStart: Int, isIPadSplit: Bool,
+                    onSelectDay: (Date) -> Void, onNewEvent: (Date) -> Void,
+                    onCopyDate: (Date) -> Void, onChangeMonth: (Int) -> Void,
+                    onTapDateJump: () -> Void)
+```
+
+下一步：把 `monthColumn` + `calendarShell` 整体搬进 `CalendarMonthColumn.swift`
+（含 `swipeMonthGesture` 随交互模型走），同样两条 UI 通道验证。
