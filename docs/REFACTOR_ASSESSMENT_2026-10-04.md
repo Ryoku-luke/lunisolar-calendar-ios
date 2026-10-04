@@ -339,3 +339,33 @@ CalendarMonthColumn(interaction: MonthGridInteraction,   // ← 单一来源，�
    （同 P4-1 的"整块搬运或窄接口"两类手法，视依赖面而定）；
 2. **③ 逻辑方法移入模型**：`parse` / `create` / `showSuccess` / `present` 与 10 个 `@State`
    缠在一起，属**状态所有权重构**（同 P4-1 的 5b）——先设计模型再动手，别硬搬。
+
+### P4-2 第 ③ 步（逻辑移入模型）的耦合面测量——已做，边界清楚了
+
+对 10 个 `@State` 分别统计它在 **`body` 段**与**逻辑段**（`// MARK: - 解析 / 校验 / 执行` 之后）
+的出现次数（`AIAssistantView.swift`，当前 513 行）：
+
+| `@State` | body 段引用 | 逻辑段引用 |
+|---|---:|---:|
+| `draft` | 2 | 10 |
+| `inputFocused` | 8 | 2 |
+| `input` | 4 | 3 |
+| `destructiveLabel` | 2 | 5 |
+| `destructiveTarget` | 2 | 4 |
+| `pendingCommand` | 1 | 5 |
+| `completedMessage` | 2 | 4 |
+| `completedOffDay` | 1 | 5 |
+| `inlineError` | 2 | 3 |
+| `queryResults` | 1 | 2 |
+| `queryDate` | 1 | 2 |
+
+- **两边都碰 → 模型候选**（11 个）：`input`, `draft`, `queryResults`, `queryDate`, `destructiveTarget`, `destructiveLabel`, `pendingCommand`, `completedMessage`, `completedOffDay`, `inlineError`, `inputFocused`
+- 只有 body 碰（0 个）：（无）
+- 只有逻辑碰（0 个）：（无）
+
+**怎么用这份数据**：`body` 只负责渲染的 state 不必进模型（留在视图更简单）；
+**两边都碰的那些**才是"契约面"——它们定义了模型必须暴露什么，也决定了第 ③ 步的
+接口大小。这跟 P4-1 的 5b 是同一套做法：先集中状态，视图抽取才会退化成传模型 + 回调。
+
+**建议顺序**：先做第 ② 步（拆 `body`，纯视图、无状态搬家），再做第 ③ 步——
+因为 ② 会把 body 的引用点分散到子视图里，届时"哪些 state 被谁碰"会更清楚。
