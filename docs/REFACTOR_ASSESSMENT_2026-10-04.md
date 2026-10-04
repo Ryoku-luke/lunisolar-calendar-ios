@@ -177,3 +177,29 @@ CalendarMonthHeader(monthName: MonthLabel.name(for: currentMonth),
 **为什么这步单独留一轮**：它是本项目最长的一块，且涉及网格布局、选中态、弹性行高这三件
 互相关联的事；抽取后**必须两通道验证**（各约 5 分钟）。在没有余量完成「读码 → 抽取 →
 两通道」整条链时开工，只会留下一份没人验证的布局改动——本文件正是 UI 用例覆盖的重点。
+
+### ✅ 补充：`MonthGridMetrics` 的 iPad 通道验证（2026-10-04）
+
+`elasticCellHeight` 只在 **iPad 分栏**下生效（`guard isIPadSplit …`）——也就是说
+**iPhone 跑多少遍都覆盖不到它**。所以补跑了 iPad 全量：**19 条（10 skip）0 失败** ✓
+（加 5 条 `MonthGridMetricsTests` 单测：非 iPad / 未测量 / 行数为 0 → nil、上限 96、
+下限 `minCellHeight`、chrome 未上报时用 170 回退）。
+
+### 📐 5b（`monthColumn` + `calendarShell`）的设计方案——建议先设计再动手
+
+依赖清单（读完 160 行后实测）约 **13 个输入 + 6 个回调 + 1 个手势类型**：
+`previewMonth` / `dragOffsetX` / `isDragging` / `monthSlideEdge` / `monthWidth` /
+`swipeMonthGesture(width:)` / `auxiliaryPage` / `changeMonth` / `selectedDate`（读+写）/
+`gridModel(for:)` / `selectDay` / `eventEditSheet` / `copyDateText` / `weekStart` /
+`columnHeight` / `chromeHeight` / `isIPadSplit`。
+
+**结论：这不是抽取，是状态所有权重构。** 建议做法（先设计、后改码）：
+
+1. 新增 `@Observable final class MonthGridInteraction`，收纳**交互态**：
+   `dragOffsetX`、`isDragging`、`monthSlideEdge`、`monthWidth`、`previewMonth`、
+   `chromeHeight`/`columnHeight`（测量结果）与 `swipeMonthGesture` 的算法；
+2. 父视图只保留"数据态"（`store` / `selectedDate` / `auxiliaryPage` / `eventEditSheet`），
+   把 `interaction` 作为 `@State` 持有并传给新视图；
+3. 新视图 `CalendarMonthColumn(interaction:month:selectedDate:accent:weekStart:isIPadSplit:onSelectDay:onNewEvent:onCopyDate:onChangeMonth:onTapDateJump:)`
+   —— 输入数会从 13 降到约 7，且**手势不再作为参数传递**（它随交互模型走）；
+4. 每步都要**两通道**验证；尤其 iPad，因为弹性行高分支只在那里生效。
