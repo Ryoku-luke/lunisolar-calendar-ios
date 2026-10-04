@@ -323,12 +323,28 @@ struct CalendarMonthView: View {
                 if let pm = interaction.previewMonth {
                     // 传 pm：此前 calendarShell 内部恒定取 currentMonth，.id(pm) 只换视图标识
                     // 不改内容 → 拖动时屏幕上并排的两份是"同一个月"，相邻月等于没预渲染
-                    calendarShell(for: pm, accent: accent.decorative, controlFill: accent.controlFill)
+                    CalendarMonthGridShell(month: pm, grid: gridModel(for: pm),
+                                              accent: accent.decorative, controlFill: accent.controlFill,
+                                              selectedDate: selectedDate, weekStart: weekStart,
+                                              isIPadSplit: isIPadSplit,
+                                              columnHeight: interaction.columnHeight,
+                                              chromeHeight: interaction.chromeHeight,
+                                              onSelectDay: { selectDay($0) },
+                                              onNewEvent: { d in selectedDate = d; eventEditSheet = .new(d) },
+                                              onCopyDate: { copyDateText($0) })
                         .id(pm)
                         .offset(x: interaction.dragOffsetX < 0 ? interaction.dragOffsetX + interaction.monthWidth : interaction.dragOffsetX - interaction.monthWidth)
                 }
                 // 顶层：当前月，1:1 跟手
-                calendarShell(for: currentMonth, accent: accent.decorative, controlFill: accent.controlFill)
+                CalendarMonthGridShell(month: currentMonth, grid: gridModel(for: currentMonth),
+                                              accent: accent.decorative, controlFill: accent.controlFill,
+                                              selectedDate: selectedDate, weekStart: weekStart,
+                                              isIPadSplit: isIPadSplit,
+                                              columnHeight: interaction.columnHeight,
+                                              chromeHeight: interaction.chromeHeight,
+                                              onSelectDay: { selectDay($0) },
+                                              onNewEvent: { d in selectedDate = d; eventEditSheet = .new(d) },
+                                              onCopyDate: { copyDateText($0) })
                     .id(currentMonth)
                     .offset(x: interaction.dragOffsetX)
                     .scaleEffect(interaction.isDragging ? 0.992 : 1.0)
@@ -348,7 +364,15 @@ struct CalendarMonthView: View {
             )
             .simultaneousGesture(swipeMonthGesture(width: interaction.monthWidth))
             #else
-            calendarShell(for: currentMonth, accent: accent.decorative, controlFill: accent.controlFill)
+            CalendarMonthGridShell(month: currentMonth, grid: gridModel(for: currentMonth),
+                                              accent: accent.decorative, controlFill: accent.controlFill,
+                                              selectedDate: selectedDate, weekStart: weekStart,
+                                              isIPadSplit: isIPadSplit,
+                                              columnHeight: interaction.columnHeight,
+                                              chromeHeight: interaction.chromeHeight,
+                                              onSelectDay: { selectDay($0) },
+                                              onNewEvent: { d in selectedDate = d; eventEditSheet = .new(d) },
+                                              onCopyDate: { copyDateText($0) })
                 .id(currentMonth)
                 .padding(.horizontal, AppTheme.Spacing.md)
             #endif
@@ -400,88 +424,6 @@ struct CalendarMonthView: View {
     /// 上报未就绪（=0）时回退旧估算值 170——行为不劣化，多一次布局即修正。
     /// 单个月份卡片（表头 + 42 格网格）。
     /// 必须按传入月份取网格：跟手滑动时同一份日历要同时渲染当前月与相邻月。
-    private func calendarShell(for month: Date, accent: Color, controlFill: Color) -> some View {
-        let grid = gridModel(for: month)
-        let columns = [GridItem](repeating: GridItem(.flexible(), spacing: 0), count: 7)
-        return VStack(alignment: .leading, spacing: 0) {
-            WeekHeaderView(weekStart: weekStart)
-                // N-3：星期表头高度上报（弹性行高 chrome 的组成部分）
-                .background(
-                    GeometryReader { geo in
-                        Color.clear.preference(key: MonthChromeHeightKey.self, value: geo.size.height)
-                    }
-                )
-            LazyVGrid(columns: columns, spacing: isIPadSplit ? 6 : 3) {
-                ForEach(grid.cells) { cell in
-                    let d = cell.date
-                    DayCellView(date: d, isCurrentMonth: cell.inCurrentMonth,
-                                isSelected: d.isSameDay(as: selectedDate),
-                                isToday: d.isToday,
-                                lunar: cell.lunar,
-                                huangli: cell.huangli,
-                                hasEvents: cell.eventCount > 0,
-                                eventPriorities: cell.eventPriorities,
-                                eventCount: cell.eventCount,
-                                festivalTint: cell.festivalTint,
-                                selectedForeground: cell.selectedForeground,
-                                cellAccent: cell.festivalTint
-                                    ?? (d.isSameDay(as: selectedDate) ? controlFill : nil),
-                                festivalName: cell.festivalName,
-                                solarTermName: cell.solarTermName,
-                                solarTermTint: cell.solarTermTint,
-                                holidayType: cell.holidayType)
-                        .equatable()
-                        // iPad：按可视高度弹性分配行高；iPhone：nil → 不限高，
-                        // 由下一行的 minHeight 给出可点下限
-                        .frame(height: MonthGridMetrics.elasticCellHeight(rows: grid.cells.count / 7,
-                                                                isIPadSplit: isIPadSplit,
-                                                                columnHeight: interaction.columnHeight,
-                                                                chromeHeight: interaction.chromeHeight))
-                        .frame(minHeight: AppTheme.Touch.minCellHeight)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectDay(d)
-                        }
-                        // 原生上下文菜单：长按日期格 → 快捷操作（原创，克制不加额外功能）
-                        .contextMenu {
-                            Button {
-                                selectDay(d)
-                            } label: {
-                                Label("选中此日", systemImage: "checkmark.circle")
-                            }
-                            Button {
-                                selectedDate = d
-                                eventEditSheet = .new(d)
-                            } label: {
-                                Label("新建日程", systemImage: "plus.circle")
-                            }
-                            Button {
-                                copyDateText(d)
-                            } label: {
-                                Label("复制日期", systemImage: "doc.on.doc")
-                            }
-                        }
-                }
-            }
-            // 原生选中触觉反馈：选中日期轻震（iOS 17+ 系统 sensoryFeedback，无自定义引擎）
-            .sensoryFeedback(.selection, trigger: selectedDate)
-            .padding(.horizontal, isIPadSplit ? AppTheme.Spacing.lg : AppTheme.Spacing.md)
-            .padding(.bottom, AppTheme.Spacing.lg)
-        }
-        .padding(.top, AppTheme.Spacing.sm)
-        // 月历是主视觉：白/浅色卡片 + 极轻边界，减少玻璃效果噪声。
-        .background(
-            Color.secondarySystemGroupedBackground,
-            in: RoundedRectangle(cornerRadius: AppTheme.Radius.xxl, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: AppTheme.Radius.xxl, style: .continuous)
-                .stroke(Color.themeSeparator.opacity(0.18), lineWidth: 0.7)
-        }
-        .contentShape(Rectangle())
-        // 月份横滑手势统一在 monthColumn 以 simultaneousGesture 挂载（避免拦截日期点按与纵向滚动）
-    }
-
 }
 
 
