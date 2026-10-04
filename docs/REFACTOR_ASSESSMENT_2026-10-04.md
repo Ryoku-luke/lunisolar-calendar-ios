@@ -123,3 +123,30 @@
 **节奏（本轮定的规矩，别破坏）**：每搬一块都跑「构建 + 单测 + 两条 UI 通道」。
 第 2、3 步里 UI 只跑了 iPhone（叶子视图、路径与 iPad 相同），
 `monthHeader` 之后**必须补齐两通道**——它涉及状态与交互，不是无状态叶子。
+
+### ✅ 第 4 步：抽出 `CalendarMonthHeader`（2026-10-04，两通道验证）
+
+按第 3 步末尾勘明的**窄接口**抽取，新增 `Views/CalendarMonthHeader.swift`（70 行）：
+
+```swift
+CalendarMonthHeader(monthName: MonthLabel.name(for: currentMonth),
+                    year: currentMonth.year,
+                    controlTint: accent.controlTint,
+                    onTapTitle: { auxiliaryPage = .dateJump },
+                    onChangeMonth: { by in changeMonth(by: by) })
+```
+
+- **解耦手法**（脚本里逐条断言替换次数，防漏改）：`auxiliaryPage = .dateJump` → `onTapTitle()`、
+  `changeMonth(by: ±1)` → `onChangeMonth(±1)`、`MonthLabel.name(for: currentMonth)` / `currentMonth.year`
+  → 入参 `monthName` / `year`；抽取后断言正文里**不再出现**这三个父状态符号。
+- **接口比预想更窄**：读码发现传入的 `accent` 参数在函数体里**根本没用**（只用 `controlTint`），
+  所以新 struct 不带 `accent`——顺手少了一个无用参数。
+- 结果：`CalendarMonthView.swift` **549 → 499 行**（首次降到 500 以下），新文件 70 行。
+- 验证：构建 0 警告 + **431 用例 × 2 时区 0 失败** + **iPhone UI 19 条（3 skip）0 失败**
+  + **iPad UI 19 条（10 skip）0 失败**。其中 Flow 14 正是通过**标题按钮**（`选择月份或年份`）
+  进日期跳转的 → `onTapTitle` 回调被真实交互覆盖 ✓。
+
+### 下一步：最后一块
+
+`monthColumn + calendarShell + elasticCellHeight`（约 160 行）——先读它们的依赖：
+若同样写父状态，按第 4 步的窄接口办法；若只是组装，按第 2/3 步的整块搬运。

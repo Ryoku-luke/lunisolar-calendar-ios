@@ -298,7 +298,11 @@ struct CalendarMonthView: View {
             // N-3：月份标题 + 节气条合包上报真实高度（含各自外层 padding）。
             // 节气条显隐两态自然正确——solarTermBar 为 @ViewBuilder，不存在时不渲染。
             VStack(spacing: 0) {
-                monthHeader(accent: accent.decorative, controlTint: accent.controlTint)
+                CalendarMonthHeader(monthName: MonthLabel.name(for: currentMonth),
+                                                    year: currentMonth.year,
+                                                    controlTint: accent.controlTint,
+                                                    onTapTitle: { auxiliaryPage = .dateJump },
+                                                    onChangeMonth: { by in changeMonth(by: by) })
                     .padding(.horizontal, AppTheme.Spacing.xl)
                     .padding(.top, 8).padding(.bottom, AppTheme.Spacing.sm)
                 CalendarSolarTermBar(accent: accent.decorative)
@@ -385,60 +389,6 @@ struct CalendarMonthView: View {
     }
 
     // MARK: - 头部：月份标题 / 节气条 / 箭头
-    private func monthHeader(accent: Color, controlTint: Color) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.md) {
-            // 月份标题可点击 → 弹出日期跳转（主流日历交互：点标题选月份/年份）
-            Button {
-                auxiliaryPage = .dateJump
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
-                    // 月份名走 MonthLabel（locale 感知、日历固定公历）。
-                    // 原先写死 `"\(month)月"`，英文界面显示「9月」（P3-3）；
-                    // 而 `Text(date, format:)` 会跟随 locale 的日历，佛历/和历下月名会错。
-                    // 年份仍是 verbatim 纯数字：避免 LocalizedStringKey 对 Int 插值加千位分隔
-                    // （英文 locale 下 2026 会渲染成 "2,026"）。
-                    Text(verbatim: MonthLabel.name(for: currentMonth))
-                        .font(AppTheme.Font.hero).foregroundStyle(Color.label)
-                        .contentTransition(.numericText())
-                        // P3-4 续：最大辅助字号下 hero(38pt) 会缩放到 ~90pt，
-                        // 不限制就会把「10月」和年份挤到折行（实测年份被折成「202」/「6」）。
-                        // 单行 + 允许缩到 60%：宁可字小，也不让日期信息读不出来。
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                    Text(verbatim: "\(currentMonth.year)")
-                        .font(AppTheme.Font.title3).foregroundStyle(Color.tertiaryLabel)
-                        .contentTransition(.numericText())
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Color.tertiaryLabel)
-                        .padding(.bottom, 6)
-                        // 装饰箭头：月/年 Text 已是完整朗读内容，箭头加入只会读出符号名
-                        .accessibilityHidden(true)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .pressableFeedback()
-            .accessibilityLabel("选择月份或年份")
-            .accessibilityHint("打开日期跳转面板")
-            Spacer()
-            HStack(spacing: AppTheme.Spacing.sm) {
-                Button {
-                    changeMonth(by: -1)
-                } label: { CalendarChevronButton(name: "chevron.left", accent: controlTint) }
-                    .pressableFeedback()
-                    // P1-2：⌘[ 上一月
-                    .keyboardShortcut("[", modifiers: .command)
-                Button {
-                    changeMonth(by: 1)
-                } label: { CalendarChevronButton(name: "chevron.right", accent: controlTint) }
-                    .pressableFeedback()
-                    // P1-2：⌘] 下一月
-                    .keyboardShortcut("]", modifiers: .command)
-            }
-        }
-    }
-
     /// 弹性行高：把可视高度扣掉「月份标题 + 节气条 + 星期表头 + 内边距」后
     /// 按行均分，夹在 56（可点下限）~96（大屏上限）之间。
     /// 2026-09-29：恢复 `isIPadSplit` 守卫——仅 iPad 分栏启用；
