@@ -94,13 +94,7 @@ struct AIAssistantView: View {
                     // 不做 disabled：空输入时点击会走 parse() 并给出明确提示；
                     // 否则按钮静默不可点，用户感受为「点了没反应」。
                     // 整行可点 + 加粗居中，减少"这个按钮在哪/要不要点"的犹豫
-                    Button {
-                        parse()
-                    } label: {
-                        Text(NSLocalizedString("解析并预览", comment: "AI助手"))
-                            .font(.body.weight(.semibold))
-                            .frame(maxWidth: .infinity, alignment: .center)
-                    }
+                        AIParseButton(onParse: { parse() })
                     .accessibilityIdentifier(AccessibilityID.aiParse)
                 }
 
