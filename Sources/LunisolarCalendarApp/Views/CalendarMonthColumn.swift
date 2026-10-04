@@ -6,8 +6,8 @@ import SwiftUI
 /// 设计要点（5b 的收尾）：
 /// - **交互态走模型**：拖拽位移/翻页方向/容器宽度都在 `MonthGridInteraction` 里，
 ///   本视图只读写它，不持有这些状态；
-/// - **手势留在父视图**：`swipeMonthGesture` 由父视图用 `.simultaneousGesture(…)` 挂在本视图上
-///   ——`some Gesture` 无法作为参数传递，且它天然属于"父视图的交互装配"这一层；
+/// - **横滑手势挂在列内部的网格区上**（不是整列）。原因见 `CalendarMonthSwipeGesture.swift`：
+///   挂到 `ScrollView` 的直接子视图上会抢走纵向拖动，真机表现为主页无法上下滑动；
 /// - 其余经入参 + 回调接入：父视图仍是唯一的状态所有者。
 struct CalendarMonthColumn: View {
     let interaction: MonthGridInteraction
@@ -23,6 +23,8 @@ struct CalendarMonthColumn: View {
     let onCopyDate: (Date) -> Void
     let onChangeMonth: (Int) -> Void
     let onTapDateJump: () -> Void
+    /// 横滑翻页提交（月份变化 + 选中日随月收敛由父视图处理——数据态仍归父视图）
+    let onCommitMonth: (Date) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,6 +86,9 @@ struct CalendarMonthColumn: View {
                         removal: .move(edge: interaction.monthSlideEdge == .trailing ? .leading : .trailing)
                     ))
             }
+            .simultaneousGesture(swipeMonthGesture(width: interaction.monthWidth))
+            // ⚠️ 只能挂在这个网格区上，不能上移到整列：挂到 ScrollView 的直接子视图
+            // 会抢走纵向拖动，真机表现为「主页上下无法滑动」（2026-10-04 真实回归）。
             .padding(.horizontal, AppTheme.Spacing.md)
             // 容器宽度（翻页阈值用）：background 里读尺寸，不改变布局高度
             .background(

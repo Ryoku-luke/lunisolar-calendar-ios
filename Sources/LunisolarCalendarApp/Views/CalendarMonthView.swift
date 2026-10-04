@@ -307,14 +307,15 @@ struct CalendarMonthView: View {
                             onNewEvent: { d in selectedDate = d; eventEditSheet = .new(d) },
                             onCopyDate: { copyDateText($0) },
                             onChangeMonth: { by in changeMonth(by: by) },
-                            onTapDateJump: { auxiliaryPage = .dateJump })
-        // 横滑手势只在 UIKit 平台存在（`swipeMonthGesture` 定义在 #if canImport(UIKit) 里）；
-        // macOS 宿主只是编译用，没有这套手势。
-        #if canImport(UIKit)
-        return column.simultaneousGesture(swipeMonthGesture(width: interaction.monthWidth))
-        #else
+                            onTapDateJump: { auxiliaryPage = .dateJump },
+                            onCommitMonth: { target in
+                                currentMonth = target
+                                selectedDate = Self.clampedToMonth(selectedDate, in: target)
+                            })
+        // 横滑手势不在这里挂：它必须挂在列内部的**网格区**上。
+        // 2026-10-04 回归：P4-1 抽取时把手势上移到了整列（= ScrollView 的直接子视图），
+        // 于是 DragGesture 抢走纵向拖动，真机表现为"主页上下无法滑动"。
         return column
-        #endif
     }
     // MARK: - 节日自适应背景与强调色
 
