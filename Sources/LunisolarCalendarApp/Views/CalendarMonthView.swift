@@ -61,6 +61,7 @@ struct CalendarMonthView: View {
     /// - iPad 双栏侧栏：false（由 NavigationSplitView 的列提供导航上下文，避免侧栏内嵌栈）
     private let embedsInNavigationStack: Bool
     /// 可选外部绑定（iPad 双栏与 DayDetailView 联动）；本地 @State 为唯一真相，onChange 双向同步
+    // MARK: - 输入与派生
     private var externalSelectedDate: Binding<Date>?
     // iPad 侧栏内「倒数日 / 设置」改用 sheet 弹出（push 会挤在窄列里）。
     // 两类模态各收一个枚举驱动（MonthAuxiliaryPage / MonthEventEditSheet），
@@ -88,6 +89,11 @@ struct CalendarMonthView: View {
     /// 会让手机套上 iPad 的网格布局（P3-2）。判据统一在 `LayoutIdiom`。
     private var isIPadSplit: Bool { LayoutIdiom.usesSplitLayout(horizontalSizeClass: hSizeClass) }
 
+    // MARK: - 视图主体
+    // 目录（P4-1）：本文件已按职责分成若干私有方法，抽取成独立 struct 时按这些分段走即可：
+    //   月列与外壳 → monthColumn / calendarShell / elasticCellHeight
+    //   头部       → monthHeader / solarTermBar / chevronButton
+    //   强调色     → dayAccentForToday / accentColorForToday / festiveBackground
     var body: some View {
         if embedsInNavigationStack {
             NavigationStack { calendarContent }
@@ -286,6 +292,7 @@ struct CalendarMonthView: View {
     }
 
     /// 预构建某月网格模型写入缓存（滑动切换零卡顿的关键）
+    // MARK: - 月列与外壳
     private func monthColumn(accent: DayAccent) -> some View {
         VStack(spacing: 0) {
             // N-3：月份标题 + 节气条合包上报真实高度（含各自外层 padding）。
@@ -361,6 +368,7 @@ struct CalendarMonthView: View {
     /// 注意：这里被 `calendarContent` 每次 body 取一次后逐层透传，避免重复做节日遍历。
     /// N-4：DayAccent 缓存读取。真正的重建在 `onChange(of: selectedDate)` 里做，
     /// 滑动翻月（选中日不变）时 body 每帧直接命中缓存，零重复计算。
+    // MARK: - 强调色
     private var dayAccentForToday: DayAccent { cachedDayAccent }
     private var accentColorForToday: Color { cachedDayAccent.decorative }
 
@@ -376,6 +384,7 @@ struct CalendarMonthView: View {
         }
     }
 
+    // MARK: - 头部：月份标题 / 节气条 / 箭头
     private func monthHeader(accent: Color, controlTint: Color) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.md) {
             // 月份标题可点击 → 弹出日期跳转（主流日历交互：点标题选月份/年份）
