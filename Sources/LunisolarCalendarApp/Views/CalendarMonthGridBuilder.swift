@@ -14,7 +14,7 @@ extension CalendarMonthView {
     /// 同时把选中日期联动到新月份（同日存在则保持，否则取月末），
     /// 避免"切月后日期卡仍显示上月内容"的逻辑不通。
     func changeMonth(by offset: Int) {
-        monthSlideEdge = offset > 0 ? .trailing : .leading
+        interaction.monthSlideEdge = offset > 0 ? .trailing : .leading
         withAnimation(AppTheme.Motion.screen) {
             currentMonth = currentMonth.addingMonths(offset)
             selectedDate = Self.clampedToMonth(selectedDate, in: currentMonth)
@@ -91,7 +91,7 @@ extension CalendarMonthView {
     func selectDay(_ date: Date) {
         let month = date.firstDayOfMonth
         if month != currentMonth {
-            monthSlideEdge = month > currentMonth ? .trailing : .leading
+            interaction.monthSlideEdge = month > currentMonth ? .trailing : .leading
             withAnimation(AppTheme.Motion.screen) { currentMonth = month }
         }
         withAnimation(AppTheme.Motion.pressInOut) { selectedDate = date }

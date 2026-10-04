@@ -5,7 +5,7 @@ import LunarCore
 struct DaySlot: Identifiable, Hashable {
     let date: Date
     let inCurrentMonth: Bool
-    /// 以日期作为稳定标识：横滑手势期间 dragOffsetX 每帧触发 body 重算，
+    /// 以日期作为稳定标识：横滑手势期间 interaction.dragOffsetX 每帧触发 body 重算，
     /// 若用 UUID() 会导致 42 个格子每帧被 ForEach 判定为全新元素而重建掉帧。
     /// 月历网格内日期天然唯一，可直接作 id。
     var id: Date { date }

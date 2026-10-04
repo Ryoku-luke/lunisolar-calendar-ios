@@ -25,28 +25,28 @@ struct CalendarMonthView: View {
     /// 彻底规避"点击日期无反应"（此前 @Binding←局部引用/投影接线的运行时失效问题）。
     @State var selectedDate: Date = Date()
     /// 月份卡片滑动的进入方向：.trailing=下月从右侧滑入，.leading=上月从左侧滑入
-    @State var monthSlideEdge: Edge = .trailing
+    /// 交互态集中在 `MonthGridInteraction`（P4-1 第 5b 步第 1 小步）。
+    /// 这与"数据态"（selectedDate / currentMonth / auxiliaryPage / eventEditSheet）分开：
+    /// 前者是拖拽与测量，后者是业务真相。集中之后，monthColumn/calendarShell 的抽取
+    /// 才会从"13 个输入 + 6 个回调 + 手势类型"退化成"传一个模型 + 几个回调"。
+    /// 用 class + @Observable：闭包里对它的字段赋值不需要 `self` 可变（正是 @State 能用的原因）。
+    @State var interaction = MonthGridInteraction()
+
     #if canImport(UIKit)
     /// 跟手滑动偏移：手指移动多少卡片就移动多少（1:1），松手后回弹或翻页
-    @State var dragOffsetX: CGFloat = 0
-    @State var isDragging: Bool = false
     /// 拖动中预览的相邻月份（左滑=下月、右滑=上月），缓存预填充后零卡顿
-    @State var previewMonth: Date? = nil
     /// 日历容器宽度（翻页/回弹阈值判定用），由 background GeometryReader 注入
-    @State var monthWidth: CGFloat = 0
     /// 最小拖动距离：小于该距离视为点按（日期选中仍可用）
     let swipeThreshold: CGFloat = 8
     #endif
     /// 中栏可视高度（仅 iPad 用）：弹性行高的计算依据，由背景 GeometryReader 注入。
     /// 0 = 尚未测量，此时行高退回 `minHeight: 56` 的旧行为（多一次布局即可修正）。
-    @State private var columnHeight: CGFloat = 0
     /// N-3：月卡「chrome」真实高度（月份标题 + 节气条 + 星期表头 + 卡片内外边距），
     /// 由 `MonthChromeHeightKey` PreferenceKey 上报求和替换旧的 170 魔数。
     /// 节气条显隐两态都会上报真实值（不存在时不上报，天然为 0 参与求和）。
     /// 0 = 尚未测量，此时回退旧估算值（多一次布局即可修正，行为不劣化）。
-    @State private var chromeHeight: CGFloat = 0
     /// 月网格派生数据缓存：仅当月份或事件版本变化时重建。
-    /// 横滑期间 dragOffsetX 每帧令 body 重算，但命中此缓存后 42 格的
+    /// 横滑期间 interaction.dragOffsetX 每帧令 body 重算，但命中此缓存后 42 格的
     /// 农历转换/黄历生成/节日遍历/事件统计全部 O(1) 复用，不再每帧重算。
     /// 月网格派生数据缓存（多月份字典）：key = "月份-版本"。
     /// 滑动切换月份时相邻月份已预填充 → 动画期间零同步重算，消除卡顿。
@@ -119,13 +119,13 @@ struct CalendarMonthView: View {
             // iPhone：当日卡片内容可能超过一屏，允许纵向滚动。
             // iPad：仍包 ScrollView（防止内容超高被裁切），但先把可视高度量出来交给月卡，
             // 让格子按可视区高度弹性分配（56~96pt），避免月卡下方留出大片空白。
-            // 量高度放在背景 GeometryReader 里：不参与布局、不改变高度（与 monthWidth 同一手法）。
+            // 量高度放在背景 GeometryReader 里：不参与布局、不改变高度（与 interaction.monthWidth 同一手法）。
             ScrollView(showsIndicators: false) {
                 monthColumn(accent: dayAccent)
             }
             // N-3：读取月卡 chrome 真实高度（月份标题 + 节气条 + 星期表头）
             .onPreferenceChange(MonthChromeHeightKey.self) { value in
-                chromeHeight = value
+                interaction.chromeHeight = value
             }
             // P1-2：方向键移动选中日期（iPad 外接键盘）。
             // selectDay 本身处理跨月联动，越界日期（1900 前/2100 后）由 LunarDate 层兜底。
@@ -144,8 +144,8 @@ struct CalendarMonthView: View {
             .background {
                 GeometryReader { geo in
                     Color.clear
-                        .onAppear { columnHeight = geo.size.height }
-                        .onChange(of: geo.size.height) { _, h in columnHeight = h }
+                        .onAppear { interaction.columnHeight = geo.size.height }
+                        .onChange(of: geo.size.height) { _, h in interaction.columnHeight = h }
                 }
             }
         }
@@ -269,7 +269,7 @@ struct CalendarMonthView: View {
         // 同时清空滑动预览月（切月后 preview 网格已无意义，避免重复渲染）
         .onChange(of: currentMonth) { _, newMonth in
             #if canImport(UIKit)
-            previewMonth = nil
+            interaction.previewMonth = nil
             #endif
             prefetchGrid(for: newMonth.addingMonths(-1))
             prefetchGrid(for: newMonth)
@@ -320,21 +320,21 @@ struct CalendarMonthView: View {
             #if canImport(UIKit)
             ZStack {
                 // 底层：拖动方向的相邻月（左滑=下月在右、右滑=上月在左），跟手同速
-                if let pm = previewMonth {
+                if let pm = interaction.previewMonth {
                     // 传 pm：此前 calendarShell 内部恒定取 currentMonth，.id(pm) 只换视图标识
                     // 不改内容 → 拖动时屏幕上并排的两份是"同一个月"，相邻月等于没预渲染
                     calendarShell(for: pm, accent: accent.decorative, controlFill: accent.controlFill)
                         .id(pm)
-                        .offset(x: dragOffsetX < 0 ? dragOffsetX + monthWidth : dragOffsetX - monthWidth)
+                        .offset(x: interaction.dragOffsetX < 0 ? interaction.dragOffsetX + interaction.monthWidth : interaction.dragOffsetX - interaction.monthWidth)
                 }
                 // 顶层：当前月，1:1 跟手
                 calendarShell(for: currentMonth, accent: accent.decorative, controlFill: accent.controlFill)
                     .id(currentMonth)
-                    .offset(x: dragOffsetX)
-                    .scaleEffect(isDragging ? 0.992 : 1.0)
+                    .offset(x: interaction.dragOffsetX)
+                    .scaleEffect(interaction.isDragging ? 0.992 : 1.0)
                     .transition(.asymmetric(
-                        insertion: .move(edge: monthSlideEdge),
-                        removal: .move(edge: monthSlideEdge == .trailing ? .leading : .trailing)
+                        insertion: .move(edge: interaction.monthSlideEdge),
+                        removal: .move(edge: interaction.monthSlideEdge == .trailing ? .leading : .trailing)
                     ))
             }
             .padding(.horizontal, AppTheme.Spacing.md)
@@ -342,11 +342,11 @@ struct CalendarMonthView: View {
             .background(
                 GeometryReader { geo in
                     Color.clear
-                        .onAppear { monthWidth = geo.size.width }
-                        .onChange(of: geo.size.width) { _, w in monthWidth = w }
+                        .onAppear { interaction.monthWidth = geo.size.width }
+                        .onChange(of: geo.size.width) { _, w in interaction.monthWidth = w }
                 }
             )
-            .simultaneousGesture(swipeMonthGesture(width: monthWidth))
+            .simultaneousGesture(swipeMonthGesture(width: interaction.monthWidth))
             #else
             calendarShell(for: currentMonth, accent: accent.decorative, controlFill: accent.controlFill)
                 .id(currentMonth)
@@ -435,8 +435,8 @@ struct CalendarMonthView: View {
                         // 由下一行的 minHeight 给出可点下限
                         .frame(height: MonthGridMetrics.elasticCellHeight(rows: grid.cells.count / 7,
                                                                 isIPadSplit: isIPadSplit,
-                                                                columnHeight: columnHeight,
-                                                                chromeHeight: chromeHeight))
+                                                                columnHeight: interaction.columnHeight,
+                                                                chromeHeight: interaction.chromeHeight))
                         .frame(minHeight: AppTheme.Touch.minCellHeight)
                         .contentShape(Rectangle())
                         .onTapGesture {
