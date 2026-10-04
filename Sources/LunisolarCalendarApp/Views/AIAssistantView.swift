@@ -136,24 +136,7 @@ struct AIAssistantView: View {
                 // P1-6b：查询意图的结果（只读快照，直接展示，无确认步骤）
                 if let results = queryResults {
                     Section {
-                        if results.isEmpty {
-                            Text(NSLocalizedString("这一天没有安排。", comment: "AI助手"))
-                                .foregroundStyle(Color.secondary)
-                        } else {
-                            ForEach(results) { ev in
-                                HStack(spacing: AppTheme.Spacing.sm) {
-                                    Text(ev.isAllDay
-                                         ? NSLocalizedString("全天", comment: "")
-                                         : ev.startDate.formatted(date: .omitted, time: .shortened))
-                                        .font(AppTheme.Font.caption)
-                                        .foregroundStyle(Color.secondaryLabel)
-                                        .frame(width: 52, alignment: .leading)
-                                    Text(ev.title)
-                                        .lineLimit(1)
-                                    Spacer(minLength: 0)
-                                }
-                            }
-                        }
+                        AIQueryResultRows(results: results)
                     } header: {
                         Text(String(format: NSLocalizedString("查询结果 · %@", comment: "AI助手"),
                                     queryDate?.formatted(date: .abbreviated, time: .omitted) ?? ""))
