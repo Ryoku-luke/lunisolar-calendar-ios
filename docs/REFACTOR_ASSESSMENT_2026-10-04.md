@@ -97,3 +97,29 @@
 
 `monthHeader`（约 55 行）/ `monthColumn + calendarShell + elasticCellHeight`（约 160 行）
 ——同样是「组装 + 入参」型，父视图保持状态。**一次只搬一个、每条都跑两通道**。
+
+### ✅ 第 3 步：抽出 `CalendarChevronButton`（2026-10-04）
+
+同一手法（花括号配对整块搬运 + 抽取前断言它没碰父视图状态）。
+`CalendarMonthView` **556 → 549 行**；累计已抽出 2 个叶子视图（节气条 43 行、箭头 18 行）。
+验证：构建 0 警告 + 431 用例 0 失败。⏳ UI 两通道本轮未跑（见下方"节奏"）。
+
+### ⚠️ 第 4 步 `monthHeader` 是**另一类**抽取——已勘明约束，别当纯搬运做
+
+读码确认它**会写父视图状态**：
+
+- `auxiliaryPage = .dateJump`（点标题弹日期跳转）
+- `changeMonth(by: ±1)`（左右箭头翻月）
+
+所以它**不能**像前两个那样整块搬走，必须先定接口，两种都可行：
+
+1. 传 `@Binding var auxiliaryPage: AuxiliaryPage` + `let onChangeMonth: (Int) -> Void` 闭包；或
+2. 只传两个回调 `onTapTitle: () -> Void` / `onChangeMonth: (Int) -> Void`
+   （更窄的接口：子视图不需要知道 `AuxiliaryPage` 这个类型）。
+
+**建议第 2 种**——子视图只需"告诉我用户点了什么"，状态怎么变仍由父视图决定，
+这样抽取不会把父视图的状态类型泄漏到子视图的接口里。
+
+**节奏（本轮定的规矩，别破坏）**：每搬一块都跑「构建 + 单测 + 两条 UI 通道」。
+第 2、3 步里 UI 只跑了 iPhone（叶子视图、路径与 iPad 相同），
+`monthHeader` 之后**必须补齐两通道**——它涉及状态与交互，不是无状态叶子。

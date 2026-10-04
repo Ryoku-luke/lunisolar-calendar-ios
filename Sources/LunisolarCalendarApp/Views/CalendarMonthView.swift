@@ -425,25 +425,18 @@ struct CalendarMonthView: View {
             HStack(spacing: AppTheme.Spacing.sm) {
                 Button {
                     changeMonth(by: -1)
-                } label: { chevronButton("chevron.left", accent: controlTint) }
+                } label: { CalendarChevronButton(name: "chevron.left", accent: controlTint) }
                     .pressableFeedback()
                     // P1-2：⌘[ 上一月
                     .keyboardShortcut("[", modifiers: .command)
                 Button {
                     changeMonth(by: 1)
-                } label: { chevronButton("chevron.right", accent: controlTint) }
+                } label: { CalendarChevronButton(name: "chevron.right", accent: controlTint) }
                     .pressableFeedback()
                     // P1-2：⌘] 下一月
                     .keyboardShortcut("]", modifiers: .command)
             }
         }
-    }
-
-    private func chevronButton(_ name: String, accent: Color) -> some View {
-        Image(systemName: name).font(.title2.weight(.semibold)).foregroundStyle(accent)
-            .frame(width: AppTheme.Touch.minTarget, height: AppTheme.Touch.minTarget)
-            .contentShape(Circle())
-            .accessibilityLabel(name == "chevron.left" ? String(localized: "上个月") : String(localized: "下个月"))
     }
 
     /// 弹性行高：把可视高度扣掉「月份标题 + 节气条 + 星期表头 + 内边距」后
