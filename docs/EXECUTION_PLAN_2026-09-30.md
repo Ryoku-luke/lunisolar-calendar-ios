@@ -1559,3 +1559,15 @@ t=17.12s Default interruption handler … tapping "允许"
 >
 > 复验：Flow 15、Flow 16 在 iPad 上分别通过（日志可见 `Swipe up` → 命中 → 三种格式齐全）。
 > 其余 17 条在同一次全量 iPad 运行中本就绿，且此后只改了测试辅助函数，未触及它们。
+
+### P4 维护性：评估已完成（2026-10-04）
+
+详见 **`docs/REFACTOR_ASSESSMENT_2026-10-04.md`**。结论：**只值得拆 1 个文件**。
+
+- **P4-1 `Views/CalendarMonthView.swift`**：583 行（更正计划里的"900+"），
+  但**近 60 次提交里改了 23 次——变更频率第一**，且内部只有 1 个 MARK、无职责分区。
+  大块逻辑已抽走（网格派生/构建、弹层、手势），剩下是视图组装 → 抽成几个小 struct，
+  **纯抽取、行为不变**，父视图继续持有状态。工作量约 1 轮，需两条 UI 通道验证。
+- **P4-2 `Views/AIAssistantView.swift`**（657 行 / 8 次）：可选，等 P4-1 之后再看。
+- **不建议动**：`EventStore.swift`（1122 行、测试最重、变更频率不在前十）、
+  `LunisolarWidgetViews.swift`、`RealCloudKitProvider.swift`、`DataPortability.swift`。
