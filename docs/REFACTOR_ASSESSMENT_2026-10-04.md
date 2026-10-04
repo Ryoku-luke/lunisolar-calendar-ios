@@ -268,3 +268,43 @@ CalendarMonthColumn(interaction: MonthGridInteraction,   // ← 单一来源，�
 搬 `monthColumn`（拖拽/翻月/预渲染相邻月，持有 `interaction`）→ 完成后 **P4-1 收口**。
 它现在的依赖已大幅变薄：`interaction` + `accent` + 上述回调，`calendarShell` 调用点
 已改为 `CalendarMonthGridShell` ✓。
+
+### ✅ 5b-2 之二：抽出 `CalendarMonthColumn`（2026-10-04）——**P4-1 收口**
+
+`CalendarMonthView` 433 → **358 行**；本会话累计 **592 → 358（-40%）**。
+
+**设计取舍**：
+- **交互态走模型**：拖拽位移/翻页方向/容器宽度都在 `MonthGridInteraction` 上读写；
+- **横滑手势留在父视图**：`some Gesture` 不能作为参数传递，且它天然属于"父视图的交互装配"层
+  ——父视图的 `monthColumn` 现在只做装配（传 `interaction` + 回调 + 挂手势）；
+- 数据态（`selectedDate` / `weekStart`）仍由父视图持有，经入参传入（网格卡需要）。
+
+**过程中修正的三处**（都写进提交信息了）：
+1. 替换模式必须先读**当前**文本（上一步已把 `calendarShell` 调用改成 `CalendarMonthGridShell`）；
+2. 漏了两个入参（`selectedDate` / `weekStart`）→ 编译器直接指出；
+3. **`swipeMonthGesture` 定义在 `#if canImport(UIKit)` 内** → 无条件调用会让 macOS 宿主构建失败
+   → 父视图按平台分支 `return`。
+
+**一个"守卫正常工作"的实例**：P3-3 写的 `testMonthHeaderUsesMonthLabel` 在本次抽取时**红了**——
+`MonthLabel` 的调用点随文件搬到了 `CalendarMonthColumn.swift`，守卫还在扫旧文件。
+这正是守卫的价值（**重构漂移被它抓住**）。已把它改为扫一组文件
+（`CalendarMonthColumn` / `CalendarMonthHeader` / `CalendarMonthView`），对后续搬迁免疫。
+
+**验证**：构建 0 警告 · **436 用例 0 失败** · **iPhone UI 19 条（3 skip）0 失败** ·
+**iPad UI 19 条（10 skip）0 失败**。
+
+### P4-1 完成清单
+
+| 步骤 | 产出 | 行数 | 验证 |
+|---|---|---|---|
+| 1 | 补 MARK 职责分区 | 592 | 构建+单测 |
+| 2 | `CalendarSolarTermBar` | → 556 | 两通道 |
+| 3 | `CalendarChevronButton` | → 549 | 两通道 |
+| 4 | `CalendarMonthHeader`（窄接口）| → 499 | 两通道 |
+| 5a | `MonthGridMetrics`（纯函数 + 5 单测）| → 490 | iPad 通道 |
+| 5b-1 | `MonthGridInteraction`（交互态集中）| 490 | 两通道 |
+| 5b-2 | `CalendarMonthGridShell` + `CalendarMonthColumn` | → **358** | 两通道 |
+
+**验收标准（评估里定的）**：不是"文件变小"，而是"同一个改动需要打开的文件数下降"。
+现在改月份头部只要开 `CalendarMonthHeader.swift`、改网格卡只要开 `CalendarMonthGridShell.swift`
+——**下次真实需求时检验这条**。
