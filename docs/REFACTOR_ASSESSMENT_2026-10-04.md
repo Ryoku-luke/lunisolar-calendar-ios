@@ -369,3 +369,33 @@ CalendarMonthColumn(interaction: MonthGridInteraction,   // ← 单一来源，�
 
 **建议顺序**：先做第 ② 步（拆 `body`，纯视图、无状态搬家），再做第 ③ 步——
 因为 ② 会把 body 的引用点分散到子视图里，届时"哪些 state 被谁碰"会更清楚。
+
+### P4-2 第 ② 步（拆 body）的结构地图——已取，拆分将变成机械操作
+
+`body` 当前位于 `AIAssistantView.swift` 第 38–290 行（**253 行**）。
+下表是它的**顶层块**（缩进 12 空格处的容器 / 条件 / 注释），这些就是天然的子视图边界：
+
+| 行 | 顶层块 |
+|---:|---|
+| 40 | `List {` |
+| 228 | `// N-6：外接键盘 ⌘+Return = 解析提交（与键盘「解析」等价）。` |
+| 229 | `// 普通 Return 已由 AutoFocusTextView 的 shouldChangeTextIn 提交，` |
+| 230 | `// ⌘+Return 在此兜底（焦点不在输入框时也可用）。` |
+| 265 | `// ⚠️ 这里刻意**没有**「整页点空白处收键盘」的手势。试过三种写法，都不行：` |
+| 266 | `//   1. simultaneousGesture(TapGesture())：与子视图手势并行，点输入框**本身*` |
+| 267 | `//      inputFocused 置 false → updateUIView 立刻 resignFirstRe` |
+| 268 | `//      键盘收掉。它与「UITextView 取得第一响应者」的先后是竞态，症状时好时坏` |
+| 269 | `//      （实测报 Neither element nor any descendant has keyboard` |
+| 270 | `//   2. onTapGesture：不抢子视图手势，但会**吞掉 List 行内按钮的点击** →` |
+| 271 | `//      「解析并预览」点了既不出现预览也不弹错误（实测）。` |
+| 272 | `//   3. SpatialTapGesture + 排除输入框区域：靠 PreferenceKey 回报输入框 fr` |
+| 273 | `//      但该 frame 始终是 .zero（background 里的 preference 不向上传播），` |
+| 274 | `//      于是任何点击都被判成「框外」→ 焦点还是被收掉（实测两条 AI 用例同时失败）。` |
+| 275 | `// 结论：键盘收起只走**明确入口**——导航栏「完成」+ 键盘工具栏「完成」+ 滚动收起 + 回车提交。` |
+| 276 | `// 这四个都不与输入框/按钮的手势竞争，是可靠的做法。` |
+
+**下一步做法**（同 P4-1 的经验）：
+1. 每个顶层块抽成一个子视图（`AIInputBar` / `AIPreviewCard` / `AIResultsList` 之类），
+   能整块搬就整块搬（无状态依赖），碰到状态的用**窄接口 + 回调**；
+2. 抽之前先量该块引用了哪些 `@State`（照 5b 那套：读它、看它写不写父状态）；
+3. 每抽一个跑**两条 UI 通道**——AI 输入框与结果列表正是 Flow 3/3b/3c/3d 覆盖的对象。
