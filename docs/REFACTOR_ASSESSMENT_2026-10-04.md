@@ -150,3 +150,30 @@ CalendarMonthHeader(monthName: MonthLabel.name(for: currentMonth),
 
 `monthColumn + calendarShell + elasticCellHeight`（约 160 行）——先读它们的依赖：
 若同样写父状态，按第 4 步的窄接口办法；若只是组装，按第 2/3 步的整块搬运。
+
+### 🔍 第 5 步（最后一块）的依赖面分析——已做完，结论是「一个不可分割的簇」
+
+用与抽取同一套花括号配对把三个函数抠出来做依赖探针（不是改动，纯分析）：
+
+| 函数 | 行数 | 参数 | 依赖的父视图成员 |
+|---|---:|---|---|
+| `monthColumn(accent:)` | 72 | `accent` | `auxiliaryPage`、`controlTint`、`currentMonth`、`isIPadSplit`、`selectedDate`、**`calendarShell`** |
+| `calendarShell(for:accent:controlFill:)` | 78 | `month`/`accent`/`controlFill` | `isIPadSplit`、`selectedDate`、`weekStart`、**`monthColumn`**、**`elasticCellHeight`** |
+| `elasticCellHeight(rows:)` | 11 | `rows` | `isIPadSplit` |
+
+**结论**：
+1. **三者必须一起搬**——`monthColumn` ↔ `calendarShell` 互相调用，且都用 `elasticCellHeight`。
+   拆成两个文件会立刻产生循环依赖或把 `internal` 暴露出去，**不值当**。
+2. **属于「窄接口」类**（同 `monthHeader`），不是能整块搬运的叶子：需要的输入约 6 个
+   （`month`/`selectedDate`/`accent`/`controlTint`/`isIPadSplit`/`weekStart`）+
+   2–3 个回调（翻月、选中某天、触发日期跳转）。
+3. 探针有**假阳性**要留意：`chrome` / `columns` / `grid` / `d` / `cardPadding` / `gridSpacing`
+   看起来是父成员，实际多半是函数体内的局部量或 `AppTheme` 常量——**读码时要逐个确认**
+   （这正是不能只靠脚本、必须读一遍的原因）。
+
+**建议落点**：一个文件 `Views/CalendarMonthColumn.swift` 装这三个（外加它俩共用的小工具），
+接口照 `CalendarMonthHeader` 的窄接口写法——子视图只说"用户做了什么"，状态仍归父视图。
+
+**为什么这步单独留一轮**：它是本项目最长的一块，且涉及网格布局、选中态、弹性行高这三件
+互相关联的事；抽取后**必须两通道验证**（各约 5 分钟）。在没有余量完成「读码 → 抽取 →
+两通道」整条链时开工，只会留下一份没人验证的布局改动——本文件正是 UI 用例覆盖的重点。
