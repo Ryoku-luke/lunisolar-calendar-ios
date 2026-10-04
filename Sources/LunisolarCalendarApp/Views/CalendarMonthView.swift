@@ -398,18 +398,6 @@ struct CalendarMonthView: View {
     /// N-3：chrome 不再用 170 魔数，改用 `MonthChromeHeightKey` 上报的真实高度
     /// （月份标题 + 节气条 + 星期表头）加上固定的卡片内外边距与网格行距。
     /// 上报未就绪（=0）时回退旧估算值 170——行为不劣化，多一次布局即修正。
-    private func elasticCellHeight(rows: Int) -> CGFloat? {
-        guard isIPadSplit, columnHeight > 0, rows > 0 else { return nil }
-        // 卡片内外固定边距：月卡 .padding(.top, sm=8) + .padding(.bottom, lg=16)
-        // 网格行距：LazyVGrid spacing（iPad 6pt / iPhone 3pt）× 行间缝隙（rows-1）
-        let cardPadding: CGFloat = AppTheme.Spacing.sm + AppTheme.Spacing.lg
-        let gridSpacing: CGFloat = CGFloat(rows - 1) * (isIPadSplit ? 6 : 3)
-        let chrome = chromeHeight > 0
-            ? chromeHeight + cardPadding + gridSpacing
-            : 170 // 回退：首次布局前偏好未上报
-        return min(96, max(AppTheme.Touch.minCellHeight, (columnHeight - chrome) / CGFloat(rows)))
-    }
-
     /// 单个月份卡片（表头 + 42 格网格）。
     /// 必须按传入月份取网格：跟手滑动时同一份日历要同时渲染当前月与相邻月。
     private func calendarShell(for month: Date, accent: Color, controlFill: Color) -> some View {
@@ -445,7 +433,10 @@ struct CalendarMonthView: View {
                         .equatable()
                         // iPad：按可视高度弹性分配行高；iPhone：nil → 不限高，
                         // 由下一行的 minHeight 给出可点下限
-                        .frame(height: elasticCellHeight(rows: grid.cells.count / 7))
+                        .frame(height: MonthGridMetrics.elasticCellHeight(rows: grid.cells.count / 7,
+                                                                isIPadSplit: isIPadSplit,
+                                                                columnHeight: columnHeight,
+                                                                chromeHeight: chromeHeight))
                         .frame(minHeight: AppTheme.Touch.minCellHeight)
                         .contentShape(Rectangle())
                         .onTapGesture {
