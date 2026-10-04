@@ -62,8 +62,13 @@
     直接子节点"的特殊处理，包进自定义视图有丢失分组语义的风险（那会改行为）。
     `AIAssistantView` 496 → 491 行；构建 0 警告 · 436 用例 0 失败 · iPhone 19(3 skip) 与
     iPad 19(10 skip) 均 0 失败。
+  - ✅ **「查询结果」Section 的内容行 → `AIQueryResultRows`**（第 3 块）：18 行（`if results.isEmpty`
+    + `ForEach`），只依赖入参 `[CalendarEvent]`、不持有状态。按"不搬 Section 本身"的规矩，
+    带 `header:` 的 Section 与 header 用的 `queryDate` 都留在父视图。
+    `AIAssistantView` 491 → 474 行；构建 0 警告 · 436 用例 0 失败 · iPhone 19(3 skip) 与
+    iPad 19(10 skip) 均 0 失败。
   - ⏭ **剩余块**（按"最小自包含"顺序，抽前先量引用哪些 `@State`，碰状态的用窄接口 + 回调）：
-    `Section`（`body` 144 行处，23 行）· 预览卡 · 查询结果 · 破坏性确认区。
+    预览卡（`if let d = draft` 分支）· 破坏性确认区（`if let target = destructiveTarget …`）。
     ⚠️ **两次踩过的坑**：①相邻 `if let` 可能是同一条链（先看有没有 `else if`）；
     ②`Section` 不要包进自定义视图（分组语义有风险）——只搬它里面的内容。
   - 📌 **选块方法（脚本化，已验证两次）**：按缩进取 `body` 的内容块 → 按行数升序 →
