@@ -249,16 +249,26 @@ final class LocalizationTests: XCTestCase {
     /// 所以退一步扫源码——只查这一处、且只看代码行（注释里正该出现旧写法作为反例）。
     /// 与 `LayoutIdiomTests` 里的接线守卫同一套路与同一理由。
     func testMonthHeaderUsesMonthLabel() throws {
-        let url = repoRoot.appendingPathComponent("Sources/LunisolarCalendarApp/Views/CalendarMonthView.swift")
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
-            throw XCTSkip("读不到 CalendarMonthView.swift（该守卫只在仓库源码树下运行）")
+        // P4-1 之后月份标题被拆到多个文件（CalendarMonthColumn 负责取月名、
+        // CalendarMonthHeader 负责渲染），所以这里扫**一组**文件而不是写死一个路径——
+        // 否则每次重构都会把守卫撞红（本守卫确实在 P4-1 抽取时红过一次，是它在工作）。
+        let views = repoRoot.appendingPathComponent("Sources/LunisolarCalendarApp/Views")
+        let candidates = ["CalendarMonthColumn.swift", "CalendarMonthHeader.swift", "CalendarMonthView.swift"]
+            .map { views.appendingPathComponent($0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !candidates.isEmpty else {
+            throw XCTSkip("读不到月历视图文件（该守卫只在仓库源码树下运行）")
         }
-        let code = codeOnly(text)
-        XCTAssertTrue(code.contains("MonthLabel.name(for: currentMonth)"),
-                      "月历标题应走 MonthLabel（locale 感知）")
-        // 用原始字符串写目标片段：`\(` 在这里是字面量，不会被当成插值
-        XCTAssertFalse(code.contains(#""\(currentMonth.month)月""#),
-                       "月历标题退回了写死的「\\(月)月」——英文界面会显示中文（P3-3）")
+
+        let code = candidates
+            .compactMap { try? String(contentsOf: $0, encoding: .utf8) }
+            .map(codeOnly)
+            .joined(separator: "\n")
+
+        XCTAssertTrue(code.contains("MonthLabel.name("),
+                      "月份标题应走 MonthLabel（locale 感知、日历固定公历）——扫过 \(candidates.map(\.lastPathComponent))")
+        XCTAssertFalse(code.contains(#""\(month)月""#),
+                       "月份标题出现了写死的中文后缀「月」——英文界面会显示中文（P3-3）")
     }
 
     /// 日历必须固定公历：系统区域用伊斯兰历/佛历时，月名不能跟着变

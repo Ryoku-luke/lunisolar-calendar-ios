@@ -294,102 +294,28 @@ struct CalendarMonthView: View {
     /// 预构建某月网格模型写入缓存（滑动切换零卡顿的关键）
     // MARK: - 月列与外壳
     private func monthColumn(accent: DayAccent) -> some View {
-        VStack(spacing: 0) {
-            // N-3：月份标题 + 节气条合包上报真实高度（含各自外层 padding）。
-            // 节气条显隐两态自然正确——solarTermBar 为 @ViewBuilder，不存在时不渲染。
-            VStack(spacing: 0) {
-                CalendarMonthHeader(monthName: MonthLabel.name(for: currentMonth),
-                                                    year: currentMonth.year,
-                                                    controlTint: accent.controlTint,
-                                                    onTapTitle: { auxiliaryPage = .dateJump },
-                                                    onChangeMonth: { by in changeMonth(by: by) })
-                    .padding(.horizontal, AppTheme.Spacing.xl)
-                    .padding(.top, 8).padding(.bottom, AppTheme.Spacing.sm)
-                CalendarSolarTermBar(accent: accent.decorative)
-                    .padding(.horizontal, AppTheme.Spacing.xl)
-                    .padding(.bottom, AppTheme.Spacing.xs)
-            }
-            .background(
-                GeometryReader { geo in
-                    Color.clear.preference(key: MonthChromeHeightKey.self, value: geo.size.height)
-                }
-            )
-            // 卡片式月份滑动（完全跟手）：
-            // 拖动中当前月卡片 1:1 跟随手指位移，相邻月网格预渲染在另一侧同速移动；
-            // 松手后按位移/速度决定翻页（transition 接管收尾动画）或回弹。
-            #if canImport(UIKit)
-            ZStack {
-                // 底层：拖动方向的相邻月（左滑=下月在右、右滑=上月在左），跟手同速
-                if let pm = interaction.previewMonth {
-                    // 传 pm：此前 calendarShell 内部恒定取 currentMonth，.id(pm) 只换视图标识
-                    // 不改内容 → 拖动时屏幕上并排的两份是"同一个月"，相邻月等于没预渲染
-                    CalendarMonthGridShell(month: pm, grid: gridModel(for: pm),
-                                              accent: accent.decorative, controlFill: accent.controlFill,
-                                              selectedDate: selectedDate, weekStart: weekStart,
-                                              isIPadSplit: isIPadSplit,
-                                              columnHeight: interaction.columnHeight,
-                                              chromeHeight: interaction.chromeHeight,
-                                              onSelectDay: { selectDay($0) },
-                                              onNewEvent: { d in selectedDate = d; eventEditSheet = .new(d) },
-                                              onCopyDate: { copyDateText($0) })
-                        .id(pm)
-                        .offset(x: interaction.dragOffsetX < 0 ? interaction.dragOffsetX + interaction.monthWidth : interaction.dragOffsetX - interaction.monthWidth)
-                }
-                // 顶层：当前月，1:1 跟手
-                CalendarMonthGridShell(month: currentMonth, grid: gridModel(for: currentMonth),
-                                              accent: accent.decorative, controlFill: accent.controlFill,
-                                              selectedDate: selectedDate, weekStart: weekStart,
-                                              isIPadSplit: isIPadSplit,
-                                              columnHeight: interaction.columnHeight,
-                                              chromeHeight: interaction.chromeHeight,
-                                              onSelectDay: { selectDay($0) },
-                                              onNewEvent: { d in selectedDate = d; eventEditSheet = .new(d) },
-                                              onCopyDate: { copyDateText($0) })
-                    .id(currentMonth)
-                    .offset(x: interaction.dragOffsetX)
-                    .scaleEffect(interaction.isDragging ? 0.992 : 1.0)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: interaction.monthSlideEdge),
-                        removal: .move(edge: interaction.monthSlideEdge == .trailing ? .leading : .trailing)
-                    ))
-            }
-            .padding(.horizontal, AppTheme.Spacing.md)
-            // 容器宽度（翻页阈值用）：background 里读尺寸，不改变布局高度
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .onAppear { interaction.monthWidth = geo.size.width }
-                        .onChange(of: geo.size.width) { _, w in interaction.monthWidth = w }
-                }
-            )
-            .simultaneousGesture(swipeMonthGesture(width: interaction.monthWidth))
-            #else
-            CalendarMonthGridShell(month: currentMonth, grid: gridModel(for: currentMonth),
-                                              accent: accent.decorative, controlFill: accent.controlFill,
-                                              selectedDate: selectedDate, weekStart: weekStart,
-                                              isIPadSplit: isIPadSplit,
-                                              columnHeight: interaction.columnHeight,
-                                              chromeHeight: interaction.chromeHeight,
-                                              onSelectDay: { selectDay($0) },
-                                              onNewEvent: { d in selectedDate = d; eventEditSheet = .new(d) },
-                                              onCopyDate: { copyDateText($0) })
-                .id(currentMonth)
-                .padding(.horizontal, AppTheme.Spacing.md)
-            #endif
-            if !isIPadSplit {
-                // 2026-09-29 用户裁决：日期卡片与今日安排不再收起折叠，始终完整展开。
-                // 底部保留固定呼吸空间，避免「宜做/勿做」卡片被 TabBar 遮挡。
-                SelectedDayCardView(selectedDate: selectedDate,
-                                    accent: accent)
-                    .padding(.horizontal, AppTheme.Spacing.md)
-                    .padding(.top, AppTheme.Spacing.md)
-                    // 系统 TabBar(~83pt) + home indicator + 呼吸空间
-                    .padding(.bottom, 96)
-            }
-        }
-        .frame(maxWidth: .infinity)
+        // 装配层：只负责把 interaction 与回调递给月列，并挂上横滑手势。
+        // 状态都不在这里——数据态在 CalendarMonthView，交互态在 MonthGridInteraction。
+        let column = CalendarMonthColumn(interaction: interaction,
+                            month: currentMonth,
+                            accent: accent,
+                            isIPadSplit: isIPadSplit,
+                            selectedDate: selectedDate,
+                            weekStart: weekStart,
+                            gridProvider: { gridModel(for: $0) },
+                            onSelectDay: { selectDay($0) },
+                            onNewEvent: { d in selectedDate = d; eventEditSheet = .new(d) },
+                            onCopyDate: { copyDateText($0) },
+                            onChangeMonth: { by in changeMonth(by: by) },
+                            onTapDateJump: { auxiliaryPage = .dateJump })
+        // 横滑手势只在 UIKit 平台存在（`swipeMonthGesture` 定义在 #if canImport(UIKit) 里）；
+        // macOS 宿主只是编译用，没有这套手势。
+        #if canImport(UIKit)
+        return column.simultaneousGesture(swipeMonthGesture(width: interaction.monthWidth))
+        #else
+        return column
+        #endif
     }
-
     // MARK: - 节日自适应背景与强调色
 
     /// 当天节日强调色，按 P0-4 分两层（见 `DayAccent`）。
