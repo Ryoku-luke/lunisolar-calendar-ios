@@ -984,6 +984,14 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 排查方向有三种（面板未展开 / 该入口需滚动 / iPad 走了别的入口——侧栏的
         // `iPadSidebarYear` 已随「年视图改走方案 C」删除）。**未定论前不留假绿**，
         // 所以这里明确跳过并记为待办，不假装它通过。
+        // 年视图：**暂只审计 iPhone**。
+        //
+        // 2026-10-04 复查（P1-2）：先怀疑"iPad 上 popover 里的「快捷跳转」区在下方、需滚动"
+        // → 加 `scrollUntilVisible` 后**仍找不到**（实测 6 次 swipe 后该按钮始终不存在）→
+        // 滚动假设**被证伪**。新证据指向：iPad 上点月历标题后日期跳转面板可能根本没被呈现
+        // （`title.tap()` 本身成功，但之后面板内一个按钮都查不到）。这属于**产品/设计问题**
+        // 而非测试问题，需要先确认 iPad 上这个入口该不该有，再决定补测试还是补入口。
+        // **未定论前不留假绿**，所以这里仍跳过并保留这份证据。
         if !isPad { audit("年视图") { app in
             let title = app.buttons["选择月份或年份"].firstMatch
             XCTAssertTrue(title.waitForExistence(timeout: 10), "月历标题应可点开日期跳转")
