@@ -24,6 +24,20 @@
 | 工程与发布 | `XCODE_BUILD_GUIDE.md` · `DEVICE_TEST_CHECKLIST.md` · `ENTITLEMENTS.md` · `APP_STORE.md` |
 | AI 协作上下文 | `AI_DEVELOPMENT_CONTEXT.md` |
 
+## 一点五、验证一律走 `Tools/run_tests.sh`（血泪规则）
+
+**不要自己拼 `grep 'error:'` 之类的判据。** 2026-10-05 我犯过一次：用 `grep -c 'error:'` 判单测，
+而 XCTest 的失败行是 `XCTAssert… failed`、**根本不含 `error:`** → 4 条失败被放行，红提交推上去了。
+
+`Tools/run_tests.sh` 本来就是对的：它要求**汇总行** `Executed N tests, with 0 failures`、
+禁一切编译警告、并覆盖 swift test / iOS SDK 构建 / UI target 类型检查 / 两条 UI 通道。
+
+其余两条同类经验：
+- **改 key 就是改"所有表 + 所有调用点"**：key 即 zh-Hans 源文案字面量，只改 zh-Hans 或只改"值"
+  都会让四语 key 集合不一致（`testLanguageTablesHaveIdenticalKeySets` 会报，但前提是你**看**了它 ✗）；
+- **脚本失败就不要提交**：用 `set -e` + 断言；写入要"先全部算完再落盘"（原子），
+  否则中断会留下半成品（本项目真实发生过两次 ✗）。
+
 ## 二、当前状态（2026-10-05 实测）
 
 | 项 | 状态 |
