@@ -1192,11 +1192,6 @@ final class LunisolarCalendarUITests: XCTestCase {
     /// （任何无关变化都能满足它）✗ 是**假守卫**；改为：
     /// 用 `^[0-9]+月$` 精确定位月份标题（能排除"10月1日"与农历"八月"），只比它是否变化。
     func testFlow17_monthGridSwipeTurnsTheMonth() throws {
-        // iPad 是分栏布局：`swipeLeft()` 按全屏坐标横滑，落不到月历网格上（实测月份不变），
-        // 所以本条只在 iPhone 成立。iPad 的横滑需要按「中列坐标」单写一条——
-        // 记在打磨清单 P6 里，不在这里用猜的坐标硬凑（猜错会变成第二条假守卫）。
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
-                          "iPad 分栏布局下全屏坐标横滑不落在月历网格上，需按列坐标单写")
         let app = launchApp()
         XCTAssertTrue(app.buttons["选择月份或年份"].firstMatch.waitForExistence(timeout: 10),
                       "月历标题应存在（主页已就绪）")
@@ -1208,12 +1203,22 @@ final class LunisolarCalendarUITests: XCTestCase {
         let before = monthLabels()
         XCTAssertFalse(before.isEmpty, "应能定位到月份标题（形如「10月」）")
 
-        app.swipeLeft()
+        // 滑动锚点取**网格内的日期数字**：这样起点必然落在月历网格上，
+        // iPhone 全屏可用、iPad 分栏（中列）同样成立——不再依赖全屏比例坐标。
+        // 终点允许越出格子（坐标转成绝对点后可以拖到别处），从而凑出足够长的横拖
+        // （翻页阈值是列宽的 22%）。
+        let dayCells = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^([1-9]|[12][0-9]|3[01])$"))
+        XCTAssertGreaterThan(dayCells.count, 6, "月历网格应有日期数字可作为滑动锚点")
+        let anchor = dayCells.element(boundBy: min(10, dayCells.count - 1))
+        let from = anchor.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        let to = from.withOffset(CGVector(dx: -260, dy: 0))
+        from.press(forDuration: 0.05, thenDragTo: to)
 
         var after = monthLabels()
         let deadline = Date().addingTimeInterval(5)
         while after == before && Date() < deadline { after = monthLabels() }
-        XCTAssertNotEqual(after, before, "在月历上横滑应翻月：月份标题必须变化")
+        XCTAssertNotEqual(after, before, "在月历网格上横滑应翻月：月份标题必须变化")
     }
 
     func testScreenshotTour() throws {

@@ -256,10 +256,18 @@ SettingsSyncSections / SettingsViewComponents / CalendarDisplaySettingsView / Ab
   - 📌 **未做**：zh-Hant 的 UI 渲染复跑。UI 套件固定跑 zh-Hans（`SHOTS_LANG` 只被截图巡游用），
     而 `xcode_build` 工具无法传环境变量；如需真跑，用 `SHOTS_LANG=zh-Hant` 手工调 xcodebuild。
 
-### P6 补充：testFlow17 的 iPad 版本（待写）
+### ✅ testFlow17 的 iPad 版：已用「网格内锚点」解决（2026-10-05）
 
-`testFlow17_monthGridSwipeTurnsTheMonth` 目前 `XCTSkipUnless(phone)` ——
-**原因**：iPad 是分栏布局，`app.swipeLeft()` 用全屏坐标横滑，落点在侧栏/中列边界，
-实测月份不变（不是功能坏，是**测试落点不对**）。
-**做法**：iPad 版要用中列内的坐标（先确认分栏展开/收起状态下的中列 frame），
-再断言月份标题变化。**不要用猜的坐标**——猜错会变成第二条"假守卫"。
+**问题**：iPad 是分栏布局，`app.swipeLeft()` 按**全屏坐标**横滑，落点在侧栏/中列边界 →
+月份不变（不是功能坏，是**测试落点不对**）。
+
+**解法**（不猜坐标）：滑动**起点**取自**网格内的日期数字元素**（`^([1-9]|[12][0-9]|3[01])$`
+的 staticText），用 `element.coordinate(withNormalizedOffset:)` 把起点钉在网格里；
+**终点**再 `withOffset(dx: -260)` 越出格子，凑出足够长的横拖（翻页阈值 = 列宽 22%）。
+这样 iPhone 全屏与 iPad 中列**同一套代码都成立**，`XCTSkipUnless(phone)` 已移除。
+
+**两形态实测**：iPad ✓（锚点命中日期格 `"5"`）、iPhone ✓（锚点命中 `"6"`）——
+锚点随当月日期变化，但都落在网格内，这正是"不猜坐标"的好处。
+
+**证伪仍然有效**：断言（月份标题必须变化）未变，此前已用"摘掉手势挂载 → 失败"证伪过；
+本次只改了**滑动方式**、未改断言，因此不需要重新证伪。
