@@ -289,12 +289,12 @@ struct AIAssistantView: View {
         switch AIAssistantService.shared.execute(command) {
         case .success(.deletedEvent):
             // 重复日程删的是整条序列，回执必须说清楚（否则用户以为只删了「明天那次」）
-            showSuccess(wasRepeatingTarget
+            model.showSuccess(wasRepeatingTarget
                         ? NSLocalizedString("已删除整条重复日程。", comment: "AI助手")
                         : NSLocalizedString("已删除该日程。", comment: "AI助手"))
             model.resetAfterCompletion()
         case .success(.updatedEvent):
-            showSuccess(wasRepeatingTarget
+            model.showSuccess(wasRepeatingTarget
                         ? NSLocalizedString("已修改整条重复日程的时间，提醒已重建。", comment: "AI助手")
                         : NSLocalizedString("已修改时间，提醒已重建。", comment: "AI助手"))
             model.resetAfterCompletion()
@@ -320,10 +320,10 @@ struct AIAssistantView: View {
                 let dayText = Self.dayFormatter.string(from: startDate)
                 // 「去看看」的日期必须走 showSuccess 的参数：不能再单独赋值 model.completedOffDay，
                 // 那会被 showSuccess 清掉（按钮永远不出现——见 showSuccess 的注释）。
-                showSuccess(String(format: NSLocalizedString("已加入 %@ 的日程", comment: "AI助手：日程建在其它日子"), dayText),
+                model.showSuccess(String(format: NSLocalizedString("已加入 %@ 的日程", comment: "AI助手：日程建在其它日子"), dayText),
                             offDay: startDate)
             } else {
-                showSuccess(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
+                model.showSuccess(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
             }
             model.input = ""
             model.draft = nil
@@ -352,27 +352,8 @@ struct AIAssistantView: View {
     /// 去路是死的。这正是 2026-10-02 UI 测试 Flow 3d 抓到的真因（当时提示文案是对的，
     /// 断言 1 通过、断言 2 失败，屏幕录制里能看到提示卡片没有按钮）。
     /// 删除 / 修改走的也是本方法，`offDay` 省略即 nil，顺手清掉上一次创建留下的按钮。
-    private func showSuccess(_ text: String, offDay: Date? = nil) {
-        model.inlineError = nil
-        model.completedOffDay = offDay
-        model.completedMessage = text
-        // 带行动按钮的提示停留更久：2 秒够读一句纯文案，但不够「读日期 → 决定 → 点按钮」。
-        // 「去看看」正是那次真机反馈的补救路径，抢不到就等于没做；UI 测试也不该跟秒表赛跑。
-        // 这是 UX 取值，要调只动这两个常量。
-        let dwell: Duration = offDay == nil ? Self.plainSuccessDwell : Self.actionableSuccessDwell
-        Task { @MainActor in
-            try? await Task.sleep(for: dwell)
-            if model.completedMessage == text {
-                model.completedMessage = nil
-                model.completedOffDay = nil
-            }
-        }
-    }
-
-    /// 纯文案提示停留时长（原行为）
-    private static let plainSuccessDwell: Duration = .seconds(2)
+        /// 纯文案提示停留时长（原行为）
     /// 带「去看看」按钮的提示停留时长：必须够用户读完并点中
-    private static let actionableSuccessDwell: Duration = .seconds(6)
 
     /// 结构化错误统一展示（文案来自 AICommandError.message），行内呈现而非模态
     
