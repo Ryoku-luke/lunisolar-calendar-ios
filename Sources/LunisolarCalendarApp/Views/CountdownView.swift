@@ -177,7 +177,7 @@ private struct CountdownRow: View {
                     HStack(spacing: 3) {
                         Image(systemName: isOnIsland ? "liveactivity.fill" : "liveactivity")
                             .font(.caption2.weight(.bold))
-                        Text(isOnIsland ? NSLocalizedString("在岛上", comment: "") : NSLocalizedString("上岛", comment: ""))
+                        Text(isOnIsland ? NSLocalizedString("灵动岛显示中", comment: "") : NSLocalizedString("显示在灵动岛", comment: ""))
                             .font(.caption2.weight(.semibold))
                     }
                     .foregroundStyle(isOnIsland ? Color.appTint : Color.secondaryLabel)
@@ -191,7 +191,7 @@ private struct CountdownRow: View {
                 .buttonStyle(.plain)
                 .pressableFeedback()
                 .accessibilityLabel(isOnIsland
-                    ? String(format: NSLocalizedString("%@ 已上灵动岛，点击下岛", comment: ""), event.title)
+                    ? String(format: NSLocalizedString("%@ 已显示在灵动岛，点击可取消显示", comment: ""), event.title)
                     : String(format: NSLocalizedString("让 %@ 上灵动岛", comment: ""), event.title))
             }
         }

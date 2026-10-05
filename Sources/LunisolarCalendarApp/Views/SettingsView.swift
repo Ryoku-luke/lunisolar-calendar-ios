@@ -179,7 +179,7 @@ struct SettingsView: View {
                         text: NSLocalizedString("时间胶囊已关闭", comment: ""))
                 } else {
                     toast = ToastMessage(kind: .success,
-                        text: NSLocalizedString("时间胶囊已开启，添加倒数日后自动上岛", comment: ""))
+                        text: NSLocalizedString("时间胶囊已开启，添加倒数日后会自动显示在灵动岛", comment: ""))
                 }
             }
         } header: {
