@@ -1,7 +1,7 @@
 /* 清和日历 Localizable.strings (en) — 自动生成，key=简体中文原文 */
 
 "%@ %@" = "%@'s %@";
-"%@ 中没有可导入的事件" = "Nothing to import from %@";
+"%@ 中没有可导入的日程" = "Nothing to import from %@";
 "%@ 导入：新增 %d · 更新 %d" = "%@ Import: %d added · %d updated";
 "%@ 已上灵动岛，点击下岛" = "%@ is on the Dynamic Island. Tap to remove.";
 "%@ 无新增（已存在或被策略跳过）" = "Nothing new from %@ (already exist or skipped by policy)";
@@ -123,7 +123,7 @@
 "取消" = "Cancel";
 "取消全选" = "Deselect All";
 "取消完成" = "Mark as Not Done";
-"同 ID 事件合并时的处理方式：%@" = "How to merge events with the same ID: %@";
+"同 ID 日程合并时的处理方式：%@" = "How to merge events with the same ID: %@";
 "同 id 一律用导入版本覆盖" = "Always overwrite same-id entries with the imported version";
 "同 id 的外部数据一律跳过" = "Always skip external data with the same id";
 "同步中（%@）" = "Syncing (%@)";
@@ -166,7 +166,7 @@
 "寒露" = "Cold Dew";
 "导入 / 恢复数据" = "Import / Restore";
 "导入、恢复与系统数据" = "Import, Restore & System Data";
-"导入事件" = "Imported Event";
+"已导入日程" = "Imported Event";
 "导入冲突策略" = "Import Conflict Strategy";
 "导入前：冲突处理策略" = "Before Import: Conflict Handling";
 "导入失败：%@" = "Import Failed: %@";
@@ -190,7 +190,7 @@
 "已同步" = "Synced";
 "已完成" = "Completed";
 "已开启" = "On";
-"已清空 %d 条事件" = "Cleared %d Events";
+"已清空 %d 条日程" = "Cleared %d Events";
 "已过 %d 天" = "%d days ago";
 "帮助与说明" = "Help & Info";
 "年" = "Year";
@@ -206,7 +206,7 @@
 "忌" = "Inauspicious";
 "忌讳" = "Avoid";
 "快捷跳转" = "Quick Jump";
-"总事件数" = "Total Events";
+"日程总数" = "Total Events";
 "情人节" = "Valentine's Day";
 "惊蛰" = "Awakening of Insects";
 "意见反馈" = "Send Feedback";
@@ -276,7 +276,7 @@
 "最近同步" = "Last Sync";
 "月" = "Month";
 "未启用" = "Disabled";
-"未导入任何新事件（已有或数据无效）" = "No new events imported (already exist or invalid data)";
+"未导入任何新日程（已存在或数据无效）" = "No new events imported (already exist or invalid data)";
 "未开启" = "Off";
 "未开启通知权限，提醒将不会送达" = "Notification permission is off — reminders won't be delivered";
 "未知" = "Unknown";
@@ -309,7 +309,7 @@
 "毛毛雨" = "Drizzle";
 "没听清要操作哪条日程，补上标题或时间（如「删掉明天3点的例会」）。" = "Couldn't tell which event you mean. Add a title or time, for example “Delete tomorrow's 3 PM meeting”.";
 "没有即将到来的日程。" = "No upcoming events.";
-"没有可导入的事件" = "Nothing to import";
+"没有可导入的日程" = "Nothing to import";
 "没有符合条件的日程" = "No matching events";
 "没识别到日程标题，换个说法试试。" = "Couldn't find an event title. Try rephrasing.";
 "没识别到要改到的时间。" = "Couldn't find a new time in your request.";
@@ -323,7 +323,7 @@
 "清明" = "Pure Brightness";
 "清明节" = "Qingming Festival";
 "清空全部 %d 条" = "Clear All %d Items";
-"清空全部事件" = "Clear All Events";
+"清空全部日程" = "Clear All Events";
 "清空后无法恢复，请谨慎操作" = "Cannot be undone. Please proceed with caution.";
 "清空输入" = "Clear Input";
 "灵动岛未开启" = "Dynamic Island Is Off";

@@ -114,7 +114,7 @@ extension SettingsView {
                     }
                 }
                 .pickerStyle(.menu)
-                statRow(label: NSLocalizedString("总事件数", comment: ""), value: "\(store.events.count)")
+                statRow(label: NSLocalizedString("日程总数", comment: ""), value: "\(store.events.count)")
                 statRow(label: NSLocalizedString("日程", comment: ""), value: "\(storeCount(of: .schedule))")
                 statRow(label: NSLocalizedString("提醒", comment: ""), value: "\(storeCount(of: .reminder))")
                 statRow(label: NSLocalizedString("记事", comment: ""), value: "\(storeCount(of: .note))")
@@ -125,7 +125,7 @@ extension SettingsView {
             } header: {
                 Text(NSLocalizedString("高级数据设置", comment: ""))
             } footer: {
-                Text(String(format: NSLocalizedString("同 ID 事件合并时的处理方式：%@", comment: ""), conflictPolicy.subtitle))
+                Text(String(format: NSLocalizedString("同 ID 日程合并时的处理方式：%@", comment: ""), conflictPolicy.subtitle))
             }
         } header: {
             QingheSectionHeader(NSLocalizedString("iCloud 同步", comment: ""), subtitle: "多设备保持一致")

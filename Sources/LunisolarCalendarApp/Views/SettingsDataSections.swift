@@ -161,7 +161,7 @@ extension SettingsView {
         if r.skipped > 0 { parts.append(String(format: NSLocalizedString("保留本地 %d", comment: ""), r.skipped)) }
         if r.invalid > 0 { parts.append(String(format: NSLocalizedString("无效 %d", comment: ""), r.invalid)) }
         let main = parts.isEmpty
-            ? NSLocalizedString("没有可导入的事件", comment: "")
+            ? NSLocalizedString("没有可导入的日程", comment: "")
             : parts.joined(separator: " · ")
         if r.hasConflicts {
             let note = String(format: NSLocalizedString("（检测到 %d 条冲突，已按「%@」处理）", comment: ""),
@@ -247,7 +247,7 @@ extension SettingsView {
                               text: String(format: NSLocalizedString("导入失败：%@", comment: ""), "\(f)"))
             } else {
                 toast = .init(kind: .warning,
-                              text: String(format: NSLocalizedString("%@ 中没有可导入的事件", comment: ""),
+                              text: String(format: NSLocalizedString("%@ 中没有可导入的日程", comment: ""),
                                            source.displayName))
             }
             return

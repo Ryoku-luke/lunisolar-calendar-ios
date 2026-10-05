@@ -119,7 +119,7 @@ struct SettingsView: View {
             Button(String(format: NSLocalizedString("清空全部 %d 条", comment: ""), store.events.count), role: .destructive) {
                 // P0 收口：清空走 EventService（内部转 EventStore.clearAll，含通知取消 / 墓碑逻辑）
                 let n = EventService.shared.clearAllEvents()
-                toast = .init(kind: .success, text: String(format: NSLocalizedString("已清空 %d 条事件", comment: ""), n))
+                toast = .init(kind: .success, text: String(format: NSLocalizedString("已清空 %d 条日程", comment: ""), n))
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {

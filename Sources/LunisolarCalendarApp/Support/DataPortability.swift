@@ -375,7 +375,7 @@ public enum DataPortability {
                     // 无标题事件在中文下种子是「导入事件」、切到英文后变成「Imported Event」，
                     // 同一份 .ics 重新导入会算出不同 UUID → 去重失效、产生副本。
                     let displayTitle = title.isEmpty
-                        ? NSLocalizedString("导入事件", comment: "")
+                        ? NSLocalizedString("已导入日程", comment: "")
                         : title
                     let identitySeedTitle = title.isEmpty ? "untitled-import" : title
                     let pseudoID = pseudoUUIDForImport(
