@@ -124,8 +124,8 @@
 "取消全选" = "Deselect All";
 "取消完成" = "Mark as Not Done";
 "同 ID 日程合并时的处理方式：%@" = "How to merge events with the same ID: %@";
-"同 id 一律用导入版本覆盖" = "Always overwrite same-id entries with the imported version";
-"同 id 的外部数据一律跳过" = "Always skip external data with the same id";
+"导入文件中的同一条日程覆盖手机上的版本" = "Always overwrite local events with the imported version";
+"导入文件中的同一条日程一律跳过（保留手机上的版本）" = "Always skip events already on this device (keep the local copy)";
 "同步中（%@）" = "Syncing (%@)";
 "同步失败：%@" = "Sync Failed: %@";
 "同步完成" = "Sync Complete";
@@ -217,7 +217,7 @@
 "打开日历 ›" = "Open Calendar ›";
 "打开日期跳转面板" = "Open Date Picker";
 "找到 %d 条匹配%@的日程，补充具体时间或标题再试。" = "%d events match %@. Add a specific time or title.";
-"按 updatedAt 谁更新就用谁" = "Use whichever has the newer updatedAt";
+"比较最后修改时间，以较新者为准" = "Keep whichever was modified more recently";
 "换个关键词，或打开「显示已完成」。" = "Try another keyword, or turn on “Show Completed”.";
 "换个关键词，或调整类型筛选。" = "Try another keyword, or change the type filter.";
 "推送 / 拉取" = "Push / Pull";
@@ -344,7 +344,7 @@
 "确认创建" = "Confirm & Create";
 "确认删除" = "Delete?";
 "确认删除 · 不可撤销" = "Confirm Delete · Cannot Be Undone";
-"确认清空全部事件？" = "Clear All Events?";
+"确认清空全部日程？" = "Clear All Events?";
 "秋分" = "Autumn Equinox";
 "稍后提醒" = "Remind Later";
 "空闲" = "Idle";
@@ -402,7 +402,7 @@
 "这是重复日程（%@），将影响整条重复规则" = "This is a repeating event (%@); the whole series will be affected";
 "适宜" = "Suitable";
 "选中此日" = "Select This Day";
-"选完策略后会打开 Files 选择文件。" = "Choosing a policy opens the Files picker.";
+"选完策略后会打开「文件」App 让你挑选文件。" = "After choosing a strategy, the Files app opens so you can pick a file.";
 "选择" = "Select";
 "选择日期" = "Select Date";
 "选择月份或年份" = "Select Month or Year";
@@ -413,7 +413,7 @@
 "部分失败" = "Partial Failure";
 "重复" = "Repeat";
 "重复与优先级" = "Repeat & Priority";
-"重新调度所有提醒" = "Reschedule All Reminders";
+"重新安排所有提醒" = "Reschedule All Reminders";
 "重试" = "Retry";
 "清除筛选" = "Clear Filters";
 "重阳节" = "Double Ninth Festival";
@@ -509,3 +509,4 @@
 "导出为 .ics 日历文件" = "Export as .ics calendar";
 "导出为 .json 备份" = "Export as .json backup";
 "导出为 .csv 表格" = "Export as .csv spreadsheet";
+"版本 %@" = "Version %@";

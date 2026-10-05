@@ -31,6 +31,7 @@ final class LocalizationTests: XCTestCase {
     /// `Text("含中文的\(插值)")` 白名单：字面量 → 理由
     private static let interpolatedChineseLiterals: [String: String] = [
         "\\(selLunar.yearGanZhi)年": "干支纪年属历法专名，年后缀随中文（与农历月/日名同一政策）",
+        "版本 \\(appVersionString)": "关于页版本号：key「版本 %@」已在 4 个语言文件登记（en 为 Version %@），属有意为之",
     ]
 
     // MARK: - 工具

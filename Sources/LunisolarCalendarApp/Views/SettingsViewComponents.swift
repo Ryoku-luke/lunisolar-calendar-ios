@@ -24,9 +24,9 @@ extension ImportConflictPolicy {
 
     public var subtitle: String {
         switch self {
-        case .keepLatest: return NSLocalizedString("按 updatedAt 谁更新就用谁", comment: "")
-        case .keepLocal:  return NSLocalizedString("同 id 的外部数据一律跳过", comment: "")
-        case .overwrite:  return NSLocalizedString("同 id 一律用导入版本覆盖", comment: "")
+        case .keepLatest: return NSLocalizedString("比较最后修改时间，以较新者为准", comment: "")
+        case .keepLocal:  return NSLocalizedString("导入文件中的同一条日程一律跳过（保留手机上的版本）", comment: "")
+        case .overwrite:  return NSLocalizedString("导入文件中的同一条日程覆盖手机上的版本", comment: "")
         }
     }
 }

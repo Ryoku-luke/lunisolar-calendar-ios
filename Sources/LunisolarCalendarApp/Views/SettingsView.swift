@@ -115,7 +115,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showAIAssistant) {
             AIAssistantView().environment(store)
         }
-        .alert(NSLocalizedString("确认清空全部事件？", comment: ""), isPresented: $showClearConfirm) {
+        .alert(NSLocalizedString("确认清空全部日程？", comment: ""), isPresented: $showClearConfirm) {
             Button(String(format: NSLocalizedString("清空全部 %d 条", comment: ""), store.events.count), role: .destructive) {
                 // P0 收口：清空走 EventService（内部转 EventStore.clearAll，含通知取消 / 墓碑逻辑）
                 let n = EventService.shared.clearAllEvents()

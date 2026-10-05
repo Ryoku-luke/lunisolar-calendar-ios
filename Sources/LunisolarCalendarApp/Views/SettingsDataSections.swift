@@ -148,7 +148,7 @@ extension SettingsView {
         VStack(alignment: .leading, spacing: 4) {
             Text(String(format: NSLocalizedString("当前策略：%@ · %@", comment: ""),
                         conflictPolicy.title, conflictPolicy.subtitle))
-            Text(NSLocalizedString("选完策略后会打开 Files 选择文件。", comment: ""))
+            Text(NSLocalizedString("选完策略后会打开「文件」App 让你挑选文件。", comment: ""))
         }
     }
 

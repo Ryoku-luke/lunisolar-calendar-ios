@@ -15,7 +15,7 @@ struct AboutSectionView: View {
                 Text(NSLocalizedString("清和日历", comment: "App名"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.label)
-                Text("Version \(appVersionString)")
+                Text("版本 \(appVersionString)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

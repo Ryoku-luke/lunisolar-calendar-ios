@@ -103,7 +103,7 @@ extension SettingsView {
                 Button {
                     EventService.shared.rescheduleAllReminders()
                 } label: {
-                    Label(NSLocalizedString("重新调度所有提醒", comment: ""), systemImage: "arrow.clockwise.circle.fill")
+                    Label(NSLocalizedString("重新安排所有提醒", comment: ""), systemImage: "arrow.clockwise.circle.fill")
                 }
                 .disabled(notifStatus != .granted)
                 .opacity(notifStatus == .granted ? 1 : 0.45)
