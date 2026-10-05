@@ -121,39 +121,16 @@ struct AIAssistantView: View {
                 // P1-6c：删除 / 修改的确认区（破坏性操作未确认不执行）
                 if let target = destructiveTarget, let label = destructiveLabel {
                     Section {
-                        LabeledContent(NSLocalizedString("日程", comment: ""), value: target.title)
-                        LabeledContent(
-                            NSLocalizedString("当前时间", comment: ""),
-                            value: occurrenceText(for: target)
-                        )
-                        // 重复日程：模型里没有"单次例外"，这里的操作会作用于**整条重复规则**。
-                        // 必须说清楚，否则用户以为只删/只改"明天那次"，实际整条每周序列都没了。
-                        if target.repeatRule != .never {
-                            Label(String(format: NSLocalizedString("这是重复日程（%@），将影响整条重复规则", comment: "AI助手"),
-                                         target.repeatRuleLabel),
-                                  systemImage: "exclamationmark.triangle.fill")
-                                .font(AppTheme.Font.caption)
-                                .foregroundStyle(Color.systemOrange)
-                        }
-                        HStack {
-                            Button(role: .cancel) {
+                        AIDestructiveConfirmRows(
+                            title: target.title,
+                            occurrence: occurrenceText(for: target),
+                            repeatLabel: target.repeatRule == .never ? nil : target.repeatRuleLabel,
+                            onConfirm: { confirmDestructive() },
+                            onCancel: {
                                 destructiveTarget = nil
                                 destructiveLabel = nil
                                 pendingCommand = nil
-                            } label: {
-                                Label(NSLocalizedString("取消", comment: ""), systemImage: "xmark.circle")
-                            }
-                            // 同上：List 行内多按钮需要显式样式，否则整行抢点击
-                            .buttonStyle(.borderless)
-                            Spacer()
-                            Button {
-                                confirmDestructive()
-                            } label: {
-                                Label(NSLocalizedString("确认", comment: ""), systemImage: "checkmark.circle.fill")
-                            }
-                            .buttonStyle(.borderless)
-                            .tint(Color.appTint)
-                        }
+                            })
                     } header: {
                         Text(label)
                     }
