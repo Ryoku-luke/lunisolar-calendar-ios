@@ -744,3 +744,20 @@ body 段 = `var body` 到 `// MARK: - 解析`；逻辑段 = 其后的解析/执�
    本文件里 `input` / `draft` / `label` 等词同时是**函数参数名与调用标签**，
    5b-1 的批量改名就误伤过形参与实参标签 ✗；
 4. 验证：每组改名后 `swift build`，全部完成后跑**两条 UI 通道 + Flow3 系**（AI 流程）✓。
+
+### P4-2 ③-2c-2 设计（2026-10-06 量完依赖面后定稿）
+
+**已量的接口面**（脚本枚举视图方法对服务的引用）：
+剩余 4 个待搬方法真正用到的服务成员**只有两个** —— `execute(_:now:)`、`resolveTarget(_:)`
+（服务对外一共 3 个：`handle` / `execute` / `resolveTarget`），外加静态 `AICommandParser.parse`。
+`occurrenceText` 经实测**不依赖服务**（早先探针是假阳性），已先行搬走。
+
+**方案：协议注入（不引真服务进模型）**
+1. 声明 `protocol AIAssistantExecuting`，只暴露模型需要的两个方法（`execute` / `resolveTarget`）；
+2. `extension AIAssistantService: AIAssistantExecuting {}`（服务保持单例不变）；
+3. 模型持有 `private let service: any AIAssistantExecuting`，由视图注入 `AIAssistantService.shared`；
+4. 单测里注入**替身**（记录被调用的命令、返回构造好的 Result），于是
+   "破坏性操作是否真的落到数据层""重复日程文案是否走对分支"这类**安全相关**行为终于可单测。
+
+**顺序建议**：`create`(28 行，只用 execute) → `confirmDestructive`(20 行，只用 execute) →
+`parse`(63 行，execute + resolveTarget + 解析器) 一次一个，每步都过门。

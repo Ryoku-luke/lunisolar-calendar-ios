@@ -108,7 +108,7 @@ struct AIAssistantView: View {
                     Section {
                         AIDestructiveConfirmRows(
                             title: target.title,
-                            occurrence: occurrenceText(for: target),
+                            occurrence: model.occurrenceText(for: target),
                             repeatLabel: target.repeatRule == .never ? nil : target.repeatRuleLabel,
                             onConfirm: { confirmDestructive() },
                             onCancel: {
@@ -263,14 +263,7 @@ struct AIAssistantView: View {
     /// 重复日程的 `startDate` 只是序列**锚点**（可能是几个月前），与用户说的「明天」无关 ——
     /// 直接显示锚点日期会让人不敢确认（也可能误以为是另一条日程）。
     /// 这里改用「用户所说的那一天 + 原时分」。
-    private func occurrenceText(for target: CalendarEvent) -> String {
-        // 解析逻辑在服务层（AIAssistantService.occurrenceStart），这里只负责格式化
-        let day = model.criteriaDay ?? target.startDate
-        return AIAssistantService.occurrenceStart(of: target, on: day)
-            .formatted(date: .abbreviated, time: .shortened)
-    }
-
-    /// 当前待确认的目标是否为重复日程（必须在 resetAfterCompletion 之前取值）
+        /// 当前待确认的目标是否为重复日程（必须在 resetAfterCompletion 之前取值）
         /// 确认执行删除 / 修改（唯一写入路径是 AIAssistantService → EventService）
     private func confirmDestructive() {
         guard let command = model.pendingCommand else { return }

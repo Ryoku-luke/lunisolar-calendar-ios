@@ -99,4 +99,13 @@ final class AIAssistantModel {
         guard let target = destructiveTarget else { return false }
         return target.repeatRule != .never
     }
+
+    // MARK: - 目标时间的可读文案（P4-2 ③-2c-2 先行：实测不依赖任何服务）
+
+    func occurrenceText(for target: CalendarEvent) -> String {
+        // 解析逻辑在服务层（AIAssistantService.occurrenceStart），这里只负责格式化
+        let day = criteriaDay ?? target.startDate
+        return AIAssistantService.occurrenceStart(of: target, on: day)
+            .formatted(date: .abbreviated, time: .shortened)
+    }
 }
