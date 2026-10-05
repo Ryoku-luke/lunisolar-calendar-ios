@@ -203,11 +203,11 @@ struct DayCellView: View {
             }
         }
         .opacity(isCurrentMonth ? 1 : 0.32)
-        // 选中弹簧回弹：切换瞬间轻微放大（1.05）并带阻尼振荡，增强"选中物理感"；
-        // 值动画只作用于 isSelected 变化时刻，非选中格不受影响
+        // 选中回弹：切换瞬间轻微放大（1.05），带**一次**轻微过冲的物理感。
+        // 曲线走 AppTheme.Motion.selection（单一来源）——原先用内联的低阻尼弹簧
+        // （dampingFraction 0.52），整格含文字来回振荡多次，文字反复适配 → 视觉上"字扭曲变形"。
         .scaleEffect(isSelected ? 1.05 : 1.0)
-        .animation(.spring(response: 0.34, dampingFraction: 0.52, blendDuration: 0.12),
-                   value: isSelected)
+        .animation(AppTheme.Motion.selection, value: isSelected)
         .contentShape(Rectangle())
         #if canImport(UIKit)
         // P1-2：指针悬停系统高亮（iPad 鼠标/妙控板；无指针环境自动无效果）

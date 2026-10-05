@@ -133,6 +133,16 @@ public enum AppTheme {
         /// 用户反馈"按住弹跳不够丝滑"即此。改为 `snappy(duration: 0.15, extraBounce: 0.02)`：
         /// 按下立刻跟手、松开干脆，几乎没有可见过冲（iOS 17+ 的原生控件即此节奏）。
         public static let pressInOut = SwiftUI.Animation.snappy(duration: 0.15, extraBounce: 0.02)
+        /// 选中回弹（日期格选中瞬间的轻微放大）。
+        ///
+        /// 2026-10-05 调校：原为内联的 `.spring(response: 0.34, dampingFraction: 0.52, …)`
+        /// —— damping 0.52 **阻尼过低**，选中时整格（含文字）来回振荡多次，
+        /// 文字随之反复重新适配，用户反馈"回弹一瞬间里面的字扭曲变形"即此。
+        /// 现改为 damping 0.82：保留"物理感"的一次轻微过冲，但不再来回抖。
+        public static let selection = SwiftUI.Animation.spring(response: 0.28,
+                                                               dampingFraction: 0.82,
+                                                               blendDuration: 0.1)
+
         /// 月切换/面板展开
         public static let screen = SwiftUI.Animation.spring(response: 0.34,
                                                             dampingFraction: 0.86,
