@@ -1259,6 +1259,40 @@ final class LunisolarCalendarUITests: XCTestCase {
 
 
 
+    /// 「跳转到日期」面板：**两形态都必须能打开**，且 iPhone 上必须有「全年视图」入口。
+    ///
+    /// 结案记录（P1-2，2026-10-05）：此前 iPad 上找不到 `全年视图`，三种猜测（面板没弹 /
+    /// 需滚动 / 走了别的入口）都未证实。用**诊断式回传**（`XCTSkip` 消息，避免失败后的
+    /// 600s 诊断收集超时）拿到两形态的新增按钮清单，对照如下：
+    ///   · iPhone：表单控制柄/取消/跳转/年·月·日轮盘/回到今天/半年后/一年后/**全年视图**/重试
+    ///   · iPad  ：表单控制柄/取消/跳转/6日 廿八/7日 廿九/年·月·日轮盘/回到今天/半年后/一年后/重试
+    /// → 结论：**面板在 iPad 上本来就会打开**（新增 13–20 个元素），
+    ///   而「全年视图」是 **iPhone 专属入口**，iPad 上不存在（不是"找不到"）。
+    /// 本用例因此按形态分别断言：两形态都要求"面板打开 + 出现「跳转」"，iPhone 额外要求「全年视图」。
+    func testFlow19_dateJumpPanelOpensAndYearEntryIsIPhoneOnly() throws {
+        let app = launchApp()
+        let title = app.buttons["选择月份或年份"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 10), "月历标题应存在")
+
+        let before = app.buttons.count
+        title.tap()
+
+        XCTAssertTrue(app.buttons["跳转"].waitForExistence(timeout: 5),
+                      "点月历标题应打开日期跳转面板（应有「跳转」按钮）")
+        XCTAssertGreaterThan(app.buttons.count, before,
+                             "面板打开后按钮数应增加（before=\(before), after=\(app.buttons.count)）")
+
+        let hasYearEntry = app.buttons["全年视图"].waitForExistence(timeout: 3)
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            XCTAssertTrue(hasYearEntry, "iPhone 上跳转面板应含「全年视图」入口")
+        } else {
+            // iPad 上该入口不存在：记录下来而不是断言"找不到"——避免后人再次误判为缺陷
+            XCTAssertFalse(hasYearEntry,
+                           "iPad 上「全年视图」按设计不存在（实测清单见上方注释）；若将来补上，请改这条断言")
+        }
+    }
+
+
     func testScreenshotTour() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["SHOTS"] == "1",
                           "截图巡游：由 Tools/shots.sh --tour 通过 TEST_RUNNER_SHOTS=1 开启")
