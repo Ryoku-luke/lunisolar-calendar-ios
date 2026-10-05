@@ -79,4 +79,24 @@ final class AIAssistantModel {
             }
         }
     }
+
+    // MARK: - 两个无依赖的计算属性（P4-2 ③-2c-1）
+
+    var criteriaDay: Date? {
+        switch pendingCommand {
+        case .deleteEvent(let d): return d.criteria.day
+        case .updateEvent(let d): return d.criteria.day
+        default: return nil
+        }
+    }
+
+    var wasRepeatingTarget: Bool {
+        // 修掉一个**既有**隐患（2026-10-06 抽出模型并补测试时暴露）：
+        // 原写法 `destructiveTarget?.repeatRule != .never` 在目标为 nil 时返回 **true**
+        // —— 可选值比较会把 .never 提升为 Optional，于是 nil != .some(.never) 成立。
+        // 语义应是"没有目标 → 不是重复日程"；该判定用于破坏性操作文案，错判会给出
+        // "将影响整条重复规则"的错误提示。
+        guard let target = destructiveTarget else { return false }
+        return target.repeatRule != .never
+    }
 }

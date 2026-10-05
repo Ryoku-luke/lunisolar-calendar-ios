@@ -258,43 +258,31 @@ struct AIAssistantView: View {
     /// 删除 / 修改命令共用的定位条件
 
     /// 待确认命令里「用户所说的那一天」（只有删除 / 修改意图带它）
-    private var criteriaDay: Date? {
-        switch model.pendingCommand {
-        case .deleteEvent(let d): return d.criteria.day
-        case .updateEvent(let d): return d.criteria.day
-        default: return nil
-        }
-    }
-
-    /// 确认区「当前时间」显示的值。
+        /// 确认区「当前时间」显示的值。
     ///
     /// 重复日程的 `startDate` 只是序列**锚点**（可能是几个月前），与用户说的「明天」无关 ——
     /// 直接显示锚点日期会让人不敢确认（也可能误以为是另一条日程）。
     /// 这里改用「用户所说的那一天 + 原时分」。
     private func occurrenceText(for target: CalendarEvent) -> String {
         // 解析逻辑在服务层（AIAssistantService.occurrenceStart），这里只负责格式化
-        let day = criteriaDay ?? target.startDate
+        let day = model.criteriaDay ?? target.startDate
         return AIAssistantService.occurrenceStart(of: target, on: day)
             .formatted(date: .abbreviated, time: .shortened)
     }
 
     /// 当前待确认的目标是否为重复日程（必须在 resetAfterCompletion 之前取值）
-    private var wasRepeatingTarget: Bool {
-        model.destructiveTarget?.repeatRule != .never
-    }
-
-    /// 确认执行删除 / 修改（唯一写入路径是 AIAssistantService → EventService）
+        /// 确认执行删除 / 修改（唯一写入路径是 AIAssistantService → EventService）
     private func confirmDestructive() {
         guard let command = model.pendingCommand else { return }
         switch AIAssistantService.shared.execute(command) {
         case .success(.deletedEvent):
             // 重复日程删的是整条序列，回执必须说清楚（否则用户以为只删了「明天那次」）
-            model.showSuccess(wasRepeatingTarget
+            model.showSuccess(model.wasRepeatingTarget
                         ? NSLocalizedString("已删除整条重复日程。", comment: "AI助手")
                         : NSLocalizedString("已删除该日程。", comment: "AI助手"))
             model.resetAfterCompletion()
         case .success(.updatedEvent):
-            model.showSuccess(wasRepeatingTarget
+            model.showSuccess(model.wasRepeatingTarget
                         ? NSLocalizedString("已修改整条重复日程的时间，提醒已重建。", comment: "AI助手")
                         : NSLocalizedString("已修改时间，提醒已重建。", comment: "AI助手"))
             model.resetAfterCompletion()
