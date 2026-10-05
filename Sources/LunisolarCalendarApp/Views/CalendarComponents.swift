@@ -247,10 +247,14 @@ struct DayCellView: View {
                 }
                 .shadow(color: (cellAccent ?? Color.appTint).opacity(0.22),
                         radius: 5, x: 0, y: 2)
+                // 选中框过渡：填充色/阴影随选中态平滑变化，避免"硬切"。
+                // 动画只挂在背景这一层（value 用 fillTint），不影响文字与布局。
+                .animation(.snappy(duration: 0.22, extraBounce: 0.06), value: fillTint)
         } else if isToday {
             // 今日：红色描边圆角（无填充），与「选中实心」区分
             RoundedRectangle(cornerRadius: isRegular ? 14 : 10, style: .continuous)
                 .stroke(Color.systemRed.opacity(0.55), lineWidth: isRegular ? 2 : 1.5)
+                .animation(.snappy(duration: 0.22, extraBounce: 0.06), value: isToday)
         }
     }
     private var foregroundForDay: Color {
