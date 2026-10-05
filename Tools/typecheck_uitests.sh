@@ -19,6 +19,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
 SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+TMP_OUT="$(mktemp)"; trap 'rm -f "$TMP_OUT"' EXIT
 PLATFORM_DIR="$(xcode-select -p)/Platforms/iPhoneSimulator.platform"
 CACHE=".build/uitest-typecheck"
 mkdir -p "$CACHE"
@@ -35,6 +36,15 @@ xcrun --sdk iphonesimulator swiftc -typecheck \
   -sdk-module-cache-path "$CACHE/sdkcache" \
   -Isystem "$PLATFORM_DIR/Developer/usr/lib" \
   -F "$PLATFORM_DIR/Developer/Library/Frameworks" \
-  -F "$SDK/Developer/Library/Frameworks"
+  -F "$SDK/Developer/Library/Frameworks" 2>&1 | tee "$TMP_OUT"
+
+# 与 Tools/run_tests.sh 同一条规矩：**编译警告即失败**。
+# （此前的实现只打印 OK，即使 swiftc 报了警告也照样"通过"——本轮就漏掉了两条
+#   XCTSkip 相关警告，直到人工看输出才发现。）
+if grep -q "warning: " "$TMP_OUT"; then
+  echo "UITESTS_TYPECHECK_FAILED: 存在编译警告（项目规矩：警告即失败）"
+  grep "warning: " "$TMP_OUT" | head -10
+  exit 1
+fi
 
 echo "UITESTS_TYPECHECK_OK"

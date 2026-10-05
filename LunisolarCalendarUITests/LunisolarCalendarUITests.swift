@@ -1239,7 +1239,7 @@ final class LunisolarCalendarUITests: XCTestCase {
         //   → 说明 iPhone 17 Pro 模拟器上，示例数据的主页内容**并未超过一屏**，没有可滚动空间。
         // 结论：本守卫需要先加 `-uitest-seed-events=N` 种子开关（造出确定性的"超过一屏"场景）才可写。
         // 依据与两次实测记录见 docs/POLISH_CHECKLIST_2026-10-04.md（P0'）。
-        try XCTSkip("需先加 -uitest-seed-events=N：模拟器上示例数据主页未超一屏，无可滚动空间（已实测两次）")
+        throw XCTSkip("需先加 -uitest-seed-events=N：模拟器上示例数据主页未超一屏，无可滚动空间（已实测两次）")
     }
 
 
