@@ -7,9 +7,9 @@ import Foundation
 /// 集中之后下一步才能把解析/执行逻辑也搬进来，从而**脱离 UI 单测**。
 ///
 /// ⚠️ 用法要点（P4-1 5b-1 的实测教训）：
-/// - 使用点直接写 `model.x`，**不要**用"带 setter 的转发计算属性"——它在 `View` 的
+/// - 使用点直接写 `x`，**不要**用"带 setter 的转发计算属性"——它在 `View` 的
 ///   逃逸闭包里不可赋值（结构体不可变），而 `@State` 之所以能用是因为 `nonmutating set`；
-/// - 需要绑定时（本视图仅 2 处）在 `body` 里加 `@Bindable var model = model` 再写 `$model.x`。
+/// - 需要绑定时（本视图仅 2 处）在 `body` 里加 `@Bindable var model = model` 再写 `$x`。
 @Observable
 final class AIAssistantModel {
     /// 输入框文本
@@ -32,4 +32,23 @@ final class AIAssistantModel {
     var inlineError: String?
     /// 输入框焦点
     var inputFocused: Bool = false
+
+    // MARK: - 结果状态的两个变更口（P4-2 ③-2 第一片：从视图搬进来）
+    //
+    // 这两个方法只写模型自己的状态、不依赖任何外部服务 —— 搬进来后就能**脱离 UI 单测**，
+    // 这正是 ③-2 的目的。（`showSuccess` 含 Task/@MainActor 的并发细节，留到专门一步再搬。）
+
+    /// 行内错误提示
+    func present(_ error: AICommandError) {
+        inlineError = error.message
+    }
+
+    /// 一次交互走完后的复位（输入与草稿一起清掉）
+    func resetAfterCompletion() {
+        input = ""
+        draft = nil
+        destructiveTarget = nil
+        destructiveLabel = nil
+        pendingCommand = nil
+    }
 }

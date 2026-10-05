@@ -208,7 +208,7 @@ struct AIAssistantView: View {
 
         switch AICommandParser.parse(model.input) {
         case .failure(let error):
-            present(error)
+            model.present(error)
 
         case .success(let command):
             switch command {
@@ -221,14 +221,14 @@ struct AIAssistantView: View {
                 case .success:
                     break // 查询路径不会出现其他结果类型
                 case .failure(let error):
-                    present(error)
+                    model.present(error)
                 }
 
             case .createEvent:
                 // 预览前先校验：让用户在「确认创建」之前就看到问题（如时间已过去）
                 switch AICommandValidator.validate(command) {
                 case .failure(let error):
-                    present(error)
+                    model.present(error)
                 case .success(.createEvent(let validated)):
                     model.draft = validated
                 case .success:
@@ -239,12 +239,12 @@ struct AIAssistantView: View {
                 // 破坏性操作：先校验，再解析出**唯一**目标，进入确认步骤（未确认不执行）
                 switch AICommandValidator.validate(command) {
                 case .failure(let error):
-                    present(error)
+                    model.present(error)
                 case .success(let validated):
                     guard let criteria = AICommandPresentation.destructiveCriteria(of: validated) else { return }
                     switch AIAssistantService.shared.resolveTarget(criteria) {
                     case .failure(let error):
-                        present(error)
+                        model.present(error)
                     case .success(let target):
                         model.destructiveTarget = target
                         model.pendingCommand = validated
@@ -292,28 +292,20 @@ struct AIAssistantView: View {
             showSuccess(wasRepeatingTarget
                         ? NSLocalizedString("已删除整条重复日程。", comment: "AI助手")
                         : NSLocalizedString("已删除该日程。", comment: "AI助手"))
-            resetAfterCompletion()
+            model.resetAfterCompletion()
         case .success(.updatedEvent):
             showSuccess(wasRepeatingTarget
                         ? NSLocalizedString("已修改整条重复日程的时间，提醒已重建。", comment: "AI助手")
                         : NSLocalizedString("已修改时间，提醒已重建。", comment: "AI助手"))
-            resetAfterCompletion()
+            model.resetAfterCompletion()
         case .success:
             break
         case .failure(let error):
-            present(error)
+            model.present(error)
         }
     }
 
-    private func resetAfterCompletion() {
-        model.input = ""
-        model.draft = nil
-        model.destructiveTarget = nil
-        model.destructiveLabel = nil
-        model.pendingCommand = nil
-    }
-
-    /// 确认创建：唯一写入路径是 AIAssistantService → EventService（AI 不直连数据层）
+        /// 确认创建：唯一写入路径是 AIAssistantService → EventService（AI 不直连数据层）
     private func create(_ d: AICreateEventDraft) {
         switch AIAssistantService.shared.execute(.createEvent(d)) {
         case .success(.createdEvent(let id)):
@@ -339,7 +331,7 @@ struct AIAssistantView: View {
         case .success:
             break
         case .failure(let error):
-            present(error)
+            model.present(error)
         }
     }
 
@@ -383,8 +375,6 @@ struct AIAssistantView: View {
     private static let actionableSuccessDwell: Duration = .seconds(6)
 
     /// 结构化错误统一展示（文案来自 AICommandError.message），行内呈现而非模态
-    private func present(_ error: AICommandError) {
-        model.inlineError = error.message
-    }
+    
 }
 #endif
