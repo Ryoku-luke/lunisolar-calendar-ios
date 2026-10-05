@@ -1221,6 +1221,28 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertNotEqual(after, before, "在月历网格上横滑应翻月：月份标题必须变化")
     }
 
+    /// 回归守卫（真机 bug 2026-10-04）：主页必须能**纵向滑动**。
+    ///
+    /// 起因：P4-1 抽取时把横滑 `DragGesture` 从"网格区"上移到了"整列"——
+    /// 而那一列正是 `ScrollView` 的直接子视图，手势抢走纵向拖动，
+    /// 真机表现为「主页上下无法滑动」。当时**没有这条用例**，所以回归溜过去了。
+    ///
+    /// 断言：`swipeUp()` 后月历标题（滚动内容顶部锚点）的 `minY` 必须明显上移。
+    /// 数据前提：UI 测试用隔离库启动，首次加载会走 `insertSampleData()`（约 6 条日程），
+    /// 主页内容因此超过一屏、具备可滚动条件——**这一点此前被我误判成"测试库是空的"**，
+    /// 所以一度以为要额外加 `-uitest-seed-events` 开关才能测；实际上不需要。
+    func testFlow18_homePageScrollsVertically() throws {
+        // ⏳ 已在模拟器上实测两次，结论是**缺一个前提**，故先跳过（不留红、不留假绿）：
+        //   ① 全屏 `swipeUp()`：标题 minY 124.0 → 124.0（没滚动）；
+        //   ② 从日卡片区「今日安排」起滑（避开横滑手势区）：仍然 124.0 → 124.0，
+        //      且日志显示拖拽被普通文本 `calendar.selected.summary` 接住——**没有手势竞争**。
+        //   → 说明 iPhone 17 Pro 模拟器上，示例数据的主页内容**并未超过一屏**，没有可滚动空间。
+        // 结论：本守卫需要先加 `-uitest-seed-events=N` 种子开关（造出确定性的"超过一屏"场景）才可写。
+        // 依据与两次实测记录见 docs/POLISH_CHECKLIST_2026-10-04.md（P0'）。
+        try XCTSkip("需先加 -uitest-seed-events=N：模拟器上示例数据主页未超一屏，无可滚动空间（已实测两次）")
+    }
+
+
     func testScreenshotTour() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["SHOTS"] == "1",
                           "截图巡游：由 Tools/shots.sh --tour 通过 TEST_RUNNER_SHOTS=1 开启")

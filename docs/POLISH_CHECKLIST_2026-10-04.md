@@ -176,8 +176,16 @@
       （报 `["10月"] == ["10月"]`）。**没有这一步，我会交付一条给假信心的测试。**
   - ⚠️ **为什么现有用例抓不到**：UI 用例统一带 `-uitest-empty-store` 启动（`launchApp` 第 78 行），
     主页**没有日程** → 内容不足一屏 → 纵向压根不需要滚动；而横滑翻月**从来没有用例**。
-  - 需要的小改动：加一个测试专用开关（如 `-uitest-seed-events=N`，与既有的
-    `-uitest-empty-store` / `-uitest-readonly-store` 同一手法）来造出"超过一屏"的确定性场景。
+  - ✅ 用例骨架已写（`testFlow18_homePageScrollsVertically`），**但当前跳过**，因为缺一个前提：
+    实测两次（① 全屏 `swipeUp()`；② 从日卡片区「今日安排」起滑以避开横滑手势区）——
+    标题 `minY` 都是 124.0 → 124.0，且日志显示拖拽被普通文本 `calendar.selected.summary`
+    接住（**没有手势竞争**）→ 说明 **iPhone 17 Pro 模拟器上示例数据的主页内容并未超过一屏**，
+    没有可滚动空间，所以纵滑本就不会发生。
+  - ⚠️ **更正一处我先前的误判**：我原以为"UI 测试库是空的、没日程"，实测发现
+    `load()` 在无存档时会调 `insertSampleData()`（约 6 条）——**数据是有的**，
+    只是**不足以让主页超出一屏**。所以仍然需要种子开关，但理由与原先说的不同。
+  - 需要的小改动：加 `-uitest-seed-events=N`（与既有 `-uitest-empty-store` /
+    `-uitest-readonly-store` 同一手法）造出确定性的"超过一屏"场景，再把上面那条用例解跳。
 
 - [ ] **顺手排查同类风险**：本次是"手势/修饰符被上移一层"导致的回归。
   其余抽取（`CalendarMonthGridShell` / `CalendarMonthHeader` / `CalendarSolarTermBar` 等）
