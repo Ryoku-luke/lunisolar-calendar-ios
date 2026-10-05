@@ -16,32 +16,17 @@ struct AIAssistantView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.isPresented) private var isPresented
 
-    @State private var input: String = ""
-    @State private var draft: AICreateEventDraft?
-    /// P1-6b：查询意图的结果（只读快照）与被查询日期
-    @State private var queryResults: [CalendarEvent]?
-    @State private var queryDate: Date?
-    /// P1-6c：破坏性操作（删除 / 修改）的确认状态
-    @State private var destructiveTarget: CalendarEvent?
-    @State private var destructiveLabel: String?
-    @State private var pendingCommand: AIStructuredCommand?
-    /// 行内成功提示（创建 / 删除 / 修改完成）：2 秒后自动消失，替代模态 alert
-    @State private var completedMessage: String?
-    /// 刚创建的事件落在**非今天**时的那个日期（用于补「去看看」按钮）。
-    /// nil = 当天，或本次操作不是创建。与 `completedMessage` 同生命周期。
-    @State private var completedOffDay: Date?
-    /// 行内失败提示（UI_DESIGN_REVIEW P0-3）：原先是「无法解析 → 好」的模态 alert。
-    /// 解析失败往往只需改几个字重试，模态要点两次才回到输入框，故与成功提示同区呈现。
-    @State private var inlineError: String?
-    @State private var inputFocused: Bool = false
+    /// 状态集中在 AIAssistantModel（P4-2 ③）；视图只持有它，不再散落 11 个 @State
+    @State private var model = AIAssistantModel()
 
     /// 把三个提示相关的 @State 映射成一个状态（P4-2 ②：让提示条只依赖一个入参）
     private var inlineNoticeState: AIInlineNoticeState {
-        if let inlineError { return .error(inlineError) }
-        if let completedMessage { return .success(completedMessage, offDay: completedOffDay) }
+        if let inlineError = model.inlineError { return .error(inlineError) }
+        if let completedMessage = model.completedMessage { return .success(completedMessage, offDay: model.completedOffDay) }
         return .none
     }
     var body: some View {
+        @Bindable var model = model
         NavigationStack {
             List {
                 // 行内提示区：成功与失败同一位置，替代模态 alert（少两次点击，也不打断连续输入）
@@ -49,12 +34,12 @@ struct AIAssistantView: View {
 
                 Section {
                     #if canImport(UIKit)
-                    AutoFocusTextView(text: $input, focused: $inputFocused, onSubmit: { parse() })
+                    AutoFocusTextView(text: $model.input, focused: $model.inputFocused, onSubmit: { parse() })
                         .frame(minHeight: 100)
                         // 占位文案在 SwiftUI 侧渲染：不写进 UITextView，避免被当成用户输入
                         // （对齐 UITextView 的 textContainerInset 12 + 行内 padding 5）
                         .overlay(alignment: .topLeading) {
-                            if input.isEmpty {
+                            if model.input.isEmpty {
                                 Text(NSLocalizedString("例如：明天下午3点提醒我开会", comment: "AI助手占位"))
                                     .font(AppTheme.Font.body)
                                     .foregroundStyle(Color.tertiaryLabel)
@@ -65,10 +50,10 @@ struct AIAssistantView: View {
                         }
                         // 一键清空：改词或取消重来（此前只能逐字删除）
                         .overlay(alignment: .topTrailing) {
-                            if !input.isEmpty {
+                            if !model.input.isEmpty {
                                 Button {
-                                    input = ""
-                                    inputFocused = true
+                                    model.input = ""
+                                    model.inputFocused = true
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
                                         .font(.system(size: 20)) // N-9-exempt: SF Symbol 图标固定方框（豁免①）
@@ -98,10 +83,10 @@ struct AIAssistantView: View {
                     .accessibilityIdentifier(AccessibilityID.aiParse)
                 }
 
-                if let d = draft {
+                if let d = model.draft {
                     Section {
                         AIPreviewRows(draft: d,
-                                       onCancel: { draft = nil; inputFocused = true },
+                                       onCancel: { model.draft = nil; model.inputFocused = true },
                                        onCreate: { create($0) })
                     } header: {
                         Text(NSLocalizedString("预览 · 确认后入库", comment: ""))
@@ -109,17 +94,17 @@ struct AIAssistantView: View {
                 }
 
                 // P1-6b：查询意图的结果（只读快照，直接展示，无确认步骤）
-                if let results = queryResults {
+                if let results = model.queryResults {
                     Section {
                         AIQueryResultRows(results: results)
                     } header: {
                         Text(String(format: NSLocalizedString("查询结果 · %@", comment: "AI助手"),
-                                    queryDate?.formatted(date: .abbreviated, time: .omitted) ?? ""))
+                                    model.queryDate?.formatted(date: .abbreviated, time: .omitted) ?? ""))
                     }
                 }
 
                 // P1-6c：删除 / 修改的确认区（破坏性操作未确认不执行）
-                if let target = destructiveTarget, let label = destructiveLabel {
+                if let target = model.destructiveTarget, let label = model.destructiveLabel {
                     Section {
                         AIDestructiveConfirmRows(
                             title: target.title,
@@ -127,9 +112,9 @@ struct AIAssistantView: View {
                             repeatLabel: target.repeatRule == .never ? nil : target.repeatRuleLabel,
                             onConfirm: { confirmDestructive() },
                             onCancel: {
-                                destructiveTarget = nil
-                                destructiveLabel = nil
-                                pendingCommand = nil
+                                model.destructiveTarget = nil
+                                model.destructiveLabel = nil
+                                model.pendingCommand = nil
                             })
                     } header: {
                         Text(label)
@@ -149,7 +134,7 @@ struct AIAssistantView: View {
             }
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    inputFocused = true
+                    model.inputFocused = true
                 }
             }
             #if canImport(UIKit)
@@ -164,9 +149,9 @@ struct AIAssistantView: View {
                 // 键盘弹起时，导航栏给一个**一眼可见**的收起入口。
                 // 键盘工具栏上的「完成」在真机上不够显眼（用户反馈「键盘无法关闭」），
                 // 导航栏按钮在键盘弹出时始终可见，是确定的兜底。
-                if inputFocused {
+                if model.inputFocused {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(NSLocalizedString("完成", comment: "AI助手")) { inputFocused = false }
+                        Button(NSLocalizedString("完成", comment: "AI助手")) { model.inputFocused = false }
                             .font(.body.weight(.semibold))
                             .accessibilityIdentifier(AccessibilityID.aiDone)
                     }
@@ -176,7 +161,7 @@ struct AIAssistantView: View {
             .scrollDismissesKeyboard(.interactively)
             // ⚠️ 这里刻意**没有**「整页点空白处收键盘」的手势。试过三种写法，都不行：
             //   1. simultaneousGesture(TapGesture())：与子视图手势并行，点输入框**本身**也会把
-            //      inputFocused 置 false → updateUIView 立刻 resignFirstResponder()，把刚点起来的
+            //      model.inputFocused 置 false → updateUIView 立刻 resignFirstResponder()，把刚点起来的
             //      键盘收掉。它与「UITextView 取得第一响应者」的先后是竞态，症状时好时坏
             //      （实测报 Neither element nor any descendant has keyboard focus）。
             //   2. onTapGesture：不抢子视图手势，但会**吞掉 List 行内按钮的点击** →
@@ -189,7 +174,7 @@ struct AIAssistantView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     // 键盘上再给一个收起入口（复用既有本地化键「完成」，四语言均已翻译）
-                    Button(NSLocalizedString("完成", comment: "AI助手")) { inputFocused = false }
+                    Button(NSLocalizedString("完成", comment: "AI助手")) { model.inputFocused = false }
                     Spacer()
                     // 键盘上的「解析」：省去"先收键盘再点列表里的按钮"这一往返
                     Button(NSLocalizedString("解析", comment: "AI助手")) { parse() }
@@ -208,20 +193,20 @@ struct AIAssistantView: View {
     /// 解析 → 校验 → 预览（创建）/ 立即执行（查询）/ 确认（删除、修改）
     private func parse() {
         // 新一轮解析：清掉上一轮的预览 / 结果 / 待确认操作
-        draft = nil
-        queryResults = nil
-        queryDate = nil
-        destructiveTarget = nil
-        destructiveLabel = nil
+        model.draft = nil
+        model.queryResults = nil
+        model.queryDate = nil
+        model.destructiveTarget = nil
+        model.destructiveLabel = nil
         // 行内提示也一起清：上一轮的红字不该继续挂在新一轮的输入旁边
-        completedMessage = nil
-        inlineError = nil
-        pendingCommand = nil
+        model.completedMessage = nil
+        model.inlineError = nil
+        model.pendingCommand = nil
 
         // 收起键盘：否则预览 / 结果区被键盘挡在屏幕下方，用户会以为「点了没反应」
-        inputFocused = false
+        model.inputFocused = false
 
-        switch AICommandParser.parse(input) {
+        switch AICommandParser.parse(model.input) {
         case .failure(let error):
             present(error)
 
@@ -231,8 +216,8 @@ struct AIAssistantView: View {
                 // 只读查询：无需确认步骤，直接执行并展示结果
                 switch AIAssistantService.shared.execute(command) {
                 case .success(.queried(let events)):
-                    queryResults = events
-                    queryDate = range.baseDate
+                    model.queryResults = events
+                    model.queryDate = range.baseDate
                 case .success:
                     break // 查询路径不会出现其他结果类型
                 case .failure(let error):
@@ -245,7 +230,7 @@ struct AIAssistantView: View {
                 case .failure(let error):
                     present(error)
                 case .success(.createEvent(let validated)):
-                    draft = validated
+                    model.draft = validated
                 case .success:
                     break
                 }
@@ -261,9 +246,9 @@ struct AIAssistantView: View {
                     case .failure(let error):
                         present(error)
                     case .success(let target):
-                        destructiveTarget = target
-                        pendingCommand = validated
-                        destructiveLabel = AICommandPresentation.destructiveLabel(for: validated)
+                        model.destructiveTarget = target
+                        model.pendingCommand = validated
+                        model.destructiveLabel = AICommandPresentation.destructiveLabel(for: validated)
                     }
                 }
             }
@@ -274,7 +259,7 @@ struct AIAssistantView: View {
 
     /// 待确认命令里「用户所说的那一天」（只有删除 / 修改意图带它）
     private var criteriaDay: Date? {
-        switch pendingCommand {
+        switch model.pendingCommand {
         case .deleteEvent(let d): return d.criteria.day
         case .updateEvent(let d): return d.criteria.day
         default: return nil
@@ -295,12 +280,12 @@ struct AIAssistantView: View {
 
     /// 当前待确认的目标是否为重复日程（必须在 resetAfterCompletion 之前取值）
     private var wasRepeatingTarget: Bool {
-        destructiveTarget?.repeatRule != .never
+        model.destructiveTarget?.repeatRule != .never
     }
 
     /// 确认执行删除 / 修改（唯一写入路径是 AIAssistantService → EventService）
     private func confirmDestructive() {
-        guard let command = pendingCommand else { return }
+        guard let command = model.pendingCommand else { return }
         switch AIAssistantService.shared.execute(command) {
         case .success(.deletedEvent):
             // 重复日程删的是整条序列，回执必须说清楚（否则用户以为只删了「明天那次」）
@@ -321,11 +306,11 @@ struct AIAssistantView: View {
     }
 
     private func resetAfterCompletion() {
-        input = ""
-        draft = nil
-        destructiveTarget = nil
-        destructiveLabel = nil
-        pendingCommand = nil
+        model.input = ""
+        model.draft = nil
+        model.destructiveTarget = nil
+        model.destructiveLabel = nil
+        model.pendingCommand = nil
     }
 
     /// 确认创建：唯一写入路径是 AIAssistantService → EventService（AI 不直连数据层）
@@ -341,16 +326,16 @@ struct AIAssistantView: View {
             let isOtherDay = !cal.isDate(startDate, inSameDayAs: Date())
             if isOtherDay {
                 let dayText = Self.dayFormatter.string(from: startDate)
-                // 「去看看」的日期必须走 showSuccess 的参数：不能再单独赋值 completedOffDay，
+                // 「去看看」的日期必须走 showSuccess 的参数：不能再单独赋值 model.completedOffDay，
                 // 那会被 showSuccess 清掉（按钮永远不出现——见 showSuccess 的注释）。
                 showSuccess(String(format: NSLocalizedString("已加入 %@ 的日程", comment: "AI助手：日程建在其它日子"), dayText),
                             offDay: startDate)
             } else {
                 showSuccess(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
             }
-            input = ""
-            draft = nil
-            inputFocused = true
+            model.input = ""
+            model.draft = nil
+            model.inputFocused = true
         case .success:
             break
         case .failure(let error):
@@ -369,25 +354,25 @@ struct AIAssistantView: View {
     /// 行内成功提示：自动消失（不打断连续输入，也省掉模态的两次点击）
     ///
     /// `offDay` 是「去看看」跳转按钮的**唯一入口**：非 nil 才渲染该按钮。
-    /// ⚠️ 所以 `completedOffDay` 必须只由本方法读写。此前 `create()` 先
-    /// `completedOffDay = startDate`、再调用本方法，而本方法开头会把它清空——
+    /// ⚠️ 所以 `model.completedOffDay` 必须只由本方法读写。此前 `create()` 先
+    /// `model.completedOffDay = startDate`、再调用本方法，而本方法开头会把它清空——
     /// 结果「去看看」按钮**从未出现过**：文案对（「已加入 10月3日 的日程」），
     /// 去路是死的。这正是 2026-10-02 UI 测试 Flow 3d 抓到的真因（当时提示文案是对的，
     /// 断言 1 通过、断言 2 失败，屏幕录制里能看到提示卡片没有按钮）。
     /// 删除 / 修改走的也是本方法，`offDay` 省略即 nil，顺手清掉上一次创建留下的按钮。
     private func showSuccess(_ text: String, offDay: Date? = nil) {
-        inlineError = nil
-        completedOffDay = offDay
-        completedMessage = text
+        model.inlineError = nil
+        model.completedOffDay = offDay
+        model.completedMessage = text
         // 带行动按钮的提示停留更久：2 秒够读一句纯文案，但不够「读日期 → 决定 → 点按钮」。
         // 「去看看」正是那次真机反馈的补救路径，抢不到就等于没做；UI 测试也不该跟秒表赛跑。
         // 这是 UX 取值，要调只动这两个常量。
         let dwell: Duration = offDay == nil ? Self.plainSuccessDwell : Self.actionableSuccessDwell
         Task { @MainActor in
             try? await Task.sleep(for: dwell)
-            if completedMessage == text {
-                completedMessage = nil
-                completedOffDay = nil
+            if model.completedMessage == text {
+                model.completedMessage = nil
+                model.completedOffDay = nil
             }
         }
     }
@@ -399,7 +384,7 @@ struct AIAssistantView: View {
 
     /// 结构化错误统一展示（文案来自 AICommandError.message），行内呈现而非模态
     private func present(_ error: AICommandError) {
-        inlineError = error.message
+        model.inlineError = error.message
     }
 }
 #endif
