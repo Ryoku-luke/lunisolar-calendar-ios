@@ -85,12 +85,32 @@ struct DayCellLongPressCatcher: View {
 /// 圆角也与格子一致。这是解决"回落文字变形 + 圆角不一致"的关键。
 struct DayCellLongPressMenu: View {
     let radius: CGFloat
+    /// 菜单卡在浮层容器里的位置（来自被长按格子的 frame）。
+    /// 由调用方传入，而不是让调用方对整体加 .offset —— 这样"背景压暗层"才能铺满容器、
+    /// **只让菜单卡偏移**（否则压暗层会被一起挪走，等于没有背景）。
+    let offset: CGSize
     let onSelect: () -> Void
     let onNew: () -> Void
     let onCopy: () -> Void
     let onDismiss: () -> Void
 
     var body: some View {
+        ZStack(alignment: .topLeading) {
+            // 背景压暗层：系统菜单"悬浮感"的重要一半 —— 背景被压暗、菜单浮在上面。
+            // 它同时承担"点击外部关闭"：此前只把可点区域放在菜单自身 bounds 内，
+            // 导致**点菜单外面根本关不掉**（真机反馈"悬浮效果丢失"时一并暴露）。
+            Color.black.opacity(0.18)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { onDismiss() }
+                .transition(.opacity)
+
+            card
+                .offset(x: offset.width, y: offset.height)
+        }
+    }
+
+    private var card: some View {
         VStack(spacing: 0) {
             item("选中此日", "checkmark.circle", onSelect)
             Divider()
@@ -99,20 +119,17 @@ struct DayCellLongPressMenu: View {
             item("复制日期", "doc.on.doc", onCopy)
         }
         .frame(minWidth: 168)
-        .background(.regularMaterial,
+        // .thinMaterial（比 regular 更薄更透）→ 更接近系统菜单那种"半透明悬浮"观感。
+        .background(.thinMaterial,
                     in: RoundedRectangle(cornerRadius: radius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .stroke(Color.themeSeparator.opacity(0.25), lineWidth: AppTheme.Stroke.hair)
         }
-        .shadow(color: .black.opacity(0.18), radius: 12, y: 6)
-        .transition(.scale(scale: 0.92, anchor: .topLeading).combined(with: .opacity))
-        // 点击菜单外部关闭：整屏透明层垫在下面（不拦截菜单自身）
-        .background {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture { onDismiss() }
-        }
+        // 阴影加大 → 抬得更高、更像浮在内容之上
+        .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
+        // 从格子位置略微放大浮出（起点更小 + 锚在左上角，配合压暗层淡入）
+        .transition(.scale(scale: 0.86, anchor: .topLeading).combined(with: .opacity))
     }
 
     private func item(_ title: LocalizedStringKey, _ symbol: String,

@@ -127,11 +127,13 @@ struct CalendarMonthGridShell: View {
             if let pressed = pressedCell {
                 DayCellLongPressMenu(
                     radius: DayCellView.selectionRadius(regular: hSizeClass == .regular),
+                    // 位置作为参数传入（见 DayCellLongPressMenu.offset 的注释：
+                    // 这样背景压暗层才能铺满容器、只让菜单卡偏移）。
+                    offset: CGSize(width: pressed.frame.minX, height: pressed.frame.maxY + 6),
                     onSelect: { onSelectDay(pressed.date); pressedCell = nil },
                     onNew: { onNewEvent(pressed.date); pressedCell = nil },
                     onCopy: { onCopyDate(pressed.date); pressedCell = nil },
                     onDismiss: { pressedCell = nil })
-                    .offset(x: pressed.frame.minX, y: pressed.frame.maxY + 6)
                     // 触觉反馈：系统菜单自带"弹出时的轻震"，自绘菜单要自己给
                     // （用户反馈"没有了原来震动的效果"）。trigger 用 Bool → 只在开/关时各响一次。
                     .sensoryFeedback(.impact(weight: .medium), trigger: pressedCell != nil)
