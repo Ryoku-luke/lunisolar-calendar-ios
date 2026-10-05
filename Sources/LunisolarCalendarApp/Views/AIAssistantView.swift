@@ -100,34 +100,9 @@ struct AIAssistantView: View {
 
                 if let d = draft {
                     Section {
-                        LabeledContent(NSLocalizedString("标题", comment: ""), value: d.title)
-                        // 类型决定会不会响（提醒类型到点必响，日程默认不打扰）——
-                        // 不显示出来，用户无法预判「说了提醒我」到底有没有兑现
-                        LabeledContent(NSLocalizedString("类型", comment: ""), value: d.type.uiLabel)
-                        LabeledContent(NSLocalizedString("时间", comment: ""), value: d.startDate.formatted(date: .abbreviated, time: .shortened))
-                        HStack {
-                            Button(role: .cancel) {
-                                // 取消只收起预览并保留原文（此前会清空输入，用户得重新打一遍）；
-                                // 焦点还给输入框，方便直接改词后重新解析
-                                draft = nil
-                                inputFocused = true
-                            } label: {
-                                Label(NSLocalizedString("取消", comment: ""), systemImage: "xmark.circle")
-                            }
-                            // List 行内多按钮必须显式样式：默认样式下整行会抢走点击 →
-                            // 两个按钮都点不动（真机反馈「点确认取消也不起作用」）
-                            .buttonStyle(.borderless)
-                            .accessibilityIdentifier(AccessibilityID.aiCancel)
-                            Spacer()
-                            Button {
-                                create(d)
-                            } label: {
-                                Label(NSLocalizedString("确认创建", comment: "AI助手"), systemImage: "checkmark.circle.fill")
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityIdentifier(AccessibilityID.aiConfirm)
-                            .tint(Color.appTint)
-                        }
+                        AIPreviewRows(draft: d,
+                                       onCancel: { draft = nil; inputFocused = true },
+                                       onCreate: { create($0) })
                     } header: {
                         Text(NSLocalizedString("预览 · 确认后入库", comment: ""))
                     }
