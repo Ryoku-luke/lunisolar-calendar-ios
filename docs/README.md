@@ -11,7 +11,18 @@
 | **`POLISH_CHECKLIST_2026-10-04.md`** | **当前待办清单**（P0–P7）+ 每条的做法/验收 + 已结案项与依据 | **每次开工前读它** |
 | **`REFACTOR_ASSESSMENT_2026-10-04.md`** | 重构优先级（按变更热点而非行数）+ P4-1 施工图 + 状态所有权重构（5b）方案 | 要动 `CalendarMonthView` / 大文件时 |
 | **`DATA_UPDATE_RUNBOOK.md`** | 农历/节气/放假安排数据怎么更新、什么时候到期 | 日期到 2026-12 之后，或测试报数据预警时 |
-| `IPAD_UI_DESIGN_2026-09-27.md` · `DEVICE_TEST_CHECKLIST.md` · `PERF_NOTES.md` 等 | 专项设计与流程 | 按需 |
+### 其余文档（历史与专项，按需查阅）
+
+> `docs/` 共 20 份。上面 5 份是"活文档"（会随进展更新，优先读）；下面这些是**历史记录或专项资料**，
+> 通常只在对应问题上翻（我未逐份通读，故此处只按主题列出，不代述内容 ✗）。
+
+| 主题 | 文档 |
+|---|---|
+| 设计与评审（历史）| `UI_REDESIGN_2026-09-20.md` · `UI_POLISH_REVIEW_2026-09-25.md` · `UI_DESIGN_REVIEW_2026-09-27.md` · `UI_DESIGN_REVIEW_2026-09-28_IMPLEMENTATION.md` · `IPAD_UI_DESIGN_2026-09-27.md` |
+| 计划与进展（历史）| `PROGRESS_ANALYSIS_2026-09-25.md` · `PROJECT_IMPROVEMENTS_2026-09-20.md` · `HANDOFF_REVIEW_2026-09-30.md` · `ALLDAY_TIMEZONE_PLAN.md` |
+| 数据来源与专项 | `HUANGLI_DATA_SOURCE.md` · `DATA_UPDATE_RUNBOOK.md` |
+| 工程与发布 | `XCODE_BUILD_GUIDE.md` · `DEVICE_TEST_CHECKLIST.md` · `ENTITLEMENTS.md` · `APP_STORE.md` |
+| AI 协作上下文 | `AI_DEVELOPMENT_CONTEXT.md` |
 
 ## 二、当前状态（2026-10-05 实测）
 
@@ -20,7 +31,7 @@
 | 单元测试 | **436 用例 × 4 时区（上海/UTC/纽约/奥克兰）0 失败** ✓ |
 | 构建 | 0 警告（SwiftPM 缓存环境噪声除外，脚本已白名单） |
 | 五通道（本地 3 + iPhone UI + iPad UI） | 全绿 ✓ |
-| UI 用例 | 23 条（含 4 条 skip 的形态相关项） |
+| UI 用例 | **22 条**（最近一次 iPhone 全量：22 executed / 4 skipped / 0 failures）|
 | 同步 | 经代理（`http://127.0.0.1:7892`，仅本仓库局部配置）独立核实，本地 = 远端 ✓ |
 | 重构进度 | **P4-1 完成**（`CalendarMonthView` 592 → 358 行）· **P4-2 ② 完成**（`AIAssistantView` 657 → 425 行） |
 
