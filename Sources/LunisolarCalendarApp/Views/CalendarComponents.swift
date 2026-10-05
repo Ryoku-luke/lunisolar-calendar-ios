@@ -193,13 +193,13 @@ struct DayCellView: View {
             }
             .padding(.vertical, isRegular ? 6 : 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // 选中放大**只作用于选中框这一层**（背景），不再缩放整格。
-            // 原因：格子里的文字带 .lineLimit/minimumScaleFactor，整格缩放会让文字在动画期间
-            // 被重采样并重新适配 → 用户反馈"回弹一瞬间里面的字扭曲变形"。
-            // 缩放框体、文字恒为 1.0 之后，字形不再被变换（视觉上"选择指示弹一下"，语义也更准）。
+            // 选中强调**不改几何**：长按/选中一旦改变尺寸，系统上下文菜单的位图快照
+            // 与落地状态就不一致，回落时会看到文字被重采样（"字扭曲变形"）。
+            // 改为纯视觉强调（阴影更深），几何逐像素不变 → 快照与落地一致，回落不再重采样。
             .background(
                 dayCellBackground
-                    .scaleEffect(isSelected ? 1.05 : 1.0)
+                    .shadow(color: isSelected ? Color.black.opacity(0.18) : .clear,
+                            radius: isSelected ? 6 : 0, y: isSelected ? 3 : 0)
                     .animation(AppTheme.Motion.selection, value: isSelected)
             )
 
