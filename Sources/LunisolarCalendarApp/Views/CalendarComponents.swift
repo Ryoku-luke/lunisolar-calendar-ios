@@ -233,13 +233,19 @@ struct DayCellView: View {
         return parts.joined(separator: " ")
     }
 
+    /// 选中框 / 上下文菜单抬起预览的**统一圆角**（单一来源）。
+    ///
+    /// 为什么要单一来源：长按抬起时系统会按此形状裁切预览，若与格子自身圆角不一致，
+    /// 抬起瞬间会出现"圆角跳一下"的视觉抖动（用户 2026-10-05 反馈）。
+    static func selectionRadius(regular: Bool) -> CGFloat { regular ? 14 : 10 }
+
     /// 格子背景（整格包裹公历+农历+事件行）：
     /// 仅「选中」实心填充；今日红色描边；节日/节气以格内文字标注区分，不再浅染背景。
     @ViewBuilder
     private var dayCellBackground: some View {
         if let fill = fillTint {
             // fillTint 仅在选中态非空；选中节日日沿用节日色实心框
-            let shape = RoundedRectangle(cornerRadius: isRegular ? 14 : 10, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: Self.selectionRadius(regular: isRegular), style: .continuous)
             shape
                 .fill(fill)
                 .overlay {
@@ -252,7 +258,7 @@ struct DayCellView: View {
                 .animation(.snappy(duration: 0.22, extraBounce: 0.06), value: fillTint)
         } else if isToday {
             // 今日：红色描边圆角（无填充），与「选中实心」区分
-            RoundedRectangle(cornerRadius: isRegular ? 14 : 10, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.selectionRadius(regular: isRegular), style: .continuous)
                 .stroke(Color.systemRed.opacity(0.55), lineWidth: isRegular ? 2 : 1.5)
                 .animation(.snappy(duration: 0.22, extraBounce: 0.06), value: isToday)
         }
