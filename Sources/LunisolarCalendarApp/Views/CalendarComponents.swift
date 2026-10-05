@@ -193,13 +193,15 @@ struct DayCellView: View {
             }
             .padding(.vertical, isRegular ? 6 : 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // 选中强调**不改几何**：长按/选中一旦改变尺寸，系统上下文菜单的位图快照
-            // 与落地状态就不一致，回落时会看到文字被重采样（"字扭曲变形"）。
-            // 改为纯视觉强调（阴影更深），几何逐像素不变 → 快照与落地一致，回落不再重采样。
+            // 选中放大只作用于选中框这一层（背景），不缩放整格 → 文字不参与几何变换。
+            //
+            // 注：曾进一步把"放大"改成"只加深阴影（完全不改几何）"，想借此减轻长按回落时的
+            // 文字重采样 —— **实测无效（用户真机确认"回落仍变形"）**。结论：那次重采样来自
+            // 系统上下文菜单自身的快照管线（预览被渲染成位图，回落弹簧缩放它），与 App 侧
+            // 几何是否变化无关，App 代码无法消除。既然零收益，就恢复尺寸强调（观感更好）。
             .background(
                 dayCellBackground
-                    .shadow(color: isSelected ? Color.black.opacity(0.18) : .clear,
-                            radius: isSelected ? 6 : 0, y: isSelected ? 3 : 0)
+                    .scaleEffect(isSelected ? 1.05 : 1.0)
                     .animation(AppTheme.Motion.selection, value: isSelected)
             )
 
