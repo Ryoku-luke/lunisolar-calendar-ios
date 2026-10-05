@@ -628,3 +628,48 @@ private struct SystemMenuForVoiceOver: ViewModifier {
 **用花括号配对找 `LazyVGrid` 的结束位置会找错层**（本轮因此产出 `expected declaration` +
 `extraneous '}'`，构建失败，已立即回退）。下一轮的做法：**先读那 15 行、人工确认插入点**，
 不要用脚本配对；或者干脆把浮层挂到 `CalendarMonthColumn` 的根上（那里是明确的单层容器）。
+
+### D. 插入锚点的**逐字原文**（2026-10-05 第四次尝试后取得）
+
+前三次都栽在"怎么找到 `CalendarMonthGridShell` 的 `body` 结尾"：
+- 花括号配对 → 找错层（构建报 `expected declaration`）；
+- `max(缩进 4 的 "    }")` → 取到**文件里最后一个**（落在其它类型里），插入位置仍然错。
+
+**正确做法（下一轮照此做）**：不要用任何结构推断，直接用 **`edit` 工具**做一次**字面替换** ——
+锚定 `body` 尾部这段**唯一**文本，在它后面追加两个修饰符：
+
+```swift
+        .padding(.top, AppTheme.Spacing.sm)
+        // 月历是主视觉：白/浅色卡片 + 极轻边界，减少玻璃效果噪声。
+        .background(
+            Color.secondarySystemGroupedBackground,
+            in: RoundedRectangle(cornerRadius: AppTheme.Radius.xxl, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: AppTheme.Radius.xxl, style: .continuous)
+                .stroke(Color.themeSeparator.opacity(0.18), lineWidth: 0.7)
+        }
+```
+
+替换为"**上面这段原样** + 下面这段"：
+
+```swift
+        // 自绘长按菜单（方案 1）：命名坐标系让格子报到网格内的准确位置；浮层挂网格根上。
+        // **不做位图快照** → 回落时文字不会被重采样。
+        .coordinateSpace(name: "monthGrid")
+        .overlay(alignment: .topLeading) {
+            if let pressed = pressedCell {
+                DayCellLongPressMenu(
+                    radius: DayCellView.selectionRadius(regular: hSizeClass == .regular),
+                    onSelect: { onSelectDay(pressed.date); pressedCell = nil },
+                    onNew: { onNewEvent(pressed.date); pressedCell = nil },
+                    onCopy: { onCopyDate(pressed.date); pressedCell = nil },
+                    onDismiss: { pressedCell = nil })
+                    .offset(x: pressed.frame.minX, y: pressed.frame.maxY + 6)
+            }
+        }
+```
+
+其余四步（组件文件、每格识别器、系统菜单降级为仅 VoiceOver、两个辅助件）在本文档
+**方案 1 施工图**与**补遗 A/B** 中已是逐字可抄；前三轮里它们都已成功替换并通过编译，
+**唯一没过的就是本段**。
