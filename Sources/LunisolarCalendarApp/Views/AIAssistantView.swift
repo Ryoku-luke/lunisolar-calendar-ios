@@ -256,14 +256,14 @@ struct AIAssistantView: View {
                 case .failure(let error):
                     present(error)
                 case .success(let validated):
-                    guard let criteria = destructiveCriteria(of: validated) else { return }
+                    guard let criteria = AICommandPresentation.destructiveCriteria(of: validated) else { return }
                     switch AIAssistantService.shared.resolveTarget(criteria) {
                     case .failure(let error):
                         present(error)
                     case .success(let target):
                         destructiveTarget = target
                         pendingCommand = validated
-                        destructiveLabel = destructiveLabel(for: validated)
+                        destructiveLabel = AICommandPresentation.destructiveLabel(for: validated)
                     }
                 }
             }
@@ -271,26 +271,6 @@ struct AIAssistantView: View {
     }
 
     /// 删除 / 修改命令共用的定位条件
-    private func destructiveCriteria(of command: AIStructuredCommand) -> AIEventCriteria? {
-        switch command {
-        case .deleteEvent(let draft): return draft.criteria
-        case .updateEvent(let draft): return draft.criteria
-        default: return nil
-        }
-    }
-
-    /// 确认区标题（区分删除与修改，并显示将改到的时间）
-    private func destructiveLabel(for command: AIStructuredCommand) -> String {
-        switch command {
-        case .deleteEvent:
-            return NSLocalizedString("确认删除 · 不可撤销", comment: "AI助手")
-        case .updateEvent(let draft):
-            let when = draft.newStartDate.formatted(date: .abbreviated, time: .shortened)
-            return String(format: NSLocalizedString("确认修改 · 改到 %@", comment: "AI助手"), when)
-        default:
-            return ""
-        }
-    }
 
     /// 待确认命令里「用户所说的那一天」（只有删除 / 修改意图带它）
     private var criteriaDay: Date? {
