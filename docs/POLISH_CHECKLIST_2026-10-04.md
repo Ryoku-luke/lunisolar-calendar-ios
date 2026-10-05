@@ -549,3 +549,82 @@ struct DayCellLongPressCatcher: UIViewRepresentable {
 - **新增一条长按守卫**：XCUITest 用 `element.press(forDuration: 1.2)` 触发长按 → 断言自绘菜单的三个操作出现
   （`press(forDuration:)` 原生支持长按 ✓）；
 - 真机确认：① 回落不再出现文字变形；② 浮层圆角与格子协调。
+
+## 方案 1 施工图 · 补遗（2026-10-05 第二次尝试所得）
+
+### A. 逐字锚点（上次卡住的地方，务必用这些原文替换）
+
+`CalendarMonthGridShell.swift` 里日期格的真实片段（行号随改动浮动，内容逐字如下）：
+
+```swift
+                        .onTapGesture {
+                            onSelectDay(d)
+                        }
+                        // ⚠️ 此处**不要**加 `Button` 或 `pressableFeedback()`（或任何手势）：
+                        // 2026-10-05 两次实测——改 Button 会吞掉横向拖动（Flow17 红：横滑翻月失效）；
+                        // 加 pressableFeedback（内部 DragGesture）会吞掉 tap（Flow1 红：点击不再选中）。
+                        // 日期格必须同时容纳「点按选中」与「网格横滑翻月」，两者都靠触摸直通，
+                        // 因此这一格是**手势真空区**。要加按下反馈只能走 UIKit 长按识别器
+                        // （cancelsTouchesInView = false，像 TapOutsideKeyboardDismisser 那样）。
+                        // 原生上下文菜单：长按日期格 → 快捷操作（原创，克制不加额外功能）
+                        .contextMenu {
+```
+
+⚠️ 注意：`.contentShape(Rectangle())` 与 `.onTapGesture` 之间**还有一条注释**
+（关于 `.contentShape(.contextMenuPreview, …)` 的那条），锚点别漏了它。
+
+### B. 浮层与降级（已写好、本轮未落地，下一轮直接抄）
+
+```swift
+/// 自绘长按菜单：圆角与格子同源，动画走 AppTheme.Motion，
+/// **不做位图快照** → 回落时文字不会被重采样（这正是方案 1 要解决的）。
+private struct DayCellLongPressMenu: View {
+    let radius: CGFloat
+    let onSelect: () -> Void
+    let onNew: () -> Void
+    let onCopy: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            item("选中此日", "checkmark.circle", onSelect); Divider()
+            item("新建日程", "plus.circle", onNew);        Divider()
+            item("复制日期", "doc.on.doc", onCopy)
+        }
+        .frame(minWidth: 168)
+        .background(.regularMaterial,
+                    in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .stroke(Color.themeSeparator.opacity(0.25), lineWidth: AppTheme.Stroke.hair) }
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 6)
+        .transition(.scale(scale: 0.92, anchor: .topLeading).combined(with: .opacity))
+        .animation(AppTheme.Motion.selection, value: true)
+    }
+    // item(_:_:_:) 用 Button + .plain + .pressableFeedback()，行高 ≥ AppTheme.Touch.minTarget
+}
+
+/// 系统上下文菜单，**仅在 VoiceOver 运行时**挂载（无障碍降级）。
+private struct SystemMenuForVoiceOver: ViewModifier {
+    let onSelect: () -> Void; let onNew: () -> Void; let onCopy: () -> Void
+    func body(content: Content) -> some View {
+        #if canImport(UIKit)
+        if UIAccessibility.isVoiceOverRunning {
+            content.contextMenu {
+                Button { onSelect() } label: { Label("选中此日", systemImage: "checkmark.circle") }
+                Button { onNew() }    label: { Label("新建日程", systemImage: "plus.circle") }
+                Button { onCopy() }   label: { Label("复制日期", systemImage: "doc.on.doc") }
+            }
+        } else { content }
+        #else
+        content
+        #endif
+    }
+}
+```
+
+### C. 已知的**唯一剩余难点**（本轮就栽在这里）
+
+给 `LazyVGrid` 挂 `.coordinateSpace(name: "monthGrid")` + `.overlay(alignment: .topLeading) { … }` 时，
+**用花括号配对找 `LazyVGrid` 的结束位置会找错层**（本轮因此产出 `expected declaration` +
+`extraneous '}'`，构建失败，已立即回退）。下一轮的做法：**先读那 15 行、人工确认插入点**，
+不要用脚本配对；或者干脆把浮层挂到 `CalendarMonthColumn` 的根上（那里是明确的单层容器）。
