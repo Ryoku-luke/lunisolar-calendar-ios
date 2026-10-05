@@ -81,10 +81,17 @@ struct CalendarMonthGridShell: View {
                             GeometryReader { geo in
                                 DayCellLongPressCatcher(
                                     onLongPress: {
-                                        pressedCell = PressedCell(
-                                            date: d, frame: geo.frame(in: .named("monthGrid")))
+                                        // 必须包 withAnimation：否则 DayCellLongPressMenu 的
+                                        // .transition 不会播放，菜单会"瞬间出现"（用户反馈
+                                        // "没有了原来弹出的动画"）。
+                                        withAnimation(AppTheme.Motion.selection) {
+                                            pressedCell = PressedCell(
+                                                date: d, frame: geo.frame(in: .named("monthGrid")))
+                                        }
                                     },
-                                    onRelease: { pressedCell = nil },
+                                    onRelease: {
+                                        withAnimation(AppTheme.Motion.selection) { pressedCell = nil }
+                                    },
                                     onTap: { onSelectDay(d) })
                             }
                         }
@@ -125,6 +132,12 @@ struct CalendarMonthGridShell: View {
                     onCopy: { onCopyDate(pressed.date); pressedCell = nil },
                     onDismiss: { pressedCell = nil })
                     .offset(x: pressed.frame.minX, y: pressed.frame.maxY + 6)
+                    // 触觉反馈：系统菜单自带"弹出时的轻震"，自绘菜单要自己给
+                    // （用户反馈"没有了原来震动的效果"）。trigger 用 Bool → 只在开/关时各响一次。
+                    .sensoryFeedback(.impact(weight: .medium), trigger: pressedCell != nil)
+                    // 开/关**两个方向**都要动画（只给 onLongPress 包 withAnimation 的话，
+                    // 点操作项或点外部关闭时菜单会"啪"地消失）。
+                    .animation(AppTheme.Motion.selection, value: pressedCell)
             }
         }
         // 月份横滑手势统一在 monthColumn 以 simultaneousGesture 挂载（避免拦截日期点按与纵向滚动）
