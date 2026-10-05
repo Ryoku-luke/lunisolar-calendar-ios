@@ -126,10 +126,13 @@ public enum AppTheme {
         public static var checkboxSymbol: SwiftUI.Font { scaled(18, weight: .semibold, textStyle: .body) }
     }
     public enum Motion {
-        /// 卡片按压弹簧（轻触 → 下沉 → 弹回）
-        public static let pressInOut = SwiftUI.Animation.spring(response: 0.22,
-                                                                 dampingFraction: 0.72,
-                                                                 blendDuration: 0.15)
+        /// 卡片按压（轻触 → 下沉 → 回弹）。
+        ///
+        /// 2026-10-05 调校：原为 `.spring(response: 0.22, dampingFraction: 0.72, blendDuration: 0.15)`
+        /// —— response 0.22 对"按下"偏慢，damping 0.72 会明显过冲，手感是"先慢后晃"，
+        /// 用户反馈"按住弹跳不够丝滑"即此。改为 `snappy(duration: 0.15, extraBounce: 0.02)`：
+        /// 按下立刻跟手、松开干脆，几乎没有可见过冲（iOS 17+ 的原生控件即此节奏）。
+        public static let pressInOut = SwiftUI.Animation.snappy(duration: 0.15, extraBounce: 0.02)
         /// 月切换/面板展开
         public static let screen = SwiftUI.Animation.spring(response: 0.34,
                                                             dampingFraction: 0.86,

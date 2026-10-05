@@ -62,6 +62,12 @@ struct CalendarMonthGridShell: View {
                         .onTapGesture {
                             onSelectDay(d)
                         }
+                        // ⚠️ 此处**不要**加 `Button` 或 `pressableFeedback()`（或任何手势）：
+                        // 2026-10-05 两次实测——改 Button 会吞掉横向拖动（Flow17 红：横滑翻月失效）；
+                        // 加 pressableFeedback（内部 DragGesture）会吞掉 tap（Flow1 红：点击不再选中）。
+                        // 日期格必须同时容纳「点按选中」与「网格横滑翻月」，两者都靠触摸直通，
+                        // 因此这一格是**手势真空区**。要加按下反馈只能走 UIKit 长按识别器
+                        // （cancelsTouchesInView = false，像 TapOutsideKeyboardDismisser 那样）。
                         // 原生上下文菜单：长按日期格 → 快捷操作（原创，克制不加额外功能）
                         .contextMenu {
                             Button {

@@ -356,3 +356,38 @@ iPhone UI **22 条（4 skip）0 失败**。
 
 > 🛡️ 顺带记一功：这次功能性回归**是几小时前刚建好的 Flow17 守卫当场拦下的**。
 > 它建好后第一次真正发挥作用，拦下的正是"改了别处、把横滑悄悄弄坏"这类最难自查的问题。
+
+### ✅ 已交付：按压曲线调校（`AppTheme.Motion.pressInOut`）
+
+用户反馈"按住弹跳不够丝滑"，查因发现曲线本身就不适合"按下"：
+
+```swift
+// 旧：response 0.22（对按下偏慢）+ dampingFraction 0.72（明显过冲）→ 手感"先慢后晃"
+.spring(response: 0.22, dampingFraction: 0.72, blendDuration: 0.15)
+// 新：按下立刻跟手、松开干脆、几乎无可见过冲（iOS 17+ 原生控件即此节奏）
+.snappy(duration: 0.15, extraBounce: 0.02)
+```
+
+影响面：所有用 `pressableFeedback()` 的控件（月历工具栏、菜单、设置页按钮等）**统一变脆**。
+验证：构建 ✓ 436 用例 ✓ Flow1（点按选中）11s 通过 ✓ Flow17（横滑翻月）12s 通过 ✓。
+
+### ❌ 日期格本身的"按下反馈"：两条路都被实测否掉（重要约束）
+
+要让**日期格自己**在按下时给反馈，试了两条标准路，各破坏一个功能：
+
+| 试法 | 结果 |
+|---|---|
+| `Button { } label: { 格子 }` + `ButtonStyle` | ❌ **吞掉横向拖动** → 横滑翻月失效（Flow17 红）|
+| `.pressableFeedback()`（内部 `DragGesture(minimumDistance: 0)`）| ❌ **吞掉 tap** → 点击不再选中（Flow1 红）|
+
+**结论**：日期格必须同时容纳「点按选中」与「网格横滑翻月」，两者都依赖触摸直通 →
+**这一格是手势真空区**：既不能是 `Button`，也不能叠任何手势。已把这条约束**写进代码注释**
+（`CalendarMonthGridShell.swift` 的格子处），避免后来者再踩。
+
+**唯一剩下的路**（未做，需要单独一轮 + 真机验证手感）：
+**UIKit 长按识别器**（`cancelsTouchesInView = false`）——本仓 `TapOutsideKeyboardDismisser`
+已是这个模式，可以与拖动/点按共存。
+
+**给用户的实话**：日期格上"按住"看到的弹跳，**来自系统上下文菜单自身的抬升动画**（App 无法直接调）✗；
+本次能调的是 App 内所有 `pressableFeedback()` 控件的按压手感 ✓（已调脆）。
+若仍希望日期格按下时有下沉反馈，需走上面那条 UIKit 路线。
