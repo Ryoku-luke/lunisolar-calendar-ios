@@ -5,7 +5,7 @@ import Foundation
 // 背景：`@AppStorage` 的"默认值"只作用于 UI 读取，**不会写入 UserDefaults**。
 // 因此对同一键做 raw `UserDefaults` 读取时，必须显式带上同样的默认值，
 // 否则会出现"设置页显示已开启、业务逻辑判定为关闭"的分裂——
-// 灵动岛时间胶囊曾因这个分裂完全不上岛（TimeCapsuleCoordinator 读 false，UI 显示 true）。
+// 灵动岛时间胶囊曾因这个分裂完全不显示在灵动岛（TimeCapsuleCoordinator 读 false，UI 显示 true）。
 //
 // 规则：新增"@AppStorage 默认值为 true 的键"时，raw 读取一律走本类型，
 // 并在 registerDefaults() 中登记，避免同类问题复发。
