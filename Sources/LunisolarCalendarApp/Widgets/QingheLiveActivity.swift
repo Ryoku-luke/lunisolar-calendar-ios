@@ -370,7 +370,7 @@ public enum QingheLiveActivityManager {
             return nil
         }
         guard LiveActivityOccupancy.isShowing(activity) else {
-            AppLogger.app.info("时间胶囊活动已不在岛上（系统收走或用户划掉），本次将重建")
+            AppLogger.app.info("时间胶囊活动已不显示在灵动岛（系统收走或用户划掉），本次将重建")
             return nil
         }
         let attrs = activity.attributes

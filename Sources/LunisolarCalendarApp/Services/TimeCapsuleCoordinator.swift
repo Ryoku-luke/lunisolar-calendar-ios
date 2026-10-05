@@ -30,21 +30,21 @@ public final class TimeCapsuleCoordinator {
         // 无从判断卡在哪一步（倒数日占用？开关关了？系统实时活动未授权？没有候选？）。
         // 仲裁：存在倒数日活动时让位（docs #25：同一时间只维护一个主要时间胶囊）
         guard LiveActivityArbiter.canTimeCapsuleTakeOver() else {
-            AppLogger.app.info("时间胶囊未上岛：灵动岛被倒数日活动占用（等它下岛后会自动接管）")
+            AppLogger.app.info("时间胶囊未显示在灵动岛：灵动岛被倒数日活动占用（等它取消显示后会自动接管）")
             return
         }
         guard enabled else {
-            AppLogger.app.info("时间胶囊未上岛：设置里「提醒与时间胶囊」开关是关闭的")
-            QingheLiveActivityManager.sync(target: nil)   // 关掉开关要能下岛
+            AppLogger.app.info("时间胶囊未显示在灵动岛：设置里「提醒与时间胶囊」开关是关闭的")
+            QingheLiveActivityManager.sync(target: nil)   // 关掉开关要能取消显示
             return
         }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            AppLogger.app.info("时间胶囊未上岛：系统「设置 → 清和日历 → 实时活动」未开启")
+            AppLogger.app.info("时间胶囊未显示在灵动岛：系统「设置 → 清和日历 → 实时活动」未开启")
             QingheLiveActivityManager.sync(target: nil)
             return
         }
         guard let candidate = EventService.shared.timeCapsuleCandidate(now: now) else {
-            AppLogger.app.info("时间胶囊未上岛：当前没有符合条件的候选（高优先级提醒 / 日程 / 24h 内节气）")
+            AppLogger.app.info("时间胶囊未显示在灵动岛：当前没有符合条件的候选（高优先级提醒 / 日程 / 24h 内节气）")
             QingheLiveActivityManager.sync(target: nil)
             return
         }
@@ -73,7 +73,7 @@ public final class TimeCapsuleCoordinator {
         )
         // 显示在灵动岛失败必须留痕（此前静默丢弃 Result，真机排查时无从判断）
         if case .failure(let error) = QingheLiveActivityManager.sync(target: display) {
-            AppLogger.app.error("时间胶囊上岛失败：\(error.localizedDescription)")
+            AppLogger.app.error("时间胶囊显示在灵动岛失败：\(error.localizedDescription)")
         }
         #endif
     }

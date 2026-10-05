@@ -107,7 +107,7 @@ public final class CountdownActivityController {
             LiveActivityArbiter.endActivities(otherThan: .countdown)
             // 自动显示在灵动岛失败不打扰用户（设计如此），但必须留痕：Console 过滤 subsystem 可见原因
             if case .failure(let error) = CountdownActivityManager.start(event: event) {
-                AppLogger.app.error("倒数日自动上岛失败：\(error.localizedDescription)")
+                AppLogger.app.error("倒数日自动显示在灵动岛失败：\(error.localizedDescription)")
             }
         }
         #endif
