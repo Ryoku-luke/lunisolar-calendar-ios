@@ -193,7 +193,15 @@ struct DayCellView: View {
             }
             .padding(.vertical, isRegular ? 6 : 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(dayCellBackground)
+            // 选中放大**只作用于选中框这一层**（背景），不再缩放整格。
+            // 原因：格子里的文字带 .lineLimit/minimumScaleFactor，整格缩放会让文字在动画期间
+            // 被重采样并重新适配 → 用户反馈"回弹一瞬间里面的字扭曲变形"。
+            // 缩放框体、文字恒为 1.0 之后，字形不再被变换（视觉上"选择指示弹一下"，语义也更准）。
+            .background(
+                dayCellBackground
+                    .scaleEffect(isSelected ? 1.05 : 1.0)
+                    .animation(AppTheme.Motion.selection, value: isSelected)
+            )
 
             // 休/班徽章：日期右上角（随格子整体淡显）
             if holidayType != .normal {
@@ -203,11 +211,9 @@ struct DayCellView: View {
             }
         }
         .opacity(isCurrentMonth ? 1 : 0.32)
-        // 选中回弹：切换瞬间轻微放大（1.05），带**一次**轻微过冲的物理感。
-        // 曲线走 AppTheme.Motion.selection（单一来源）——原先用内联的低阻尼弹簧
-        // （dampingFraction 0.52），整格含文字来回振荡多次，文字反复适配 → 视觉上"字扭曲变形"。
-        .scaleEffect(isSelected ? 1.05 : 1.0)
-        .animation(AppTheme.Motion.selection, value: isSelected)
+        // 选中放大已移到「选中框」那一层（见上方 .background）：**文字不参与缩放**，
+        // 因此选中回弹时字形不会被重采样/重新适配（原先整格缩放 + 文字 minimumScaleFactor
+        // 会导致"回弹一瞬间字扭曲变形"）。
         .contentShape(Rectangle())
         #if canImport(UIKit)
         // P1-2：指针悬停系统高亮（iPad 鼠标/妙控板；无指针环境自动无效果）
