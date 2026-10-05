@@ -238,3 +238,11 @@ SettingsSyncSections / SettingsViewComponents / CalendarDisplaySettingsView / Ab
 ### 🚩 待办（前述）
 
 - zh-Hant 用词专项：「行程」27 处 vs「日程」35 处，台湾习惯统一为「行程」。
+
+### P6 补充：testFlow17 的 iPad 版本（待写）
+
+`testFlow17_monthGridSwipeTurnsTheMonth` 目前 `XCTSkipUnless(phone)` ——
+**原因**：iPad 是分栏布局，`app.swipeLeft()` 用全屏坐标横滑，落点在侧栏/中列边界，
+实测月份不变（不是功能坏，是**测试落点不对**）。
+**做法**：iPad 版要用中列内的坐标（先确认分栏展开/收起状态下的中列 frame），
+再断言月份标题变化。**不要用猜的坐标**——猜错会变成第二条"假守卫"。
