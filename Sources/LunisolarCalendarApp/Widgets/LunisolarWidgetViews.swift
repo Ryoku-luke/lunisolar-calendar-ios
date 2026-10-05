@@ -830,7 +830,7 @@ public struct TodoProgressWidgetView: View {
                 DisplayRow(title: NSLocalizedString("打开 App 查看今日日程", comment: ""), done: true,  priorityHex: "#6B7280"),
                 DisplayRow(title: NSLocalizedString("长按小组件可切换尺寸样式", comment: ""), done: false, priorityHex: "#2563EB"),
                 DisplayRow(title: String(format: NSLocalizedString("今日宜 %@", comment: ""), entry.huangli?.yi.first ?? NSLocalizedString("祭祀", comment: "")), done: false, priorityHex: "#D97706"),
-                DisplayRow(title: NSLocalizedString("规划一下明天的安排", comment: ""), done: false, priorityHex: "#6B7280"),
+                DisplayRow(title: NSLocalizedString("规划明天的安排", comment: ""), done: false, priorityHex: "#6B7280"),
                 DisplayRow(title: NSLocalizedString("记得喝水、起身活动", comment: ""), done: false, priorityHex: "#22A06B")
             ]
             for f in fallbacks where rows.count < pick { rows.append(f) }
@@ -844,13 +844,13 @@ public struct TodoProgressWidgetView: View {
             return NSLocalizedString("打开 App 查看今日安排", comment: "")
         }
         if entry.todaysEventsCount == 0 {
-            return NSLocalizedString("今日还没安排 · 打开 App 添加 ✨", comment: "")
+            return NSLocalizedString("今日暂无安排 · 打开 App 添加", comment: "")
         } else if entry.progress >= 1.0 {
-            return NSLocalizedString("已全部完成 🎉 给自己加个鸡腿", comment: "")
+            return NSLocalizedString("今日安排已全部完成", comment: "")
         } else if entry.progress >= 0.5 {
-            return NSLocalizedString("进度过半，继续加油 💪", comment: "")
+            return NSLocalizedString("今日安排已完成过半", comment: "")
         } else {
-            return NSLocalizedString("开工啦，一步一步来 ☕️", comment: "")
+            return NSLocalizedString("今日安排进行中", comment: "")
         }
     }
 

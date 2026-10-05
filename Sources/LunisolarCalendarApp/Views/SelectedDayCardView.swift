@@ -147,7 +147,7 @@ struct SelectedDayCardView: View {
                         }
                         VStack(alignment: .leading, spacing: 2) {
                             Text(String(localized: "这一天很空闲")).font(AppTheme.Font.bodyBold).foregroundStyle(Color.label)
-                            Text("去安排点美好的事吧 ✨").font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
+                            Text("暂无安排，去添加日程").font(AppTheme.Font.caption).foregroundStyle(Color.tertiaryLabel)
                         }
                         Spacer()
                     }

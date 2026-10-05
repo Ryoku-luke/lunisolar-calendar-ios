@@ -105,7 +105,7 @@ public enum AICommandValidator {
         guard !normalized.title.isEmpty else {
             return .failure(AICommandError(
                 kind: .missingTitle,
-                message: NSLocalizedString("没识别到日程标题，换个说法试试。", comment: "")
+                message: NSLocalizedString("未识别到日程标题，请调整表述后重试。", comment: "")
             ))
         }
         if normalized.title.count > maxTitleLength {
