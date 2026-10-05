@@ -247,7 +247,14 @@ SettingsSyncSections / SettingsViewComponents / CalendarDisplaySettingsView / Ab
 
 ### 🚩 待办（前述）
 
-- zh-Hant 用词专项：「行程」27 处 vs「日程」35 处，台湾习惯统一为「行程」。
+- [x] **zh-Hant 用词专项** —— **已完成（2026-10-05）**
+  - 实测：值含「行程」**29** 处 vs 值含「日程」**15** 处（其中多数是本会话早前把「事件」改成「日程」时引入的）；
+  - 台湾习惯（苹果 zh-Hant 日历即用「行程」）→ 15 处值统一为「行程」；
+  - ⚠️ **只改值、绝不动 key**：key 必须恒为 zh-Hans 源文案（本次键含「日程」的 **39** 条保持不变，
+    脚本里专门断言了这一点 —— 否则 key 一改，四个语言的表就对不上了）；
+  - 验证：结构校验（键未被改动、剩余值含「日程」= 0）+ 本地化守卫 **436 用例 0 失败**。
+  - 📌 **未做**：zh-Hant 的 UI 渲染复跑。UI 套件固定跑 zh-Hans（`SHOTS_LANG` 只被截图巡游用），
+    而 `xcode_build` 工具无法传环境变量；如需真跑，用 `SHOTS_LANG=zh-Hant` 手工调 xcodebuild。
 
 ### P6 补充：testFlow17 的 iPad 版本（待写）
 
