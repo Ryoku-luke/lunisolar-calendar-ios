@@ -1,12 +1,12 @@
 import Foundation
 
-// MARK: - 清和时间胶囊 · 上岛内容与同步决策（纯逻辑，平台无关）
+// MARK: - 清和时间胶囊 · 显示在灵动岛内容与同步决策（纯逻辑，平台无关）
 //
 // 文档 #24：EventService → QingheActivityCoordinator → QingheLiveActivityManager → ActivityKit。
 // 本文件只放「快照 + 决策」纯值类型，不依赖 ActivityKit，Linux 单测可覆盖；
 // ActivityKit 侧（QingheLiveActivityWidget / Manager）在 Widgets/QingheLiveActivity.swift。
 
-/// 上岛内容快照：用于幂等复用与 diff 决策（可 Equatable 比较）。
+/// 显示在灵动岛内容快照：用于幂等复用与 diff 决策（可 Equatable 比较）。
 public struct QingheTimeCapsuleDisplay: Equatable, Sendable {
     public let eventID: UUID
     public let type: QingheActivityType

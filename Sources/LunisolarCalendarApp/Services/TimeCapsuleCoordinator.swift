@@ -24,7 +24,7 @@ public final class TimeCapsuleCoordinator {
         #if canImport(ActivityKit) && !os(macOS) && canImport(WidgetKit)
         let now = Date()
         // 必须用 AppSettings.liveActivityEnabled（raw bool(forKey:) 在键不存在时返回 false，
-        // 而 @AppStorage 默认值是 true —— 曾因此"设置显示开启但永不上岛"）
+        // 而 @AppStorage 默认值是 true —— 曾因此"设置显示开启但永不显示在灵动岛"）
         let enabled = AppSettings.liveActivityEnabled
         // 诊断留痕：下面几道守卫以前全是**静默 return** —— 真机上"灵动岛完全没出现"时
         // 无从判断卡在哪一步（倒数日占用？开关关了？系统实时活动未授权？没有候选？）。
@@ -71,7 +71,7 @@ public final class TimeCapsuleCoordinator {
             countdownTarget: candidate.type == .solarTerm ? candidate.startDate : nil,
             isImportant: candidate.priority >= .important
         )
-        // 上岛失败必须留痕（此前静默丢弃 Result，真机排查时无从判断）
+        // 显示在灵动岛失败必须留痕（此前静默丢弃 Result，真机排查时无从判断）
         if case .failure(let error) = QingheLiveActivityManager.sync(target: display) {
             AppLogger.app.error("时间胶囊上岛失败：\(error.localizedDescription)")
         }

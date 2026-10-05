@@ -17,7 +17,7 @@ struct CountdownView: View {
     /// 编辑器目标：`nil` = 不呈现。合并自原先两个 sheet（`showingEditor` + `editingEvent`）——
     /// 两者指向同一个编辑器，状态不同步时会互相顶掉（月历页已用 `MonthEventEditSheet` 解决过同类问题）。
     @State private var editorTarget: CountdownEditorTarget?
-    /// 行内「上岛」失败提示。从 `CountdownRow` 提升到列表层：
+    /// 行内「显示在灵动岛」失败提示。从 `CountdownRow` 提升到列表层：
     /// 行本身是 `.accessibilityElement(children: .combine)`，把行动按钮放进行里会点不到。
     @State private var islandProblem: IslandProblem?
 
@@ -50,7 +50,7 @@ struct CountdownView: View {
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
-                                // P0 收口：倒数日删除走 EventService（内部转 CountdownStore.delete，含下岛清理）
+                                // P0 收口：倒数日删除走 EventService（内部转 CountdownStore.delete，含取消显示清理）
                                 EventService.shared.deleteCountdown(id: event.id)
                             } label: { Label("删除", systemImage: "trash") }
                         }
@@ -122,7 +122,7 @@ enum CountdownEditorTarget: Identifiable {
     }
 }
 
-/// 倒数日行「上岛」失败的两类原因
+/// 倒数日行「显示在灵动岛」失败的两类原因
 enum IslandProblem: Equatable {
     /// 系统「实时活动」或 App 内「时间胶囊」开关被关 → 要指引用户去开（带行动按钮）
     case denied(message: String)
@@ -135,7 +135,7 @@ enum IslandProblem: Equatable {
 private struct CountdownRow: View {
     let event: CountdownEvent
     let today: Date
-    /// 上岛失败的上报出口。呈现放在 CountdownView 那一层（理由见 `IslandProblem` 的注释）
+    /// 显示在灵动岛失败的上报出口。呈现放在 CountdownView 那一层（理由见 `IslandProblem` 的注释）
     var onIslandProblem: (IslandProblem) -> Void
     /// 该倒数日是否已上灵动岛（Live Activity 活跃）
     @State private var isOnIsland = false
@@ -169,7 +169,7 @@ private struct CountdownRow: View {
                 Text(event.kind.label)
                     .font(AppTheme.Font.caption2)
                     .foregroundStyle(Color.tertiaryLabel)
-                // 灵动岛快捷开关：点一下上岛（灵动岛/锁屏实时倒计时），再点下岛
+                // 灵动岛快捷开关：点一下显示在灵动岛（灵动岛/锁屏实时倒计时），再点取消显示
                 // （原创交互，参考 iOS 17 系统灵动岛触达但不照抄；Live Activity 由系统驱动零耗电）
                 Button {
                     toggleIsland()
@@ -212,7 +212,7 @@ private struct CountdownRow: View {
     }
 
     private func toggleIsland() {
-        // P0 遗留收口：上岛/下岛走 CountdownActivityController，View 只按结果弹 alert
+        // P0 遗留收口：显示在灵动岛/取消显示走 CountdownActivityController，View 只按结果弹 alert
         switch CountdownActivityController.shared.toggleIsland(for: event) {
         case .started:
             isOnIsland = true
@@ -361,8 +361,8 @@ struct CountdownEditor: View {
         // 0.5s saveDebounce 里的 Task.sleep 在后台不一定能按时跑完，
         // flush=true 确保这次变更一定落盘（防丢数据）。
         EventService.shared.saveCountdown(event, flush: true)
-        // P0 遗留收口：保存后的自动上岛策略在 CountdownActivityController
-        // （新建自动上岛；编辑且已在岛上 → 同步新内容；手动下岛过 → 不打扰）
+        // P0 遗留收口：保存后的自动显示在灵动岛策略在 CountdownActivityController
+        // （新建自动显示在灵动岛；编辑且已显示在灵动岛 → 同步新内容；手动取消显示过 → 不打扰）
         CountdownActivityController.shared.autoStartAfterSave(isNew: editing == nil, event: event)
         dismiss()
     }

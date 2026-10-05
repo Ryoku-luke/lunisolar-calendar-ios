@@ -1,17 +1,17 @@
 import Foundation
 
-// MARK: - 「这个活动还在岛上吗」的共享判据
+// MARK: - 「这个活动还显示在灵动岛吗」的共享判据
 //
 // 为什么必须有这一层：`Activity<T>.activities` 返回的**不只是正在展示的活动**，还包含
 // 系统已经结束（`.ended`）但尚未从列表移除的残留项——系统 8 小时上限、用户在系统活动
 // 列表里把它划掉、App 被上滑杀掉（系统会结束其全部活动），都会留下这种残留。
 //
-// 此前所有调用点都只看「id 在不在列表里」，于是残留项会被当成「还在岛上」，造成两类故障：
+// 此前所有调用点都只看「id 在不在列表里」，于是残留项会被当成「还显示在灵动岛」，造成两类故障：
 //   1. 仲裁器认为倒数日仍占着灵动岛 → 时间胶囊永远让位 → 表现为「灵动岛什么都没有」；
 //   2. 管理器认为活动还在 → 走 update 路径去更新一个已经结束、根本不在屏幕上的活动，
 //      接口还返回成功，屏幕上什么都不出现，连一条失败日志都不会有（排查时毫无线索）。
 //
-// 判据只认「仍在展示」的两态；未来 SDK 新增的状态一律按「不在岛上」处理——宁可重建一个
+// 判据只认「仍在展示」的两态；未来 SDK 新增的状态一律按「不显示在灵动岛」处理——宁可重建一个
 // 活动（幂等且留痕），也不要停在一个可能已经消失的活动上。
 
 /// 活动展示状态（`ActivityKit.ActivityState` 的平台无关投影，便于在单测里覆盖判据表）
@@ -41,7 +41,7 @@ public enum LiveActivityOccupancy {
 
 extension LiveActivityDisplayState {
     /// 由系统状态投影。未识别的状态（含未来 SDK 新增）归到 `.unknown`，
-    /// 由 `isShowing` 按「不在岛上」处理。
+    /// 由 `isShowing` 按「不显示在灵动岛」处理。
     public init(_ state: ActivityState) {
         switch state {
         case .active: self = .active
@@ -54,7 +54,7 @@ extension LiveActivityDisplayState {
 }
 
 extension LiveActivityOccupancy {
-    /// 该活动当前是否仍在岛上展示（`.ended` / `.dismissed` 均不算）
+    /// 该活动当前是否仍显示在灵动岛展示（`.ended` / `.dismissed` 均不算）
     public static func isShowing<A: ActivityAttributes>(_ activity: Activity<A>) -> Bool {
         isShowing(LiveActivityDisplayState(activity.activityState))
     }

@@ -9,13 +9,13 @@ import ActivityKit
 // 两个活动互相挤压时切换体验很差，App 也无法自定义该系统列表。
 // 因此把"谁占用灵动岛"收敛为确定性规则，从根上避免并存：
 //
-//     倒数日 / 纪念日倒计时（用户主动上岛或新建时自动上岛）
+//     倒数日 / 纪念日倒计时（用户主动显示在灵动岛或新建时自动显示在灵动岛）
 //         > 时间胶囊（自动候选：提醒 / 高优先级日程 / 节气）
 //
 // 具体规则：
 // - 倒数日启动 → 结束时间胶囊（抢占）；
-// - 存在倒数日活动时，时间胶囊不再自动上岛（让位，不互相挤压）；
-// - 倒数日下岛 / 删除 / 自然过期 → 时间胶囊在下次 refresh 时自动接管。
+// - 存在倒数日活动时，时间胶囊不再自动显示在灵动岛（让位，不互相挤压）；
+// - 倒数日取消显示 / 删除 / 自然过期 → 时间胶囊在下次 refresh 时自动接管。
 //
 // 占用状态直接由系统活动列表推导（不做额外记账），跨启动天然可靠、无状态不同步风险。
 
@@ -47,12 +47,12 @@ public enum LiveActivityArbiter {
         #endif
     }
 
-    /// 时间胶囊是否允许（自动）上岛：存在倒数日活动时让位
+    /// 时间胶囊是否允许（自动）显示在灵动岛：存在倒数日活动时让位
     public static func canTimeCapsuleTakeOver() -> Bool {
         currentOccupant() != .countdown
     }
 
-    /// 抢占：结束除目标类型外的所有 Live Activity（倒数日上岛前调用）
+    /// 抢占：结束除目标类型外的所有 Live Activity（倒数日显示在灵动岛前调用）
     public static func endActivities(otherThan kind: Occupant) {
         #if canImport(ActivityKit) && !os(macOS)
         if kind != .countdown {

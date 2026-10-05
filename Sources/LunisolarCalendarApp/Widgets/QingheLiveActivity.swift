@@ -13,7 +13,7 @@ import os
 //
 // 与 CountdownActivity（倒数日/纪念日专用）的区别与分工：
 // - CountdownActivityManager：用户「手动添加倒数日」后常驻灵动岛（countdown/anniversary）；
-// - QingheLiveActivityManager：自动挑选「当前最值得关注的时间事件」上岛
+// - QingheLiveActivityManager：自动挑选「当前最值得关注的时间事件」显示在灵动岛
 //   （高优先级提醒、高优先级日程；节气短生命周期活动预留）。
 // 两套事件域不重叠（CountdownEvent ≠ CalendarEvent），不会同时抢同一个事件。
 //
@@ -119,7 +119,7 @@ struct QingheLiveActivityLockScreenView: View {
 
 // MARK: - 灵动岛 / 锁屏注册（WidgetBundle 成员）
 
-/// 通用时间胶囊 Live Activity：自动上岛（高优先级提醒/日程，节气短活动预留）。
+/// 通用时间胶囊 Live Activity：自动显示在灵动岛（高优先级提醒/日程，节气短活动预留）。
 @available(iOS 16.1, *)
 public struct QingheLiveActivityWidget: Widget {
     public let kind: String = "QingheLiveActivity"
@@ -272,11 +272,11 @@ public enum QingheLiveActivityManager {
             }
             return .failure(NSError(domain: "QingheLiveActivity", code: 0))
         case .end:
-            // ⚠️ 不能只下岛：决策为 .end 有两种来源——target 为 nil（确实没有候选了），
+            // ⚠️ 不能只取消显示：决策为 .end 有两种来源——target 为 nil（确实没有候选了），
             // 或 current/target 是**不同事件**（切换候选）。后者的契约由
             // QingheLiveActivityLifecycle 写明「调用方负责撤掉旧活动」，
             // 此前只 end 就返回，新候选被静默丢弃 → 岛上留空白直到下一次 refresh()
-            // （用户把当前上岛的提醒标记完成 / 改期后，看不到下一个该上岛的日程）。
+            // （用户把当前显示在灵动岛的提醒标记完成 / 改期后，看不到下一个该显示在灵动岛的日程）。
             guard let target else {
                 endCurrent()
                 return .failure(NSError(domain: "QingheLiveActivity", code: 1,
@@ -284,7 +284,7 @@ public enum QingheLiveActivityManager {
             }
             // 切换候选走「先上新、后撤旧」，与 CountdownActivityManager.start 的既定顺序一致。
             // 反过来做（先撤旧再上新）时旧的 end 是异步的，新活动 request 会落进「旧活动仍然存活」
-            // 的窗口里：轻则两颗活动短暂并存，重则 request 被系统拒绝 → 用户看到「切换后不上岛」。
+            // 的窗口里：轻则两颗活动短暂并存，重则 request 被系统拒绝 → 用户看到「切换后不显示在灵动岛」。
             // 旧 id 必须先留一手：start 成功后会把记录覆盖成新 id，之后就没法再定位旧活动了。
             let previousID = UserDefaults.standard.string(forKey: idsKey)
             let result = start(display: target)
@@ -329,7 +329,7 @@ public enum QingheLiveActivityManager {
         guard let id = UserDefaults.standard.string(forKey: idsKey),
               let activity = Activity<QingheLiveActivityAttributes>.activities
                 .first(where: { $0.id == id && LiveActivityOccupancy.isShowing($0) }) else {
-            // 记录里的活动已经不在岛上（系统收走 / 用户划掉）→ 更新它等于更新一个
+            // 记录里的活动已经不显示在灵动岛（系统收走 / 用户划掉）→ 更新它等于更新一个
             // 空气：屏幕上什么都不出现，却返回成功。必须改为重建。
             return start(display: display)
         }

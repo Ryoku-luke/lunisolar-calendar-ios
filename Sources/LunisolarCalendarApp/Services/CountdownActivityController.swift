@@ -13,7 +13,7 @@ import os
 // MARK: - 倒数日灵动岛控制器（P0 遗留收口）
 //
 // 调用链：View（CountdownRow / CountdownEditor）→ 本控制器 → CountdownActivityManager → ActivityKit。
-// 系统「实时活动」权限探测、上岛/下岛结果、保存后自动上岛策略统一收在这里；
+// 系统「实时活动」权限探测、显示在灵动岛/取消显示结果、保存后自动显示在灵动岛策略统一收在这里；
 // View 只按 ToggleOutcome 弹对应 alert，不再 import ActivityKit / 接触 Manager。
 // 无 ActivityKit / WidgetKit 的编译组合（macOS / Linux）下全部方法安全降级。
 
@@ -21,11 +21,11 @@ import os
 public final class CountdownActivityController {
     public static let shared = CountdownActivityController()
 
-    /// 行内「上岛/下岛」开关一次点击的结果（View 按此弹对应 alert / 更新图标态）
+    /// 行内「显示在灵动岛/取消显示」开关一次点击的结果（View 按此弹对应 alert / 更新图标态）
     public enum ToggleOutcome: Sendable {
-        /// 成功上岛
+        /// 成功显示在灵动岛
         case started
-        /// 成功下岛
+        /// 成功取消显示
         case ended
         /// 系统「实时活动」总开关被关闭（引导用户去系统设置）
         case systemDenied
@@ -46,7 +46,7 @@ public final class CountdownActivityController {
         #endif
     }
 
-    /// 该倒数日当前是否在岛上（含"系统已悄悄结束"的清理）
+    /// 该倒数日当前是否显示在灵动岛（含"系统已悄悄结束"的清理）
     public func isOnIsland(eventID: UUID) -> Bool {
         #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
         CountdownActivityManager.activeActivityID(for: eventID) != nil
@@ -55,7 +55,7 @@ public final class CountdownActivityController {
         #endif
     }
 
-    /// 行内「上岛 / 下岛」开关。语义与原 CountdownRow.toggleIsland 逐一对应。
+    /// 行内「显示在灵动岛 / 取消显示」开关。语义与原 CountdownRow.toggleIsland 逐一对应。
     public func toggleIsland(for event: CountdownEvent) -> ToggleOutcome {
         #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
         if CountdownActivityManager.activeActivityID(for: event.id) != nil {
@@ -64,7 +64,7 @@ public final class CountdownActivityController {
             TimeCapsuleCoordinator.shared.refresh()
             return .ended
         }
-        // App 内「时间胶囊」总开关关闭：不允许（重新）上岛
+        // App 内「时间胶囊」总开关关闭：不允许（重新）显示在灵动岛
         guard AppSettings.liveActivityEnabled else {
             return .appSettingDisabled
         }
@@ -93,19 +93,19 @@ public final class CountdownActivityController {
         #endif
     }
 
-    /// 编辑器保存后的自动上岛策略（不打扰、不弹窗）：
-    /// - 新建倒数日 → 自动上岛（核心诉求）
-    /// - 编辑且当前已在岛上 → 同步新内容（start 内部幂等：内容未变不重启）
-    /// - 编辑但已手动下岛 → 保持下岛，尊重用户主动选择
+    /// 编辑器保存后的自动显示在灵动岛策略（不打扰、不弹窗）：
+    /// - 新建倒数日 → 自动显示在灵动岛（核心诉求）
+    /// - 编辑且当前已显示在灵动岛 → 同步新内容（start 内部幂等：内容未变不重启）
+    /// - 编辑但已手动取消显示 → 保持取消显示，尊重用户主动选择
     public func autoStartAfterSave(isNew: Bool, event: CountdownEvent) {
         #if canImport(ActivityKit) && canImport(WidgetKit) && !os(macOS)
-        // 尊重 App 内「时间胶囊」总开关：关闭时新建的倒数日不再自动上岛
+        // 尊重 App 内「时间胶囊」总开关：关闭时新建的倒数日不再自动显示在灵动岛
         guard AppSettings.liveActivityEnabled else { return }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         if isNew || CountdownActivityManager.activeActivityID(for: event.id) != nil {
             // 仲裁：倒数日占用灵动岛 → 先结束时间胶囊（新建倒数日是用户明确意图，docs #25）
             LiveActivityArbiter.endActivities(otherThan: .countdown)
-            // 自动上岛失败不打扰用户（设计如此），但必须留痕：Console 过滤 subsystem 可见原因
+            // 自动显示在灵动岛失败不打扰用户（设计如此），但必须留痕：Console 过滤 subsystem 可见原因
             if case .failure(let error) = CountdownActivityManager.start(event: event) {
                 AppLogger.app.error("倒数日自动上岛失败：\(error.localizedDescription)")
             }

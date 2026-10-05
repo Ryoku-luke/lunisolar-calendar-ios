@@ -204,8 +204,8 @@ public final class EventService {
 
     /// 从当前事件中选出最值得进入时间胶囊（灵动岛 / 锁屏）的一个。
     /// 映射规则（对齐文档 #20 优先级表）：
-    /// - 记事（note）：不上岛；
-    /// - 普通日程（schedule）：不上岛；
+    /// - 记事（note）：不显示在灵动岛；
+    /// - 普通日程（schedule）：不显示在灵动岛；
     /// - 提醒（reminder）：按事件优先级映射 urgent / important / normal；
     /// - 高优先级日程：按 important 处理。
     public func timeCapsuleCandidate(now: Date = Date()) -> QingheTimeCapsuleCandidate? {
@@ -219,8 +219,8 @@ public final class EventService {
 
     /// 事件 → 时间胶囊候选（纯函数，可测试）。
     /// 映射规则（对齐文档 #20 优先级表）：
-    /// - 记事（note）：不上岛；
-    /// - 普通日程（schedule）：不上岛；
+    /// - 记事（note）：不显示在灵动岛；
+    /// - 普通日程（schedule）：不显示在灵动岛；
     /// - 提醒（reminder）：按事件优先级映射 urgent / important / normal；
     /// - 高优先级日程：按 important 处理。
     nonisolated public static func timeCapsuleCandidates(from events: [CalendarEvent]) -> [QingheTimeCapsuleCandidate] {

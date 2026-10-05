@@ -29,13 +29,13 @@ public struct QingheTimeCapsuleCandidate: Equatable, Sendable {
 /// 2. 普通日程 / 记事不参与（由调用方过滤，不产生候选）；
 /// 3. 排序：优先级（urgent > important > normal）→ 进行中优先 →
 ///    距开始时间近者优先；
-/// 4. 无合格候选 → nil（不强制上岛）。
+/// 4. 无合格候选 → nil（不强制显示在灵动岛）。
 public enum QingheActivityCoordinator {
     /// 时间胶囊候选窗口：未来 24h 内开始的事件可进入
     public static let lookaheadWindow: TimeInterval = 24 * 60 * 60
 
     /// 从 SolarTermProvider 构造下一个节气的 Live Activity 候选（文档 #29）。
-    /// 节气是短生命周期事件：交节前后 2h 内才上岛，过后自动消失。
+    /// 节气是短生命周期事件：交节前后 2h 内才显示在灵动岛，过后自动消失。
     /// 返回 nil 表示未来 24h 内无节气。
     public static func nextSolarTermCandidate(now: Date = Date()) -> QingheTimeCapsuleCandidate? {
         // 先处理“刚刚交节”的窗口。旧实现只查 nextTerm(from:)，
@@ -95,7 +95,7 @@ public enum QingheActivityCoordinator {
         return end >= now
     }
 
-    /// 从候选集中选出最值得上岛的一个。
+    /// 从候选集中选出最值得显示在灵动岛的一个。
     public static func pickForIsland(
         from candidates: [QingheTimeCapsuleCandidate],
         now: Date = Date()

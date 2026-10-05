@@ -54,7 +54,7 @@ struct CountdownLiveActivityView: View {
 
     var body: some View {
         HStack(spacing: AppTheme.Spacing.md) {
-            // 自定义 emoji 图标：独创性 —— 用户选择的倒数日图标直接上岛
+            // 自定义 emoji 图标：独创性 —— 用户选择的倒数日图标直接显示在灵动岛
             Text(context.attributes.emoji)
                 .font(.system(size: 26, weight: .semibold))
                 .frame(width: 40, height: 40)
@@ -166,9 +166,9 @@ public enum CountdownActivityManager {
     private static let idsKey = "Lunisolar.liveActivity.ids"
 
     /// 为某个倒数日启动灵动岛活动（新建/编辑保存时自动调用）。
-    /// 幂等：事件已在岛上且标题/图标/日期都未变 → 直接复用，不重启（避免编辑时活动闪烁）。
+    /// 幂等：事件已显示在灵动岛且标题/图标/日期都未变 → 直接复用，不重启（避免编辑时活动闪烁）。
     /// 重建时「先上新、后撤旧」：新活动 request 成功后再结束旧活动，
-    /// 避免旧活动先行消失导致的上岛失败窗口与视觉抖动。
+    /// 避免旧活动先行消失导致的显示在灵动岛失败窗口与视觉抖动。
     @discardableResult
     public static func start(event: CountdownEvent) -> Result<String, Error> {
         // 倒计时目标：纪念日取"下一个周年"。直接用原始日期时，若该日期当年已过，
@@ -177,8 +177,8 @@ public enum CountdownActivityManager {
             ? (event.nextAnniversary(from: Date()) ?? event.date)
             : event.date
         // 幂等复用：关键内容未变 → 保持现有活动原样。
-        // 必须同时要求「仍在岛上」：留一个已结束的残留实例时复用它是空操作，
-        // 屏幕上不会出现任何东西，用户看到的是「点了上岛却没反应」。
+        // 必须同时要求「仍显示在灵动岛」：留一个已结束的残留实例时复用它是空操作，
+        // 屏幕上不会出现任何东西，用户看到的是「点了显示在灵动岛却没反应」。
         if let oldID = activeActivityID(for: event.id),
            let old = Activity<CountdownActivityAttributes>.activities.first(where: { $0.id == oldID }),
            LiveActivityOccupancy.isShowing(old),
@@ -197,7 +197,7 @@ public enum CountdownActivityManager {
                 attributes: attrs,
                 content: content
             )
-            // 新活动已上岛 → 再撤同事件旧活动（若有）
+            // 新活动已显示在灵动岛 → 再撤同事件旧活动（若有）
             if let oldID = UserDefaults.standard.dictionary(forKey: idsKey)?[event.id.uuidString] as? String,
                oldID != activity.id {
                 end(id: oldID)
@@ -221,7 +221,7 @@ public enum CountdownActivityManager {
 
     /// 当前是否已有该事件的活跃活动。
     /// 「活跃」= 记录里的 id 存在**且仍在展示**：只查 id 是否在列表里会漏掉
-    /// 已结束的残留实例，于是「在岛上」徽标会一直骗着用户，点它去下岛也下不掉。
+    /// 已结束的残留实例，于是「显示在灵动岛」徽标会一直骗着用户，点它去取消显示也下不掉。
     public static func activeActivityID(for eventID: UUID) -> String? {
         let dict = UserDefaults.standard.dictionary(forKey: idsKey) as? [String: String] ?? [:]
         guard let id = dict[eventID.uuidString] else { return nil }
@@ -235,7 +235,7 @@ public enum CountdownActivityManager {
         }
     }
 
-    /// 结束某事件对应的活动（若在岛上）
+    /// 结束某事件对应的活动（若显示在灵动岛）
     public static func end(for eventID: UUID) {
         if let id = activeActivityID(for: eventID) {
             end(id: id)
@@ -243,17 +243,17 @@ public enum CountdownActivityManager {
         remove(eventID: eventID)
     }
 
-    /// 启动兜底：清理「事件已不存在但活动仍在岛上」的孤儿活动。
-    /// 覆盖所有删除路径（即使某处删除时漏调 end，下次启动也会自动下岛）。
+    /// 启动兜底：清理「事件已不存在但活动仍显示在灵动岛」的孤儿活动。
+    /// 覆盖所有删除路径（即使某处删除时漏调 end，下次启动也会自动取消显示）。
     public static func cleanupOrphans(validEventIDs: Set<UUID>) {
         var dict = UserDefaults.standard.dictionary(forKey: idsKey) as? [String: String] ?? [:]
         for (idString, activityID) in dict {
             guard let eventID = UUID(uuidString: idString) else {
-                // 单条记录损坏：只删这一条，不影响其他正常上岛的倒数日
+                // 单条记录损坏：只删这一条，不影响其他正常显示在灵动岛的倒数日
                 dict.removeValue(forKey: idString)
                 continue
             }
-            // 事件已删除，或活动已不在岛上（系统收走 / 已结束的残留）→ 清理记录
+            // 事件已删除，或活动已不显示在灵动岛（系统收走 / 已结束的残留）→ 清理记录
             if !validEventIDs.contains(eventID)
                 || !Activity<CountdownActivityAttributes>.activities
                     .contains(where: { $0.id == activityID && LiveActivityOccupancy.isShowing($0) }) {
