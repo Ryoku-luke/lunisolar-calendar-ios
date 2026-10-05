@@ -440,3 +440,112 @@ Flow17（横滑翻月）12s ✓。
 **因此圆角差异又回来了** ✗（这是现状，如实说明）。建议**就此接受**：
 抬起过程只有 ~0.3 秒，少量圆角差异远不如文字扭曲显眼；若确实要治，只剩
 "自定义 `preview:` 真实视图"（跳过位图遮罩，但 API 已废弃、风险高）一条路。
+
+---
+
+# 方案 1 施工图：自绘长按菜单（长按"文字变形 + 圆角不一致"的彻底解）
+
+> 状态：**设计完成、组件代码已验证可编译，尚未接线**。
+> 2026-10-05 一次尝试中，组件本身编译通过（0 错误），但接线脚本出错把
+> `CalendarMonthGridShell.swift` 截断，已立即恢复、未留半成品。
+> ⚠️ **不要在余量不足一轮时动它**——这是一次功能级改动（多文件接线 + 两条 UI 通道 + 无障碍降级）。
+
+## 一、结论（先看这条）
+
+两个症状**同源**：系统 `.contextMenu` 会对格子做**位图快照**，回落时缩放这张位图。
+
+| 症状 | 机制 |
+|---|---|
+| 回落一瞬间"字扭曲变形" | 快照是位图 → 回落弹簧缩放它 → 文字被重采样 |
+| 格子圆角不一致很突兀 | 抬起预览/高亮盘的圆角**由系统决定**，与格子 `RoundedRectangle(10/14)` 无关 |
+
+**因此：只要还用系统 `.contextMenu`，这两件事都消不掉** ✗ —— 自绘菜单是唯一彻底解。
+
+**两条已实测否掉的死路**（有守卫证据，别再试）：
+- 格子改 `Button` + `ButtonStyle` → **吞掉横向拖动** → 横滑翻月失效（`testFlow17` 当场变红）；
+- 格子加 `.pressableFeedback()`（内部 `DragGesture`）→ **吞掉 tap** → 点击不再选中（`testFlow1` 变红）。
+- 另：`.contentShape(.contextMenuPreview, …)` 能对齐圆角，但**强制位图遮罩** → 放大文字变形（已回退）。
+
+## 二、组件（已编译验证 ✓，可直接落盘为 `DayCellLongPressCatcher.swift`）
+
+```swift
+import SwiftUI
+
+#if canImport(UIKit)
+import UIKit
+
+/// 日期格上的 UIKit 长按识别器。
+/// `cancelsTouchesInView = false` + 并行识别：点按（选中）与拖动（横滑翻月）都不受影响。
+/// 这是两条 SwiftUI 路被实测否掉后唯一剩下的做法。
+struct DayCellLongPressCatcher: UIViewRepresentable {
+    var onLongPress: () -> Void
+    var onRelease: () -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        let press = UILongPressGestureRecognizer(
+            target: context.coordinator, action: #selector(Coordinator.handle(_:)))
+        press.minimumPressDuration = 0.32
+        press.cancelsTouchesInView = false          // 关键
+        press.delegate = context.coordinator
+        view.addGestureRecognizer(press)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        private let parent: DayCellLongPressCatcher
+        init(_ parent: DayCellLongPressCatcher) { self.parent = parent }
+
+        @objc func handle(_ gesture: UILongPressGestureRecognizer) {
+            switch gesture.state {
+            case .began: parent.onLongPress()
+            case .ended, .cancelled, .failed: parent.onRelease()
+            default: break
+            }
+        }
+
+        func gestureRecognizer(_ gesture: UIGestureRecognizer,
+                              shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
+        }
+    }
+}
+#endif
+```
+
+## 三、接线方式（本轮想清楚的关键点）
+
+1. **命名坐标空间**：在 `CalendarMonthGridShell` 的 `LazyVGrid` 上加
+   `.coordinateSpace(name: "monthGrid")`；
+2. **每格取锚点**（不要用屏幕坐标，分栏/横屏下会错）：
+   ```swift
+   .overlay {
+       GeometryReader { geo in
+           DayCellLongPressCatcher(
+               onLongPress: { pressedCell = PressedCell(date: d,
+                                                        frame: geo.frame(in: .named("monthGrid"))) },
+               onRelease: { pressedCell = nil })
+       }
+   }
+   ```
+   （`PressedCell` = `{ let date: Date; let frame: CGRect }`，`@State private var pressedCell: PressedCell?`）
+3. **浮层**挂在同一层：`.overlay(alignment: .topLeading) { if let c = pressedCell { menu(c) } }`，
+   用 `.offset(x: c.frame.minX, y: c.frame.maxY + 6)` 定位；
+4. **浮层内容**：圆角取 `DayCellView.selectionRadius(regular:)`（单一来源 ✓）、
+   动画取 `AppTheme.Motion.selection`（单一来源 ✓）、三项操作 = 选中此日 / 新建日程 / 复制日期
+   （与原系统菜单一致），背后放一层 `Color.clear.contentShape(Rectangle()).onTapGesture { pressedCell = nil }`
+   点击外部关闭；切月/滚动时也置 nil；
+5. **无障碍降级（已确认保留）**：`UIAccessibility.isVoiceOverRunning` 为真时**改挂系统 `.contextMenu`**
+   （VoiceOver 用户仍可完整操作；视觉变形对他们无影响），普通用户走自绘 ✓。
+
+## 四、验收清单
+
+- 构建 0 警告 + 436 用例 0 失败；
+- **`testFlow1`（点按选中）与 `testFlow17`（横滑翻月）必须仍通过** ← 这两条是本方案的"不许破坏"红线；
+- **新增一条长按守卫**：XCUITest 用 `element.press(forDuration: 1.2)` 触发长按 → 断言自绘菜单的三个操作出现
+  （`press(forDuration:)` 原生支持长按 ✓）；
+- 真机确认：① 回落不再出现文字变形；② 浮层圆角与格子协调。
