@@ -123,7 +123,7 @@ public final class AIAssistantService {
         case 0:
             return .failure(AICommandError(
                 kind: .notFound,
-                message: String(format: NSLocalizedString("这一天没有匹配到%@相关的日程。", comment: ""), targetDescription)
+                message: String(format: NSLocalizedString("这一天没有与 %@ 相关的日程。", comment: ""), targetDescription)
             ))
         case 1:
             return .success(matched[0])

@@ -397,7 +397,7 @@
 "还有 %d 天" = "%d days left";
 "还没有倒数日" = "No countdowns yet";
 "这一天很空闲" = "Free This Day";
-"这一天没有匹配到%@相关的日程。" = "No events on this day match %@.";
+"这一天没有与 %@ 相关的日程。" = "No events on this day match %@.";
 "这一天没有安排。" = "Nothing scheduled for this day.";
 "这是重复日程（%@），将影响整条重复规则" = "This is a repeating event (%@); the whole series will be affected";
 "适宜" = "Suitable";
