@@ -29,6 +29,13 @@
 **不要自己拼 `grep 'error:'` 之类的判据。** 2026-10-05 我犯过一次：用 `grep -c 'error:'` 判单测，
 而 XCTest 的失败行是 `XCTAssert… failed`、**根本不含 `error:`** → 4 条失败被放行，红提交推上去了。
 
+**沙箱环境下要用**：受限文件沙箱里 SwiftPM 写不了全局缓存，五通道会**整体报错**
+（`Operation not permitted`，看着像代码坏了，其实是环境），此时：
+
+```bash
+SWIFT_EXTRA_ARGS=--disable-sandbox Tools/run_tests.sh
+```
+
 `Tools/run_tests.sh` 本来就是对的：它要求**汇总行** `Executed N tests, with 0 failures`、
 禁一切编译警告、并覆盖 swift test / iOS SDK 构建 / UI target 类型检查 / 两条 UI 通道。
 

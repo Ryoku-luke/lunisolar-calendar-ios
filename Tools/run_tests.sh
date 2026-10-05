@@ -50,6 +50,11 @@ FAILED_NAMES=()
 FLAKY_INFRA_PATTERN='Failed to install or launch the test runner|failed preflight checks|SBMainWorkspace.*Busy|Unable to boot device|Timed out while loading'
 
 # 编译器警告白名单：受限环境（CI 容器 / Agent 沙箱）下 SwiftPM 的缓存噪音，不是代码问题。
+# 沙箱友好：本机在受限文件沙箱（仅工作区可写）下运行时，SwiftPM 无法写它的全局缓存
+# （~/Library/Caches/org.swift.swiftpm/… → "Operation not permitted"），表现为**整条通道失败**，
+# 但那与代码无关。此时用：`SWIFT_EXTRA_ARGS=--disable-sandbox Tools/run_tests.sh`。
+SWIFT_EXTRA_ARGS="${SWIFT_EXTRA_ARGS:-}"
+
 CHANNEL_FORBID_ALLOW='org\.swift\.swiftpm|not writable|readonly database'
 
 # 为什么「编译警告也算红」（2026-10-02 的教训）：
@@ -129,11 +134,11 @@ echo "项目五通道验证 —— iPhone: $IPHONE_SIM / iPad: $IPAD_SIM / iOS $
 
 CHANNEL_FORBID='warning: ' channel "swift test（macOS 宿主）" \
   "Executed [0-9]+ tests, with 0 failures" \
-  swift test
+  swift test $SWIFT_EXTRA_ARGS
 
 CHANNEL_FORBID='warning: ' channel "iOS SDK 构建" \
   "Build complete" \
-  swift build --triple arm64-apple-ios17.0-simulator \
+  swift build --triple arm64-apple-ios17.0-simulator \ $SWIFT_EXTRA_ARGS
     --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
 
 # 放在两条 UI 测试通道之前：UI 测试 target 不在 SwiftPM 包里，`swift test` 看不见它，
