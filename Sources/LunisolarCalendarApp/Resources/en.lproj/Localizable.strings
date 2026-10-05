@@ -40,7 +40,7 @@
 "万圣节" = "Halloween";
 "上个月" = "Last Month";
 "显示在灵动岛" = "Show on Dynamic Island";
-"显示在灵动岛失败" = "Couldn't Show on Island";
+"显示在灵动岛失败" = "Couldn't Show on Dynamic Island";
 "下一个节气" = "Next Solar Term";
 "下个月" = "Next Month";
 "不可用" = "Unavailable";
@@ -254,7 +254,7 @@
 "时间" = "Time";
 "时间格式无法识别。" = "Couldn't recognize the time format.";
 "时间胶囊已关闭" = "Live Activity Is Off";
-"时间胶囊已开启，添加倒数日后会自动显示在灵动岛" = "Live Activity is on — countdowns appear on the Dynamic Island automatically";
+"时间胶囊已开启，添加倒数日后会自动显示在灵动岛" = "Live Activities are on — countdowns appear on the Dynamic Island automatically";
 "春分" = "Spring Equinox";
 "春节" = "Spring Festival";
 "是" = "Yes";
@@ -323,7 +323,7 @@
 "清空全部日程" = "Clear All Events";
 "清空后无法恢复，请谨慎操作" = "Cannot be undone. Please proceed with caution.";
 "清空输入" = "Clear Input";
-"时间胶囊未开启" = "Dynamic Island Is Off";
+"时间胶囊未开启" = "Live Activities Off";
 "点击右上角添加生日、纪念日或重要日期" = "Tap + to add birthdays, anniversaries or important dates";
 "状态" = "Status";
 "环形进度条展示今日已完成日程占比，激励每日打卡，Medium 尺寸还显示节日与冲煞信息。" = "The circular progress ring shows today's completion rate; Medium size also shows festivals and clashes.";
