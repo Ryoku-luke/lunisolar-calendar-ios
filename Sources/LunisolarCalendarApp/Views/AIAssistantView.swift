@@ -87,7 +87,7 @@ struct AIAssistantView: View {
                     Section {
                         AIPreviewRows(draft: d,
                                        onCancel: { model.draft = nil; model.inputFocused = true },
-                                       onCreate: { create($0) })
+                                       onCreate: { model.create($0) })
                     } header: {
                         Text(NSLocalizedString("预览 · 确认后入库", comment: ""))
                     }
@@ -287,47 +287,11 @@ struct AIAssistantView: View {
     }
 
         /// 确认创建：唯一写入路径是 AIAssistantService → EventService（AI 不直连数据层）
-    private func create(_ d: AICreateEventDraft) {
-        switch AIAssistantService.shared.execute(.createEvent(d)) {
-        case .success(.createdEvent(let id)):
-            let created = EventStore.shared.eventBy(idString: id.uuidString)
-            // 落点是今天还是别的日子：决定提示文案，以及要不要给「去看看」跳转。
-            // 真机反馈（2026-09-30）：「明天上午10点…」会正确建到明天，但用户在今天的
-            // 日历页上只看到"没有变化"，误以为没生效。所以这里必须**说出具体哪一天**。
-            let startDate = created?.startDate ?? d.startDate
-            let cal = Calendar(identifier: .gregorian)
-            let isOtherDay = !cal.isDate(startDate, inSameDayAs: Date())
-            if isOtherDay {
-                let dayText = Self.dayFormatter.string(from: startDate)
-                // 「去看看」的日期必须走 showSuccess 的参数：不能再单独赋值 model.completedOffDay，
-                // 那会被 showSuccess 清掉（按钮永远不出现——见 showSuccess 的注释）。
-                model.showSuccess(String(format: NSLocalizedString("已加入 %@ 的日程", comment: "AI助手：日程建在其它日子"), dayText),
-                            offDay: startDate)
-            } else {
-                model.showSuccess(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
-            }
-            model.input = ""
-            model.draft = nil
-            model.inputFocused = true
-        case .success:
-            break
-        case .failure(let error):
-            model.present(error)
-        }
-    }
-
-    /// 提示里显示的日期（跟随设备区域；如 10月1日 / Oct 1）
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .none
-        return f
-    }()
-
-    /// 行内成功提示：自动消失（不打断连续输入，也省掉模态的两次点击）
+        /// 提示里显示的日期（跟随设备区域；如 10月1日 / Oct 1）
+        /// 行内成功提示：自动消失（不打断连续输入，也省掉模态的两次点击）
     ///
     /// `offDay` 是「去看看」跳转按钮的**唯一入口**：非 nil 才渲染该按钮。
-    /// ⚠️ 所以 `model.completedOffDay` 必须只由本方法读写。此前 `create()` 先
+    /// ⚠️ 所以 `model.completedOffDay` 必须只由本方法读写。此前 `model.create()` 先
     /// `model.completedOffDay = startDate`、再调用本方法，而本方法开头会把它清空——
     /// 结果「去看看」按钮**从未出现过**：文案对（「已加入 10月3日 的日程」），
     /// 去路是死的。这正是 2026-10-02 UI 测试 Flow 3d 抓到的真因（当时提示文案是对的，

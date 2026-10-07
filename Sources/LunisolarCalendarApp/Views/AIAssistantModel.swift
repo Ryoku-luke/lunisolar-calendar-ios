@@ -108,4 +108,59 @@ final class AIAssistantModel {
         return AIAssistantService.occurrenceStart(of: target, on: day)
             .formatted(date: .abbreviated, time: .shortened)
     }
+
+    // MARK: - 依赖注入（P4-2 ③-2c-2）
+    //
+    // 带默认值的闭包，默认实现调原单例 → 视图调用点零改动；单测传替身即可脱离服务与存储。
+    // （不用协议：`create` 实测同时依赖 AIAssistantService.execute 与 EventStore.eventBy，
+    //  同一协议无法让两个不同的单例各自遵循。）
+    private let execute: (AIStructuredCommand) -> Result<AIExecutionOutcome, AICommandError>
+    private let eventByID: (String) -> CalendarEvent?
+
+    init(execute: @escaping (AIStructuredCommand) -> Result<AIExecutionOutcome, AICommandError> = {
+                AIAssistantService.shared.execute($0)
+            },
+         eventByID: @escaping (String) -> CalendarEvent? = {
+                EventStore.shared.eventBy(idString: $0)
+            }) {
+        self.execute = execute
+        self.eventByID = eventByID
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
+    /// 创建日程并讲清落点（今天 / 别的日子 → 文案与「去看看」按钮）
+    func create(_ d: AICreateEventDraft) {
+        switch execute(.createEvent(d)) {
+        case .success(.createdEvent(let id)):
+            let created = eventByID(id.uuidString)
+            // 落点是今天还是别的日子：决定提示文案，以及要不要给「去看看」跳转。
+            // 真机反馈（2026-09-30）：「明天上午10点…」会正确建到明天，但用户在今天的
+            // 日历页上只看到"没有变化"，误以为没生效。所以这里必须**说出具体哪一天**。
+            let startDate = created?.startDate ?? d.startDate
+            let cal = Calendar(identifier: .gregorian)
+            let isOtherDay = !cal.isDate(startDate, inSameDayAs: Date())
+            if isOtherDay {
+                let dayText = Self.dayFormatter.string(from: startDate)
+                // 「去看看」的日期必须走 showSuccess 的参数：不能再单独赋值 completedOffDay，
+                // 那会被 showSuccess 清掉（按钮永远不出现——见 showSuccess 的注释）。
+                showSuccess(String(format: NSLocalizedString("已加入 %@ 的日程", comment: "AI助手：日程建在其它日子"), dayText),
+                            offDay: startDate)
+            } else {
+                showSuccess(NSLocalizedString("日程已加入日历。", comment: "AI助手"))
+            }
+            input = ""
+            draft = nil
+            inputFocused = true
+        case .success:
+            break
+        case .failure(let error):
+            present(error)
+        }
+    }
 }
