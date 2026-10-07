@@ -761,3 +761,23 @@ body 段 = `var body` 到 `// MARK: - 解析`；逻辑段 = 其后的解析/执�
 
 **顺序建议**：`create`(28 行，只用 execute) → `confirmDestructive`(20 行，只用 execute) →
 `parse`(63 行，execute + resolveTarget + 解析器) 一次一个，每步都过门。
+
+### ③-2c-2 施工补遗（2026-10-07 失败一次后补）
+
+**已确认的依赖面（比原记录更全）**：`create` 除了 `AIAssistantService.execute`，还用
+`EventStore.shared.eventBy(idString:)` —— 早先探针把它过滤掉了。因此
+"一个协议 + 两个 conformance"**不成立**（同一协议无法让两个不同单例各自遵循）。
+
+**改用的方案（更轻、视图零改动）**：模型注入**带默认值的闭包**：
+```swift
+private let execute: (AIStructuredCommand) -> Result<AIExecutionOutcome, AICommandError>
+private let eventByID: (String) -> CalendarEvent?
+init(execute: ... = { AIAssistantService.shared.execute($0) },
+     eventByID: ... = { EventStore.shared.eventBy(idString: $0) })
+```
+默认即调原单例 → 视图调用点零改动；单测传替身即可完全脱离服务与存储。
+
+**本轮踩的坑（务必避免）**：视图里的 `private static let dayFormatter: DateFormatter = { … }()`
+是**多行声明**，我用"匹配单行"的正则去摘 → 只删掉第一行、留下断裂闭包 →
+视图与模型双双语法错（10 个 error）。**搬运带闭包/多行的声明必须用花括号配对**（与搬函数一致），
+不能用单行正则。
