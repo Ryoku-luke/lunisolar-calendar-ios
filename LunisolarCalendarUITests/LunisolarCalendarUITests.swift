@@ -394,6 +394,402 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 回到日历 Tab —— 这一步就是用户报告里「不立刻出现」的地方
         app.tabBars.buttons["日历"].tap()
 
+        // 目标行可能在折叠线以下**并且是切 Tab 之后异步出现的**：
+        // 上一版"先滚动 8 次（约 2 秒）再等 10 秒"顺序是错的 —— 滚动在行出现之前就跑完了，
+        // 之后的等待虽长，但它已在屏外，依然找不到。这里改为**等与滚交替**，给异步出现留时间。
+        let row = eventRow(app, title: title)
+        var appeared = false
+        for _ in 0..<8 {
+            if row.exists { appeared = true; break }
+            _ = row.waitForExistence(timeout: 2)      // 先给异步创建/刷新留时间
+            if row.exists { appeared = true; break }
+            app.swipeUp()                              // 再往下找
+        }
+        XCTAssertTrue(appeared, "AI 创建后切回日历，「今日安排」里必须立刻出现「\(title)」")于文案的断言都会失配。用 launchArguments 固定语言/地区。
+// 2. **优先按 accessibilityIdentifier 定位**，文案只作兜底。
+// 3. **不假设初始数据为空**：模拟器上的 App 容器跨运行保留，因此只断言「这次造的东西出现了」，
+//    绝不依赖「原本没有」。
+// 4. **用 `element(_:_:)` 而不是绑死元素类型**：SwiftUI 的 `TextField(axis:.vertical)`、
+//    `Toggle`、`HStack+accessibilityIdentifier` 在 XCUITest 里映射到的类型会随 SDK 变化，
+//    按标识全类型查找才不会因为类型变了就失败。
+
+/// 与 App 侧 `Sources/LunisolarCalendarApp/Support/AccessibilityID.swift` 保持一致的**字面量副本**。
+///
+/// 为什么不复用那个类型：UI 测试 target 没有链接 App 的框架模块，无法 import。
+/// 失配不会静默——找不到元素就是测试红，因此可以接受这份副本；
+/// 而 App 侧的命名规范与格式由 `AccessibilityIDTests` 锁住。
+private enum ID {
+    static let monthNewEvent = "calendar.month.new"
+    static let todayJump = "calendar.month.today"
+    static let selectedSummary = "calendar.selected.summary"
+    static let dayDetailNewEvent = "calendar.day.detail.new"
+    static let editTitle = "event.edit.title"
+    static let editSave = "event.edit.save"
+    static let aiInput = "ai.input.draft"
+    static let aiParse = "ai.input.parse"
+    static let aiConfirm = "ai.preview.confirm"
+    static let aiDone = "ai.input.done"
+    static let aiGoToCreatedDay = "ai.created.goto"
+    static let settingsSyncToggle = "settings.sync.toggle"
+    static let settingsSyncStatus = "settings.sync.status"
+    static let iPadSidebarCalendar = "ipad.sidebar.calendar"
+    static let iPadSidebarAI = "ipad.sidebar.ai"
+    static let iPadSidebarAgenda = "ipad.sidebar.agenda"
+    static let iPadSidebarCountdown = "ipad.sidebar.countdown"
+    static let iPadSidebarSettings = "ipad.sidebar.settings"
+    static let iPadInspectorCountdown = "ipad.inspector.countdown"
+    static let monthMenu = "calendar.month.menu"
+    static let stateEmpty = "state.empty"
+    static let stateError = "state.error"
+    static let stateToast = "state.toast"
+
+    /// 必须与 App 侧 `AccessibilityID.monthDay` 的格式完全一致
+    static func monthDay(year: Int, month: Int, day: Int) -> String {
+        String(format: "calendar.month.day.y%04dm%02dd%02d", year, month, day)
+    }
+}
+
+final class LunisolarCalendarUITests: XCTestCase {
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    // MARK: - 基础工具
+
+    @discardableResult
+    /// - Parameter extra: 额外的启动参数（如 `-uitest-readonly-store`），默认不影响既有用例
+    private func launchApp(extra: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        // 固定语言/地区：否则英文模拟器下界面走 en.lproj，文案断言全部失配。
+        // shots.sh --tour --lang 用 SHOTS_LANG 覆盖（截图巡游按指定语言出图）；
+        // 普通 Flow 用例不传该变量，固定 zh-Hans 保证断言稳定。
+        switch ProcessInfo.processInfo.environment["SHOTS_LANG"] ?? "zh-Hans" {
+        case "en":      app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        case "ja":      app.launchArguments += ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
+        case "zh-Hant": app.launchArguments += ["-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_Hant_TW"]
+        default:        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_Hans_CN"]
+        }
+        // §7.1 数据隔离：空库启动，「空态 / 首次使用 / 无数据」类断言与真实容器无关
+        app.launchArguments += ["-uitest-empty-store"]
+        app.launchArguments += extra
+        app.launch()
+        dismissSystemPermissionPromptIfNeeded()
+        return app
+    }
+
+    /// 关掉可能挡住首屏的系统权限弹窗（当前只有定位会弹）。
+    ///
+    /// 为什么必须显式处理：这个弹窗属于 **SpringBoard**，不在 App 的元素树里，
+    /// 所以 `app.buttons["不允许"]` 找不到它；而它一旦挂上，App 内的点击全部落空。
+    /// 在**全新模拟器**上第一次跑必然遇到——本项目此前的 UI 测试只在已经授权过的
+    /// 机器上跑过，所以一直没暴露这个问题（用新建的 iPhone SE 验收时踩到）。
+    private func dismissSystemPermissionPromptIfNeeded() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        // 先判「有没有弹窗」再找按钮：没有就直接返回，
+        // 否则每个用例都会为了 3 个标题各白等 3 秒（10 条用例就是一分半）。
+        guard springboard.alerts.firstMatch.waitForExistence(timeout: 2) else { return }
+        for title in ["不允许", "允许一次", "好"] {
+            let button = springboard.buttons[title].firstMatch
+            if button.exists {
+                button.tap()
+                return
+            }
+        }
+    }
+
+    /// 按标识查找元素，不关心它映射成哪一类（textField / textView / other / button…）
+    private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: id).firstMatch
+    }
+
+    /// 按文案查找（只用于没有稳定标识的场景：系统菜单项、纯文案按钮）。
+    /// 注意：依赖 App 的本地化文案，所以只在强制简体中文的前提下才可靠。
+    private func label(_ app: XCUIApplication, _ text: String) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", text))
+            .firstMatch
+    }
+
+    /// 「今天、且还没到」的时刻文案（形如 `19点54分`），用于需要落在**今天**的用例。
+    ///
+    /// 为什么要算而不是写死：`AICommandValidator.validateCreate` 会拦下
+    /// 「一次性（不重复）日程落在过去」——这是**正确**的产品行为，但它让写死时刻的
+    /// 用例变成「几点跑决定红绿」：写「下午3点」时，15:00 之后跑必然拿不到预览。
+    /// 2026-10-02 18:54 的全量跑就是这样红的。
+    ///
+    /// 距零点不足 5 分钟时返回 nil（调用方 `XCTSkip`）：那个窗口里构造不出
+    /// 「今天且还没到」的时刻，与其假红不如明说跳过。
+    private func laterTodayText() -> String? {
+        let cal = Calendar(identifier: .gregorian)
+        let now = Date()
+        guard let tomorrowStart = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now)),
+              tomorrowStart.timeIntervalSince(now) > 300 else { return nil }
+        // 现在 + 1 小时；若跨天则收敛到 23:59（仍是今天，且必然在未来）
+        let target = min(now.addingTimeInterval(3600), tomorrowStart.addingTimeInterval(-60))
+        let c = cal.dateComponents([.hour, .minute], from: target)
+        return "\(c.hour ?? 0)点\(c.minute ?? 0)分"
+    }
+
+    /// 事件行的标题断言（「当日安排」里能不能看到某条日程）。
+    ///
+    /// ⚠️ 不能写成 `app.staticTexts[title]`：`EventRow` 用了
+    /// `.accessibilityElement(children: .combine)`，整行被合成**一个**元素，
+    /// 其 label 是「标题 + 时间段」（见 `EventRow.swift` 的 accessibilityLabel）——
+    /// 按标题做**精确**匹配永远找不到事件行，行为完全正确也会红。
+    /// 这里用前缀匹配：将来若把 combine 去掉、标题还原成独立 Text，它同样成立。
+    private func eventRow(_ app: XCUIApplication, title: String) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", title))
+            .firstMatch
+    }
+
+    /// 当前月份的月中日（15 号）。
+    ///
+    /// 为什么必须是月中日：跟手滑动时相邻两个月的网格会**同时渲染**（`calendarShell` 会被
+    /// 调用两次），月初/月末的日期会在两个网格里各出现一次 → 同一个 accessibilityIdentifier
+    /// 匹配到多个元素，测试随之变得不稳定。月中日只会出现在当月网格里。
+    private var midMonthTarget: (year: Int, month: Int, day: Int) {
+        let cal = Calendar(identifier: .gregorian)
+        let c = cal.dateComponents([.year, .month], from: Date())
+        return (c.year ?? 2026, c.month ?? 1, 15)
+    }
+
+    private func todayTarget() -> (year: Int, month: Int, day: Int) {
+        let cal = Calendar(identifier: .gregorian)
+        let c = cal.dateComponents([.year, .month, .day], from: Date())
+        return (c.year ?? 2026, c.month ?? 1, c.day ?? 1)
+    }
+
+    /// 当月最后一天 —— 网格**最后一行**的探针。
+    ///
+    /// 与 `midMonthTarget` 的取舍正好相反：这里**故意**用月末，因为它最能代表
+    /// 「整月是否一屏可见」（P0-1 的验收）。它的风险是跟手滑动时相邻月的网格会
+    /// 一起渲染、同一天出现两次；但 Flow 10 全程不滑动，稳态下只有当前月的网格。
+    private var monthEndTarget: (year: Int, month: Int, day: Int) {
+        let cal = Calendar(identifier: .gregorian)
+        let c = cal.dateComponents([.year, .month], from: Date())
+        let year = c.year ?? 2026, month = c.month ?? 1
+        var dc = DateComponents(); dc.year = year; dc.month = month
+        let firstOfMonth = cal.date(from: dc) ?? Date()
+        let days = cal.range(of: .day, in: .month, for: firstOfMonth)?.count ?? 28
+        return (year, month, days)
+    }
+
+    /// 往下滚动直到元素出现（设置页很长）
+    private func scrollUntilVisible(_ app: XCUIApplication,
+                                    _ target: XCUIElement,
+                                    maxSwipes: Int = 8) -> Bool {
+        for _ in 0..<maxSwipes {
+            if target.exists { return true }
+            app.swipeUp()
+        }
+        return target.exists
+    }
+
+    /// 可靠输入（2026-10-07 实测：中文输入法下 `typeText` 会丢字/改字）。
+    ///
+    /// 做法：输入后**读回**校验；不一致就清空重打，最多 `attempts` 次；
+    /// 仍不一致则失败并打印**实际内容** —— 这样失败信息能直接指出是输入问题，
+    /// 而不是让用例在下游（比如按标题找不到那一行）以看不懂的方式变红。
+    private func typeReliably(_ text: String, into field: XCUIElement, attempts: Int = 3) {
+        var last = ""
+        for attempt in 1...attempts {
+            if attempt > 1 {
+                field.tap()
+                let current = (field.value as? String) ?? ""
+                if !current.isEmpty {
+                    field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue,
+                                          count: current.count))
+                }
+            }
+            field.typeText(text)
+            last = (field.value as? String) ?? ""
+            if last == text { return }
+            print("输入不一致（第 \(attempt) 次）：期望「\(text)」，实际「\(last)」")
+        }
+        XCTFail("""
+                输入框内容不稳定：期望「\(text)」，实际「\(last)」。
+                疑似输入法丢字/改字（模拟器为简体拼音键盘）——这是**测试环境**问题，不是 App 缺陷。
+                """)
+    }
+
+    // MARK: - Flow 1：打开 → 点日期 → 选中态与当日摘要跟随
+
+    func testFlow1_selectingDayUpdatesSelectionAndSummary() {
+        let app = launchApp()
+
+        let target = midMonthTarget
+        let cell = element(app, ID.monthDay(year: target.year, month: target.month, day: target.day))
+        XCTAssertTrue(cell.waitForExistence(timeout: 15),
+                      "月历网格里应出现本月 \(target.day) 日（标识 \(ID.monthDay(year: target.year, month: target.month, day: target.day))）")
+
+        let wasSelected = cell.isSelected
+        cell.tap()
+
+        XCTAssertTrue(cell.isSelected, "点击后该日期格应带上选中态（.isSelected）")
+
+        // 选中日摘要卡必须渲染出来（农历/黄历/天气都挂在它里面）
+        XCTAssertTrue(element(app, ID.selectedSummary).waitForExistence(timeout: 5),
+                      "选中日期后应出现选中日摘要卡")
+
+        // 反向断言：原来选中的「今天」应让出选中态（除非本来就点的是今天）
+        let today = todayTarget()
+        let isTargetToday = (today.year == target.year
+                             && today.month == target.month
+                             && today.day == target.day)
+        if !wasSelected && !isTargetToday {
+            let todayCell = element(app, ID.monthDay(year: today.year, month: today.month, day: today.day))
+            if todayCell.exists {
+                XCTAssertFalse(todayCell.isSelected,
+                               "选中其它日期后，今天不应仍处于选中态（选中态必须唯一）")
+            }
+        }
+    }
+
+    // MARK: - Flow 2：新建日程 → 保存 → 回日历能看到
+
+    func testFlow2_createEventThenItAppearsOnCalendar() {
+        let app = launchApp()
+
+        // 唯一标题：模拟器容器跨运行保留，固定标题会与历史数据混淆
+        let title = "UI测试事件-\(Int(Date().timeIntervalSince1970))"
+
+        let addButton = element(app, ID.monthNewEvent)
+        XCTAssertTrue(addButton.waitForExistence(timeout: 15), "工具栏应有新建日程按钮")
+        addButton.tap()
+
+        let titleField = element(app, ID.editTitle)
+        XCTAssertTrue(titleField.waitForExistence(timeout: 5), "编辑页应出现标题输入框")
+        titleField.tap()
+        titleField.typeText(title)
+
+        let saveButton = element(app, ID.editSave)
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 5), "编辑页应有保存按钮")
+        saveButton.tap()
+
+        // 回到日历后，当日安排里应能看到刚建的事件标题
+        XCTAssertTrue(eventRow(app, title: title).waitForExistence(timeout: 10),
+                      "保存后应回到日历，且当天安排里出现「\(title)」")
+    }
+
+    // MARK: - Flow 3：AI 助手必须对输入有反应（用户反馈过「点了没反应」）
+
+    func testFlow3_aiAssistantReactsToInput() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "仅在 iPhone 上运行（iPad 为侧栏布局，无 TabBar；AI 助手在 iPad 的入口路径不同）")
+        let app = launchApp()
+
+        app.tabBars.buttons["AI 助手"].tap()
+
+        let input = element(app, ID.aiInput)
+        XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
+        input.tap()
+        // 用中性的输入：本用例断言的是「有反应」，不是解析正确性
+        // （解析正确性由 43 条 AIAssistantTests / 18 条边界用例在单测层覆盖）
+        input.typeText("测试输入")
+        // 先确认文字真的进去了：CJK 输入若失败，后面的断言会指向错误的方向
+        XCTAssertEqual(input.value as? String, "测试输入", "输入框应包含刚键入的文本")
+
+        let parseButton = element(app, ID.aiParse)
+        XCTAssertTrue(parseButton.waitForExistence(timeout: 5), "应有「解析并预览」按钮")
+        parseButton.tap()
+
+        // 期望：要么出现预览（含确认创建），要么给出明确的错误提示；绝不能毫无反应。
+        // 错误自 P0-3 起改为行内 QingheToast（不再弹模态），三种形态都要认——
+        // 否则「错误表现得更轻」会被误判成「毫无反应」。
+        let preview = element(app, ID.aiConfirm)
+        let previewAppeared = preview.waitForExistence(timeout: 6)
+        let toastAppeared = element(app, ID.stateToast).exists
+        let alertAppeared = app.alerts.firstMatch.exists
+        if !previewAppeared && !toastAppeared && !alertAppeared {
+            XCTFail("""
+                点「解析并预览」后必须给出结果（预览或明确错误），不能毫无反应。
+                当前界面树：
+                \(app.debugDescription)
+                """)
+        }
+    }
+
+    // MARK: - Flow 3c：AI 创建的日程必须**立刻**出现在日历的「今日安排」里
+    //
+    // 真机回归（2026-09-30 用户报告）：
+    //   「AI 日历助手创建的日程不会立刻出现在今日安排里面，必须手动再创建一条新的日程
+    //     才会和新创建的日程一同显示」
+    //
+    // 为什么此前没被发现：Flow 2 断言了「手动创建 → 日历出现」，
+    // 而 Flow 3 只断言 AI「有反应」（预览/错误二选一），**没人断言 AI 创建的事件真的落到日历上**。
+    // 这条用例补的就是那个缺口——它是这个 bug 的回归锚点。
+    //
+    // 数据层已单独验证过是正确的（AI 写入与手动写入在 store 上留下的状态完全一致：
+    // count+1、revision+1、events(on: today) 立刻 +1）。所以本用例失败时，
+    // 问题一定在**视图重新求值/观察**，不要去改数据层。
+    //
+    // ── 2026-09-30 真机诊断的最终结论（重要，别再往刷新方向查）──────────────
+    // 实测（临时埋点已被移除）：写入 → 观察通知 → `month.body` → `card.body`，
+    // SwiftUI 自证 `SelectedDayCardView: \EventStore.revision changed.`，
+    // 新事件 id 确实出现在它所属那天的当日数组里。**刷新链路完全正常。**
+    //
+    // 用户报告的「不立刻出现」真因是：说「明天上午10点…」时日程**正确地建到了明天**，
+    // 而用户人还在今天的日历页 —— 今天列表当然不变，直到切日期才看见。
+    // 也就是说：不是刷新 bug，而是**反馈没说明加到了哪一天、也没有去路**。
+    // 对应修复在 `AIAssistantView.create()`；回归锚点是下面的 Flow 3d。
+
+    func testFlow3c_aiCreatedEventAppearsInTodayScheduleImmediately() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone,
+                          "仅在 iPhone 上运行（iPad 为侧栏布局，AI 入口路径不同）")
+        let app = launchApp()
+
+        // 唯一标题，避免模拟器容器里的历史数据混淆断言
+        let title = "AI日程-\(Int(Date().timeIntervalSince1970))"
+
+        app.tabBars.buttons["AI 助手"].tap()
+
+        let input = element(app, ID.aiInput)
+        XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
+        input.tap()
+        // 显式带上标题与「今天」，让解析结果落在今天。
+        // ⚠️ 时刻**不能写死**（原来写「下午3点」）：`AICommandValidator` 会正确拦下
+        // 「一次性日程落在过去」，于是预览不出现、这条断言假红——2026-10-02 18:54 的
+        // 全量跑正是这样红的（探针复现：parser OK，validator `inThePast`
+        // 「「2026年10月2日 15:00」已经过去了」）。取「现在 + 1 小时」。
+        guard let timeText = laterTodayText() else {
+            throw XCTSkip("距零点不足 5 分钟：构造不出「今天、且还没到」的时刻，而本用例必须落在今天")
+        }
+        // 用可靠输入：中文输入法下 typeText 可能丢字/改字（见 typeReliably 的说明）
+        typeReliably("今天\(timeText)提醒我\(title)", into: input)
+
+        let parseButton = element(app, ID.aiParse)
+        XCTAssertTrue(parseButton.waitForExistence(timeout: 5), "应有「解析并预览」按钮")
+        parseButton.tap()
+
+        let confirm = element(app, ID.aiConfirm)
+        XCTAssertTrue(confirm.waitForExistence(timeout: 6),
+                      "应出现「确认创建」预览（若这里是解析失败，说明输入未被识别）")
+
+        // 决定性诊断（2026-10-07 加）：**确认之前**就检查预览卡里的标题。
+        // 本用例的失败现象是"创建后回日历找不到那一行"，而它有两种完全不同的病因：
+        //   (a) 输入被输入法改写（模拟器上是简体拼音键盘，typeText 输入中文并不可靠）→ 标题就不是 title；
+        //   (b) App 创建/落点有问题。
+        // 在预览卡这一步断言标题，就能把两者区分开：这里红 = (a)，这里绿而最后红 = (b)。
+        // 手动路径已证实 App 正常（用户截图：说「今天 17 点提醒我测试」→ 今日安排里出现了「测试」）。
+        // ⚠️ 上一版这里写错了（假警报）：预览卡用 LabeledContent("标题", value: d.title)，
+        // 标题在无障碍树里是 **value** 而不是 **label**，所以 `staticTexts[title]` 精确匹配标签
+        // 永远查不到 —— 我因此错误地得出"输入被改写"的结论。改为按 CONTAINS 查任意元素。
+        let titleAnywhere = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", title, title))
+            .firstMatch
+        XCTAssertTrue(titleAnywhere.waitForExistence(timeout: 5),
+                      """
+                      预览卡里应能查到标题「\(title)」（查 label 或 value 任一处）。
+                      若这里失败，才说明解析结果与输入不符；这里通过而最后失败，则问题在
+                      "创建后回日历的今日安排"这一段。
+                      """)
+        confirm.tap()
+
+        // 回到日历 Tab —— 这一步就是用户报告里「不立刻出现」的地方
+        app.tabBars.buttons["日历"].tap()
+
         // 同理：目标行可能在折叠线以下；先滚到它出现再断言存在性
         _ = scrollUntilVisible(app, eventRow(app, title: title))
         XCTAssertTrue(eventRow(app, title: title).waitForExistence(timeout: 10),
