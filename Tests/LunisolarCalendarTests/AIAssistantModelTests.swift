@@ -101,3 +101,60 @@ final class AIAssistantModelCreateTests: XCTestCase {
         XCTAssertNil(m.completedMessage)
     }
 }
+
+// MARK: - confirmDestructive：破坏性操作的确认执行（安全相关断言）
+
+@MainActor
+final class AIAssistantModelDestructiveTests: XCTestCase {
+
+    /// 用引用盒记录"执行层到底收到了什么"（闭包是 escaping，不能用捕获的可变局部变量）
+    private final class Box { var commands: [AIStructuredCommand] = [] }
+
+    private let criteria = AIEventCriteria(
+        day: Date(timeIntervalSince1970: 1_759_600_000),
+        timeHint: DateComponents(hour: 15, minute: 0), keyword: "例会")
+
+    private func deleteCommand() -> AIStructuredCommand {
+        .deleteEvent(AIDeleteEventDraft(criteria: criteria))
+    }
+
+    /// **安全底线**：确认后命令必须真的送到执行层。
+    /// 若哪天重构让这条路径漏掉执行，用户会以为删了、其实没删 —— 这比崩溃更难发现。
+    func testConfirmationActuallyReachesTheExecutor() {
+        let box = Box()
+        let m = AIAssistantModel(execute: { cmd in
+            box.commands.append(cmd); return .success(.deletedEvent(UUID()))
+        }, eventByID: { _ in nil })
+        m.pendingCommand = deleteCommand()
+        m.confirmDestructive()
+
+        XCTAssertEqual(box.commands.count, 1, "确认后必须调用执行层，且只调一次")
+        XCTAssertEqual(box.commands.first, deleteCommand(), "送进执行层的必须是待确认的那条命令")
+        XCTAssertNil(m.pendingCommand, "成功后待确认命令应清掉")
+        XCTAssertNil(m.destructiveTarget, "成功后破坏性目标应清掉")
+        XCTAssertFalse(m.completedMessage?.isEmpty ?? true, "成功后应给出回执（删了哪条）")
+        XCTAssertNil(m.inlineError)
+    }
+
+    /// 没有待确认命令时**不得**执行任何东西（防止误触/重复点击造成意外删除）
+    func testNoPendingCommandMeansNoExecution() {
+        let box = Box()
+        let m = AIAssistantModel(execute: { cmd in
+            box.commands.append(cmd); return .success(.deletedEvent(UUID()))
+        }, eventByID: { _ in nil })
+        XCTAssertNil(m.pendingCommand)
+        m.confirmDestructive()
+        XCTAssertTrue(box.commands.isEmpty, "没有待确认命令时绝不能执行")
+    }
+
+    /// 执行失败 → 走行内错误，且**不**给出成功回执
+    func testFailureShowsInlineErrorAndNoReceipt() {
+        let m = AIAssistantModel(
+            execute: { _ in .failure(AICommandError(kind: .notFound, message: "测试用失败")) },
+            eventByID: { _ in nil })
+        m.pendingCommand = deleteCommand()
+        m.confirmDestructive()
+        XCTAssertEqual(m.inlineError, "测试用失败")
+        XCTAssertNil(m.completedMessage, "失败时不能出现成功回执")
+    }
+}
