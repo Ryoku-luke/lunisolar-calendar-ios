@@ -377,11 +377,17 @@ final class LunisolarCalendarUITests: XCTestCase {
         //   (b) App 创建/落点有问题。
         // 在预览卡这一步断言标题，就能把两者区分开：这里红 = (a)，这里绿而最后红 = (b)。
         // 手动路径已证实 App 正常（用户截图：说「今天 17 点提醒我测试」→ 今日安排里出现了「测试」）。
-        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5),
+        // ⚠️ 上一版这里写错了（假警报）：预览卡用 LabeledContent("标题", value: d.title)，
+        // 标题在无障碍树里是 **value** 而不是 **label**，所以 `staticTexts[title]` 精确匹配标签
+        // 永远查不到 —— 我因此错误地得出"输入被改写"的结论。改为按 CONTAINS 查任意元素。
+        let titleAnywhere = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", title, title))
+            .firstMatch
+        XCTAssertTrue(titleAnywhere.waitForExistence(timeout: 5),
                       """
-                      预览卡里应显示解析出的标题「\(title)」。
-                      若这里失败，说明**输入被输入法改写了**（不是 App 的创建逻辑问题）：
-                      请检查模拟器键盘设置，或改用不触发输入法的方式输入。
+                      预览卡里应能查到标题「\(title)」（查 label 或 value 任一处）。
+                      若这里失败，才说明解析结果与输入不符；这里通过而最后失败，则问题在
+                      "创建后回日历的今日安排"这一段。
                       """)
         confirm.tap()
 
