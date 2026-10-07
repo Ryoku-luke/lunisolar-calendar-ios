@@ -191,6 +191,33 @@ final class LunisolarCalendarUITests: XCTestCase {
         return target.exists
     }
 
+    /// 可靠输入（2026-10-07 实测：中文输入法下 `typeText` 会丢字/改字）。
+    ///
+    /// 做法：输入后**读回**校验；不一致就清空重打，最多 `attempts` 次；
+    /// 仍不一致则失败并打印**实际内容** —— 这样失败信息能直接指出是输入问题，
+    /// 而不是让用例在下游（比如按标题找不到那一行）以看不懂的方式变红。
+    private func typeReliably(_ text: String, into field: XCUIElement, attempts: Int = 3) {
+        var last = ""
+        for attempt in 1...attempts {
+            if attempt > 1 {
+                field.tap()
+                let current = (field.value as? String) ?? ""
+                if !current.isEmpty {
+                    field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue,
+                                          count: current.count))
+                }
+            }
+            field.typeText(text)
+            last = (field.value as? String) ?? ""
+            if last == text { return }
+            print("输入不一致（第 \(attempt) 次）：期望「\(text)」，实际「\(last)」")
+        }
+        XCTFail("""
+                输入框内容不稳定：期望「\(text)」，实际「\(last)」。
+                疑似输入法丢字/改字（模拟器为简体拼音键盘）——这是**测试环境**问题，不是 App 缺陷。
+                """)
+    }
+
     // MARK: - Flow 1：打开 → 点日期 → 选中态与当日摘要跟随
 
     func testFlow1_selectingDayUpdatesSelectionAndSummary() {
@@ -333,7 +360,8 @@ final class LunisolarCalendarUITests: XCTestCase {
         guard let timeText = laterTodayText() else {
             throw XCTSkip("距零点不足 5 分钟：构造不出「今天、且还没到」的时刻，而本用例必须落在今天")
         }
-        input.typeText("今天\(timeText)提醒我\(title)")
+        // 用可靠输入：中文输入法下 typeText 可能丢字/改字（见 typeReliably 的说明）
+        typeReliably("今天\(timeText)提醒我\(title)", into: input)
 
         let parseButton = element(app, ID.aiParse)
         XCTAssertTrue(parseButton.waitForExistence(timeout: 5), "应有「解析并预览」按钮")
