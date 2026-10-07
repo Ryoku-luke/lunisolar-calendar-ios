@@ -110,7 +110,7 @@ struct AIAssistantView: View {
                             title: target.title,
                             occurrence: model.occurrenceText(for: target),
                             repeatLabel: target.repeatRule == .never ? nil : target.repeatRuleLabel,
-                            onConfirm: { confirmDestructive() },
+                            onConfirm: { model.confirmDestructive() },
                             onCancel: {
                                 model.destructiveTarget = nil
                                 model.destructiveLabel = nil
@@ -265,28 +265,7 @@ struct AIAssistantView: View {
     /// 这里改用「用户所说的那一天 + 原时分」。
         /// 当前待确认的目标是否为重复日程（必须在 resetAfterCompletion 之前取值）
         /// 确认执行删除 / 修改（唯一写入路径是 AIAssistantService → EventService）
-    private func confirmDestructive() {
-        guard let command = model.pendingCommand else { return }
-        switch AIAssistantService.shared.execute(command) {
-        case .success(.deletedEvent):
-            // 重复日程删的是整条序列，回执必须说清楚（否则用户以为只删了「明天那次」）
-            model.showSuccess(model.wasRepeatingTarget
-                        ? NSLocalizedString("已删除整条重复日程。", comment: "AI助手")
-                        : NSLocalizedString("已删除该日程。", comment: "AI助手"))
-            model.resetAfterCompletion()
-        case .success(.updatedEvent):
-            model.showSuccess(model.wasRepeatingTarget
-                        ? NSLocalizedString("已修改整条重复日程的时间，提醒已重建。", comment: "AI助手")
-                        : NSLocalizedString("已修改时间，提醒已重建。", comment: "AI助手"))
-            model.resetAfterCompletion()
-        case .success:
-            break
-        case .failure(let error):
-            model.present(error)
-        }
-    }
-
-        /// 确认创建：唯一写入路径是 AIAssistantService → EventService（AI 不直连数据层）
+            /// 确认创建：唯一写入路径是 AIAssistantService → EventService（AI 不直连数据层）
         /// 提示里显示的日期（跟随设备区域；如 10月1日 / Oct 1）
         /// 行内成功提示：自动消失（不打断连续输入，也省掉模态的两次点击）
     ///

@@ -163,4 +163,26 @@ final class AIAssistantModel {
             present(error)
         }
     }
+
+    /// 破坏性操作的确认执行（删除 / 修改都走这里）
+    func confirmDestructive() {
+        guard let command = pendingCommand else { return }
+        switch execute(command) {
+        case .success(.deletedEvent):
+            // 重复日程删的是整条序列，回执必须说清楚（否则用户以为只删了「明天那次」）
+            showSuccess(wasRepeatingTarget
+                        ? NSLocalizedString("已删除整条重复日程。", comment: "AI助手")
+                        : NSLocalizedString("已删除该日程。", comment: "AI助手"))
+            resetAfterCompletion()
+        case .success(.updatedEvent):
+            showSuccess(wasRepeatingTarget
+                        ? NSLocalizedString("已修改整条重复日程的时间，提醒已重建。", comment: "AI助手")
+                        : NSLocalizedString("已修改时间，提醒已重建。", comment: "AI助手"))
+            resetAfterCompletion()
+        case .success:
+            break
+        case .failure(let error):
+            present(error)
+        }
+    }
 }
