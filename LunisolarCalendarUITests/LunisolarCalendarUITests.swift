@@ -347,6 +347,8 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 回到日历 Tab —— 这一步就是用户报告里「不立刻出现」的地方
         app.tabBars.buttons["日历"].tap()
 
+        // 同理：目标行可能在折叠线以下；先滚到它出现再断言存在性
+        _ = scrollUntilVisible(app, eventRow(app, title: title))
         XCTAssertTrue(eventRow(app, title: title).waitForExistence(timeout: 10),
                       """
                       AI 创建后切回日历，「今日安排」里必须立刻出现「\(title)」。
@@ -920,7 +922,10 @@ final class LunisolarCalendarUITests: XCTestCase {
         } else {
             app.tabBars.buttons["我的"].tap()
         }
+        // 设置页是惰性 List：**不在屏内的行根本不在元素树里**（iPad 侧早就因此加过滚动，
+        // iPhone 侧一直没加）。不滚动直接 waitForExistence 会假红 —— 先滚到它出现。
         let importRow = app.buttons["导入 / 恢复数据"]
+        _ = scrollUntilVisible(app, importRow)
         XCTAssertTrue(importRow.waitForExistence(timeout: 5),
                       "设置页应有名为「导入 / 恢复数据」的按钮（无标签的 Menu 时代是按名字找不到的）")
         XCTAssertGreaterThanOrEqual(importRow.frame.height, 44,
