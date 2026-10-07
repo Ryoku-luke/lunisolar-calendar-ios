@@ -261,7 +261,11 @@ struct CountdownEditor: View {
         guard let min = cal.date(from: minComps), let max = cal.date(from: maxComps) else {
             // 理论不可达；兜底为"今天前后各一年"，避免空范围导致 DatePicker 崩溃
             let now = Date()
-            return now.addingTimeInterval(-365 * 86400)...now.addingTimeInterval(365 * 86400)
+            // 用日历加减而不是 ±365×86400 秒：秒数在跨夏令时切换时会偏移一小时，
+        // 再乘以 365 就可能让边界日多算/少算一天；而「±一年」本就该按日历算。
+        let start = Calendar.current.date(byAdding: .year, value: -1, to: now) ?? now
+        let end = Calendar.current.date(byAdding: .year, value: 1, to: now) ?? now
+        return start...end
         }
         return min...max
     }()

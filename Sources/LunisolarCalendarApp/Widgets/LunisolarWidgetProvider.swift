@@ -140,7 +140,7 @@ public struct LunisolarWidgetTimelineProvider: TimelineProvider {
             comps.day = 1
             comps.hour = 0
             comps.minute = 5
-            return cal.date(byAdding: comps, to: today) ?? today.addingTimeInterval(86400)
+            return cal.date(byAdding: comps, to: today) ?? cal.date(byAdding: .day, value: 1, to: today) ?? today
         }()
         completion(Timeline(entries: entries, policy: .after(nextRefresh)))
     }
