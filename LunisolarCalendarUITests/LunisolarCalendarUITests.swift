@@ -342,6 +342,19 @@ final class LunisolarCalendarUITests: XCTestCase {
         let confirm = element(app, ID.aiConfirm)
         XCTAssertTrue(confirm.waitForExistence(timeout: 6),
                       "应出现「确认创建」预览（若这里是解析失败，说明输入未被识别）")
+
+        // 决定性诊断（2026-10-07 加）：**确认之前**就检查预览卡里的标题。
+        // 本用例的失败现象是"创建后回日历找不到那一行"，而它有两种完全不同的病因：
+        //   (a) 输入被输入法改写（模拟器上是简体拼音键盘，typeText 输入中文并不可靠）→ 标题就不是 title；
+        //   (b) App 创建/落点有问题。
+        // 在预览卡这一步断言标题，就能把两者区分开：这里红 = (a)，这里绿而最后红 = (b)。
+        // 手动路径已证实 App 正常（用户截图：说「今天 17 点提醒我测试」→ 今日安排里出现了「测试」）。
+        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5),
+                      """
+                      预览卡里应显示解析出的标题「\(title)」。
+                      若这里失败，说明**输入被输入法改写了**（不是 App 的创建逻辑问题）：
+                      请检查模拟器键盘设置，或改用不触发输入法的方式输入。
+                      """)
         confirm.tap()
 
         // 回到日历 Tab —— 这一步就是用户报告里「不立刻出现」的地方
