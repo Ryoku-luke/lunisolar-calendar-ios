@@ -34,7 +34,7 @@ struct AIAssistantView: View {
 
                 Section {
                     #if canImport(UIKit)
-                    AutoFocusTextView(text: $model.input, focused: $model.inputFocused, onSubmit: { parse() })
+                    AutoFocusTextView(text: $model.input, focused: $model.inputFocused, onSubmit: { model.parse() })
                         .frame(minHeight: 100)
                         // 占位文案在 SwiftUI 侧渲染：不写进 UITextView，避免被当成用户输入
                         // （对齐 UITextView 的 textContainerInset 12 + 行内 padding 5）
@@ -76,10 +76,10 @@ struct AIAssistantView: View {
                 }
 
                 Section {
-                    // 不做 disabled：空输入时点击会走 parse() 并给出明确提示；
+                    // 不做 disabled：空输入时点击会走 model.parse() 并给出明确提示；
                     // 否则按钮静默不可点，用户感受为「点了没反应」。
                     // 整行可点 + 加粗居中，减少"这个按钮在哪/要不要点"的犹豫
-                        AIParseButton(onParse: { parse() })
+                        AIParseButton(onParse: { model.parse() })
                     .accessibilityIdentifier(AccessibilityID.aiParse)
                 }
 
@@ -127,7 +127,7 @@ struct AIAssistantView: View {
             // ⌘+Return 在此兜底（焦点不在输入框时也可用）。
             .onKeyPress { press in
                 if press.modifiers.contains(.command), press.key == .return {
-                    parse()
+                    model.parse()
                     return .handled
                 }
                 return .ignored
@@ -177,7 +177,7 @@ struct AIAssistantView: View {
                     Button(NSLocalizedString("完成", comment: "AI助手")) { model.inputFocused = false }
                     Spacer()
                     // 键盘上的「解析」：省去"先收键盘再点列表里的按钮"这一往返
-                    Button(NSLocalizedString("解析", comment: "AI助手")) { parse() }
+                    Button(NSLocalizedString("解析", comment: "AI助手")) { model.parse() }
                         .font(.body.weight(.semibold))
                 }
             }
@@ -191,71 +191,7 @@ struct AIAssistantView: View {
     // 现已收口为 Parser → Validator → AIAssistantService 三层；本视图只保留「预览 + 确认」。
 
     /// 解析 → 校验 → 预览（创建）/ 立即执行（查询）/ 确认（删除、修改）
-    private func parse() {
-        // 新一轮解析：清掉上一轮的预览 / 结果 / 待确认操作
-        model.draft = nil
-        model.queryResults = nil
-        model.queryDate = nil
-        model.destructiveTarget = nil
-        model.destructiveLabel = nil
-        // 行内提示也一起清：上一轮的红字不该继续挂在新一轮的输入旁边
-        model.completedMessage = nil
-        model.inlineError = nil
-        model.pendingCommand = nil
-
-        // 收起键盘：否则预览 / 结果区被键盘挡在屏幕下方，用户会以为「点了没反应」
-        model.inputFocused = false
-
-        switch AICommandParser.parse(model.input) {
-        case .failure(let error):
-            model.present(error)
-
-        case .success(let command):
-            switch command {
-            case .queryAgenda(let range):
-                // 只读查询：无需确认步骤，直接执行并展示结果
-                switch AIAssistantService.shared.execute(command) {
-                case .success(.queried(let events)):
-                    model.queryResults = events
-                    model.queryDate = range.baseDate
-                case .success:
-                    break // 查询路径不会出现其他结果类型
-                case .failure(let error):
-                    model.present(error)
-                }
-
-            case .createEvent:
-                // 预览前先校验：让用户在「确认创建」之前就看到问题（如时间已过去）
-                switch AICommandValidator.validate(command) {
-                case .failure(let error):
-                    model.present(error)
-                case .success(.createEvent(let validated)):
-                    model.draft = validated
-                case .success:
-                    break
-                }
-
-            case .deleteEvent, .updateEvent:
-                // 破坏性操作：先校验，再解析出**唯一**目标，进入确认步骤（未确认不执行）
-                switch AICommandValidator.validate(command) {
-                case .failure(let error):
-                    model.present(error)
-                case .success(let validated):
-                    guard let criteria = AICommandPresentation.destructiveCriteria(of: validated) else { return }
-                    switch AIAssistantService.shared.resolveTarget(criteria) {
-                    case .failure(let error):
-                        model.present(error)
-                    case .success(let target):
-                        model.destructiveTarget = target
-                        model.pendingCommand = validated
-                        model.destructiveLabel = AICommandPresentation.destructiveLabel(for: validated)
-                    }
-                }
-            }
-        }
-    }
-
-    /// 删除 / 修改命令共用的定位条件
+        /// 删除 / 修改命令共用的定位条件
 
     /// 待确认命令里「用户所说的那一天」（只有删除 / 修改意图带它）
         /// 确认区「当前时间」显示的值。

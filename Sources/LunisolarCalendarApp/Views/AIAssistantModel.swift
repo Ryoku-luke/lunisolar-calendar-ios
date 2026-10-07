@@ -117,14 +117,20 @@ final class AIAssistantModel {
     private let execute: (AIStructuredCommand) -> Result<AIExecutionOutcome, AICommandError>
     private let eventByID: (String) -> CalendarEvent?
 
+    private let resolveTarget: (AIEventCriteria) -> Result<CalendarEvent, AICommandError>
+
     init(execute: @escaping (AIStructuredCommand) -> Result<AIExecutionOutcome, AICommandError> = {
                 AIAssistantService.shared.execute($0)
             },
          eventByID: @escaping (String) -> CalendarEvent? = {
                 EventStore.shared.eventBy(idString: $0)
+            },
+         resolveTarget: @escaping (AIEventCriteria) -> Result<CalendarEvent, AICommandError> = {
+                AIAssistantService.shared.resolveTarget($0)
             }) {
         self.execute = execute
         self.eventByID = eventByID
+        self.resolveTarget = resolveTarget
     }
 
     private static let dayFormatter: DateFormatter = {
@@ -183,6 +189,71 @@ final class AIAssistantModel {
             break
         case .failure(let error):
             present(error)
+        }
+    }
+
+    /// 解析一句话：能执行就直接执行，需确认就出预览卡，失败走行内提示
+    func parse() {
+        // 新一轮解析：清掉上一轮的预览 / 结果 / 待确认操作
+        draft = nil
+        queryResults = nil
+        queryDate = nil
+        destructiveTarget = nil
+        destructiveLabel = nil
+        // 行内提示也一起清：上一轮的红字不该继续挂在新一轮的输入旁边
+        completedMessage = nil
+        inlineError = nil
+        pendingCommand = nil
+
+        // 收起键盘：否则预览 / 结果区被键盘挡在屏幕下方，用户会以为「点了没反应」
+        inputFocused = false
+
+        switch AICommandParser.parse(input) {
+        case .failure(let error):
+            present(error)
+
+        case .success(let command):
+            switch command {
+            case .queryAgenda(let range):
+                // 只读查询：无需确认步骤，直接执行并展示结果
+                switch execute(command) {
+                case .success(.queried(let events)):
+                    queryResults = events
+                    queryDate = range.baseDate
+                case .success:
+                    break // 查询路径不会出现其他结果类型
+                case .failure(let error):
+                    present(error)
+                }
+
+            case .createEvent:
+                // 预览前先校验：让用户在「确认创建」之前就看到问题（如时间已过去）
+                switch AICommandValidator.validate(command) {
+                case .failure(let error):
+                    present(error)
+                case .success(.createEvent(let validated)):
+                    draft = validated
+                case .success:
+                    break
+                }
+
+            case .deleteEvent, .updateEvent:
+                // 破坏性操作：先校验，再解析出**唯一**目标，进入确认步骤（未确认不执行）
+                switch AICommandValidator.validate(command) {
+                case .failure(let error):
+                    present(error)
+                case .success(let validated):
+                    guard let criteria = AICommandPresentation.destructiveCriteria(of: validated) else { return }
+                    switch resolveTarget(criteria) {
+                    case .failure(let error):
+                        present(error)
+                    case .success(let target):
+                        destructiveTarget = target
+                        pendingCommand = validated
+                        destructiveLabel = AICommandPresentation.destructiveLabel(for: validated)
+                    }
+                }
+            }
         }
     }
 }

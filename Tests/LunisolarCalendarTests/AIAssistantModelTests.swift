@@ -158,3 +158,60 @@ final class AIAssistantModelDestructiveTests: XCTestCase {
         XCTAssertNil(m.completedMessage, "失败时不能出现成功回执")
     }
 }
+
+// MARK: - parse：解析入口（安全相关：未确认前绝不写数据）
+
+@MainActor
+final class AIAssistantModelParseTests: XCTestCase {
+
+    private final class Box { var commands: [AIStructuredCommand] = [] }
+
+    private func model(_ box: Box,
+                       execute: @escaping (AIStructuredCommand) -> Result<AIExecutionOutcome, AICommandError>
+                           = { _ in .success(.queried([])) }) -> AIAssistantModel {
+        AIAssistantModel(execute: { cmd in box.commands.append(cmd); return execute(cmd) },
+                         eventByID: { _ in nil },
+                         resolveTarget: { _ in .failure(AICommandError(kind: .notFound, message: "不需要")) })
+    }
+
+    /// 解析失败（听不懂的话）→ 只给行内错误，**绝不**落到执行层
+    func testUnparsableInputNeverReachesTheExecutor() {
+        let box = Box()
+        let m = model(box)
+        m.input = "asdfghjkl 这不是一句话"
+        m.parse()
+        XCTAssertNotNil(m.inlineError, "听不懂时应有行内错误提示")
+        XCTAssertTrue(box.commands.isEmpty, "解析失败绝不能调用执行层")
+        XCTAssertNil(m.draft)
+        XCTAssertNil(m.queryResults)
+    }
+
+    /// 创建类指令 → 只出**预览卡**，**不执行**（用户点确认前不能写数据）
+    func testCreateCommandOnlyShowsPreviewAndDoesNotExecute() {
+        let box = Box()
+        let m = model(box)
+        m.input = "明天下午3点提醒我开会"
+        m.parse()
+        XCTAssertNotNil(m.draft, "创建类指令应出预览卡")
+        XCTAssertTrue(box.commands.isEmpty,
+                      "创建必须等用户确认，解析阶段绝不能写数据（否则会出现未确认就建好的日程）")
+    }
+
+    /// 新一轮解析要清掉上一轮的残留（预览/结果/红字/待确认），否则旧内容会挂在新输入旁边
+    func testParseClearsPreviousRoundState() {
+        let box = Box()
+        let m = model(box)
+        m.draft = AICreateEventDraft(title: "旧的", startDate: Date(), repeatRule: .never)
+        m.inlineError = "旧的红字"
+        m.completedMessage = "旧的成功"
+        m.pendingCommand = .deleteEvent(AIDeleteEventDraft(criteria: AIEventCriteria(
+            day: Date(), timeHint: nil, keyword: "")))
+        m.input = "asdfghjkl 这不是一句话"
+        m.parse()
+        XCTAssertNil(m.draft, "上一轮预览必须清掉")
+        XCTAssertNil(m.completedMessage, "上一轮成功文案必须清掉")
+        XCTAssertNotEqual(m.inlineError, "旧的红字", "上一轮红字必须清掉")
+        XCTAssertNil(m.pendingCommand, "上一轮待确认命令必须清掉")
+        XCTAssertFalse(m.inputFocused, "解析时应收起键盘，否则结果区被键盘挡住")
+    }
+}
