@@ -396,14 +396,9 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 而键盘会盖住 Tab 栏 —— 失败现场的元素树证实了这点（可见内容只剩 ~336pt + 键盘，
         // App 仍停在 AI 助手界面）。所以直接点「日历」等于点在键盘上，根本没切 Tab。
         // App 支持「点击空白处收起键盘」，先点一下上方空白，确认键盘消失再切 Tab。
-        if app.keyboards.element.exists {
-            // 用本仓库 testFlow3b 已经验证过的做法：点输入框**之外**的分区标题收起键盘。
-            // （我先前的坐标点击 (0.5, 0.12) 落在导航栏上、收不起键盘 —— 实测键盘仍在。）
-            app.staticTexts["用一句话描述"].firstMatch.tap()
-            if !app.keyboards.element.waitForNonExistence(timeout: 3) {
-                XCTFail("点分区标题后键盘仍未收起：后续点 Tab 会落在键盘上（这正是本用例此前的失败原因）")
-            }
-        }
+        dismissKeyboardIfNeeded(app)
+        XCTAssertFalse(app.keyboards.element.exists,
+                       "切 Tab 前键盘必须已收起；否则点「日历」会落在键盘上，界面不会切换")
         app.tabBars.buttons["日历"].tap()
 
         // 目标行可能在折叠线以下，**并且是切 Tab 之后异步出现的**：
@@ -913,7 +908,21 @@ final class LunisolarCalendarUITests: XCTestCase {
     /// ⚠️ 涉及设置页的新用例请一律走这里。Flow 15/16 最初直接点 TabBar，
     /// iPad 通道因此红了两条——而 Flow 13 早就踩过同一个坑（同一类错误犯了两次，
     /// 所以这次把它固化成唯一入口，而不是再写一遍 if）。
+    /// 收起键盘（若它在）。**为什么必须有**：`create`/聚焦输入框后焦点会回到输入框
+    /// （有意的 UX），键盘随之弹起并**盖住底部 Tab 栏** —— 此时点 Tab 会落在键盘上，
+    /// 界面根本没切换。testFlow3c 的真实病因就是这个（失败现场元素树：可见内容只剩 ~336pt + 键盘）。
+    ///
+    /// 只用「点输入框之外的分区标题」这一招：仓库里 testFlow3b 已验证有效；而整页
+    /// 「点空白收键盘」手势**早已被移除**（历史 bug：会把刚点起来的键盘立刻收掉）。
+    private func dismissKeyboardIfNeeded(_ app: XCUIApplication) {
+        guard app.keyboards.element.exists else { return }
+        let sectionTitle = app.staticTexts["用一句话描述"].firstMatch
+        if sectionTitle.exists { sectionTitle.tap() }
+        _ = app.keyboards.element.waitForNonExistence(timeout: 3)
+    }
+
     private func openSettings(_ app: XCUIApplication) {
+        dismissKeyboardIfNeeded(app)          // 键盘会盖住 Tab/侧栏，先收掉再切界面
         if UIDevice.current.userInterfaceIdiom == .pad {
             tapSidebarItem(app, ID.iPadSidebarSettings)
         } else {
@@ -987,6 +996,7 @@ final class LunisolarCalendarUITests: XCTestCase {
         if isPad {
             tapSidebarItem(app, ID.iPadSidebarSettings)
         } else {
+            dismissKeyboardIfNeeded(app)      // 审计遍历后可能仍留着键盘（否则点不中 Tab）
             app.tabBars.buttons["我的"].tap()
         }
         // 设置页是惰性 List：**不在屏内的行根本不在元素树里**（iPad 侧早就因此加过滚动，
