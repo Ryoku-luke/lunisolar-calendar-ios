@@ -397,8 +397,12 @@ final class LunisolarCalendarUITests: XCTestCase {
         // App 仍停在 AI 助手界面）。所以直接点「日历」等于点在键盘上，根本没切 Tab。
         // App 支持「点击空白处收起键盘」，先点一下上方空白，确认键盘消失再切 Tab。
         if app.keyboards.element.exists {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
-            _ = app.keyboards.element.waitForNonExistence(timeout: 3)
+            // 用本仓库 testFlow3b 已经验证过的做法：点输入框**之外**的分区标题收起键盘。
+            // （我先前的坐标点击 (0.5, 0.12) 落在导航栏上、收不起键盘 —— 实测键盘仍在。）
+            app.staticTexts["用一句话描述"].firstMatch.tap()
+            if !app.keyboards.element.waitForNonExistence(timeout: 3) {
+                XCTFail("点分区标题后键盘仍未收起：后续点 Tab 会落在键盘上（这正是本用例此前的失败原因）")
+            }
         }
         app.tabBars.buttons["日历"].tap()
 
