@@ -394,10 +394,18 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 回到日历 Tab —— 这一步就是用户报告里「不立刻出现」的地方
         app.tabBars.buttons["日历"].tap()
 
-        // 同理：目标行可能在折叠线以下；先滚到它出现再断言存在性
-        _ = scrollUntilVisible(app, eventRow(app, title: title))
-        XCTAssertTrue(eventRow(app, title: title).waitForExistence(timeout: 10),
-                      """
+        // 目标行可能在折叠线以下，**并且是切 Tab 之后异步出现的**：
+        // 初版"先滚动 8 次（约 2 秒）再等 10 秒"顺序是错的 —— 滚动在行出现之前就跑完了，
+        // 之后的等待虽长，但它已在屏外，依然找不到。这里改为**等与滚交替**。
+        let aiRow = eventRow(app, title: title)
+        var aiRowAppeared = false
+        for _ in 0..<8 {
+            if aiRow.exists { aiRowAppeared = true; break }
+            _ = aiRow.waitForExistence(timeout: 2)     // 先给异步创建/刷新留时间
+            if aiRow.exists { aiRowAppeared = true; break }
+            app.swipeUp()                               // 再往下找
+        }
+        XCTAssertTrue(aiRowAppeared, """
                       AI 创建后切回日历，「今日安排」里必须立刻出现「\(title)」。
                       若失败：数据层已证明写入正确，问题在视图未重新求值（观察失效），
                       而不是事件没存进去。当前界面树：
