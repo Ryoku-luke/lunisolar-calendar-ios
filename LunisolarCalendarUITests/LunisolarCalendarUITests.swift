@@ -79,7 +79,33 @@ final class LunisolarCalendarUITests: XCTestCase {
         app.launchArguments += extra
         app.launch()
         dismissSystemPermissionPromptIfNeeded()
+        // 语言自检（2026-10-12 加）：把"环境假设失败"收成**一条清晰失败**。
+        // 起因：模拟器系统语言为 en 时，`-AppleLanguages` 兜底**实测没兜住**，界面走英文，
+        // 于是所有按中文标签查找的用例各自以看不懂的方式变红（当时我正在查的 testFlow13/Flow3c
+        // 就是被它连累的）。这里主动确认首屏确实是中文，并给出可直接照做的修复命令。
+        if expectedLanguageIsSimplifiedChinese {
+            let probe = UIDevice.current.userInterfaceIdiom == .pad
+                ? app.descendants(matching: .any).matching(identifier: ID.iPadSidebarCalendar).firstMatch
+                : app.tabBars.buttons["日历"]
+            if !probe.waitForExistence(timeout: 5) {
+                XCTFail("""
+                        App 未按 zh-Hans 启动：找不到「日历」入口，界面语言与 launchArguments 不一致。
+                        这**不是业务缺陷**，而是模拟器环境问题。常见修复（任选）：
+                          xcrun simctl shutdown all
+                          xcrun simctl spawn booted defaults write -g AppleLanguages -array zh-Hans
+                          xcrun simctl spawn booted defaults write -g AppleLocale -string zh_Hans_CN
+                        然后重跑。（SHOTS_LANG 指定其它语言的截图巡游不受此检查约束。）
+                        """)
+            }
+        }
         return app
+    }
+
+    /// 是否期望简体中文界面：默认是；SHOTS_LANG 指定其它语言时不做本自检
+    /// （截图巡游本来就要出其它语言/地区的图）。
+    private var expectedLanguageIsSimplifiedChinese: Bool {
+        let lang = ProcessInfo.processInfo.environment["SHOTS_LANG"] ?? "zh-Hans"
+        return lang != "en" && lang != "ja" && lang != "zh-Hant"
     }
 
     /// 关掉可能挡住首屏的系统权限弹窗（当前只有定位会弹）。
