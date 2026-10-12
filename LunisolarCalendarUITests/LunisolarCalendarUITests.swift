@@ -392,6 +392,14 @@ final class LunisolarCalendarUITests: XCTestCase {
         confirm.tap()
 
         // 回到日历 Tab —— 这一步就是用户报告里「不立刻出现」的地方
+        // ⚠️ create 之后焦点会回到输入框（**有意的 UX**：方便继续输入），键盘随之弹起，
+        // 而键盘会盖住 Tab 栏 —— 失败现场的元素树证实了这点（可见内容只剩 ~336pt + 键盘，
+        // App 仍停在 AI 助手界面）。所以直接点「日历」等于点在键盘上，根本没切 Tab。
+        // App 支持「点击空白处收起键盘」，先点一下上方空白，确认键盘消失再切 Tab。
+        if app.keyboards.element.exists {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+            _ = app.keyboards.element.waitForNonExistence(timeout: 3)
+        }
         app.tabBars.buttons["日历"].tap()
 
         // 目标行可能在折叠线以下，**并且是切 Tab 之后异步出现的**：
