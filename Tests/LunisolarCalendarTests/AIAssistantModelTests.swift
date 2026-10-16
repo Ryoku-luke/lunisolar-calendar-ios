@@ -223,3 +223,65 @@ final class AIAssistantModelParseTests: XCTestCase {
         XCTAssertFalse(m.inputFocused, "解析时应收起键盘，否则结果区被键盘挡住")
     }
 }
+
+// MARK: - P4-2 ③ 补测（2026-10-17）：查询分支 + 重复日程文案分支
+
+@MainActor
+final class AIAssistantModelBranchTests: XCTestCase {
+
+    private final class Box { var commands: [AIStructuredCommand] = [] }
+
+    private func model(_ box: Box,
+                       execute: @escaping (AIStructuredCommand) -> Result<AIExecutionOutcome, AICommandError>
+                           = { _ in .success(.queried([])) }) -> AIAssistantModel {
+        AIAssistantModel(execute: { cmd in box.commands.append(cmd); return execute(cmd) },
+                         eventByID: { _ in nil },
+                         resolveTarget: { _ in .failure(AICommandError(kind: .notFound, message: "不需要")) })
+    }
+
+    /// 查询分支：只读查询**可以直接执行**（不需要确认），并把结果/日期填进模型
+    func testQueryAgendaRunsImmediatelyAndFillsResults() {
+        let box = Box()
+        let m = model(box)
+        // 「明天有什么安排」在解析器的查询白名单里，解析结果稳定（不依赖 locale）
+        m.input = "明天有什么安排"
+        m.parse()
+
+        XCTAssertNil(m.inlineError, "查询不应报错")
+        XCTAssertNil(m.draft, "查询不该出现创建预览卡")
+        XCTAssertEqual(box.commands.count, 1, "只读查询可直接执行一次")
+        XCTAssertEqual(m.queryResults?.isEmpty, true, "替身返回空结果，应被填入 queryResults")
+        XCTAssertNotNil(m.queryDate, "应记录被查询的日期（用于结果标题）")
+    }
+
+    /// 重复日程的破坏性回执**必须与单次不同**：删/改重复日程会影响整条序列，
+    /// 回执不说清楚，用户会以为只动了「明天那次」。
+    func testRepeatingTargetGetsWholeSeriesWording() {
+        let repeating = CalendarEvent(title: "每周例会", startDate: Date(), repeatRule: .weekly)
+        let single = CalendarEvent(title: "一次性事项", startDate: Date(), repeatRule: .never)
+
+        // ① 判定本身
+        let probe = AIAssistantModel(execute: { _ in .success(.deletedEvent(UUID())) }, eventByID: { _ in nil })
+        probe.destructiveTarget = repeating
+        XCTAssertTrue(probe.wasRepeatingTarget, "每周重复应被判为重复日程")
+        probe.destructiveTarget = single
+        XCTAssertFalse(probe.wasRepeatingTarget, "一次性日程不该被判为重复日程")
+
+        // ② 回执文案必须分流
+        func receipt(for target: CalendarEvent) -> String? {
+            let m = AIAssistantModel(execute: { _ in .success(.deletedEvent(UUID())) },
+                                    eventByID: { _ in nil })
+            m.destructiveTarget = target
+            m.pendingCommand = .deleteEvent(AIDeleteEventDraft(
+                criteria: AIEventCriteria(day: Date(), timeHint: nil, keyword: "")))
+            m.confirmDestructive()
+            return m.completedMessage
+        }
+        let repeatingMsg = receipt(for: repeating)
+        let singleMsg = receipt(for: single)
+        XCTAssertFalse(repeatingMsg?.isEmpty ?? true, "重复日程删除后必须有回执")
+        XCTAssertFalse(singleMsg?.isEmpty ?? true, "一次性删除后必须有回执")
+        XCTAssertNotEqual(repeatingMsg, singleMsg,
+                          "两条回执必须不同：重复日程要说清影响整条序列，否则用户以为只删了这一次")
+    }
+}
