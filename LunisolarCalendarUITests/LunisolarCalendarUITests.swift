@@ -84,10 +84,11 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 于是所有按中文标签查找的用例各自以看不懂的方式变红（当时我正在查的 testFlow13/Flow3c
         // 就是被它连累的）。这里主动确认首屏确实是中文，并给出可直接照做的修复命令。
         if expectedLanguageIsSimplifiedChinese {
-            let probe = UIDevice.current.userInterfaceIdiom == .pad
-                ? app.descendants(matching: .any).matching(identifier: ID.iPadSidebarCalendar).firstMatch
-                : app.tabBars.buttons["日历"]
-            if !probe.waitForExistence(timeout: 5) {
+            // 探针必须两种形态都可靠：**导航栏标题「日历」**在 iPhone/iPad 首屏都存在
+            // （iPad 侧栏 identifier 启动瞬间未必就绪 —— 我第一版用它，结果 iPad 通道
+            //  5 条用例假失败，是本会话我自己引入的一次回归）。
+            let probe = app.navigationBars["日历"]
+            if !probe.waitForExistence(timeout: 15) {
                 XCTFail("""
                         App 未按 zh-Hans 启动：找不到「日历」入口，界面语言与 launchArguments 不一致。
                         这**不是业务缺陷**，而是模拟器环境问题。常见修复（任选）：
