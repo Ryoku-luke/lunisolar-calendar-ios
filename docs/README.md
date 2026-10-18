@@ -53,7 +53,7 @@ SWIFT_EXTRA_ARGS=--disable-sandbox Tools/run_tests.sh
 | 单元测试 | **436 用例 × 4 时区（上海/UTC/纽约/奥克兰）0 失败** ✓ |
 | 构建 | 0 警告（SwiftPM 缓存环境噪声除外，脚本已白名单） |
 | 五通道（本地 3 + iPhone UI + iPad UI） | 全绿 ✓ |
-| UI 用例 | **22 条**（最近一次 iPhone 全量：22 executed / 4 skipped / 0 failures）|
+| UI 用例 | **23 条**（新增 Flow20：最大辅助字号可用性；最近一次 iPhone 全量为 22 条时 22/4/0）|
 | 同步 | 经代理（`http://127.0.0.1:7892`，仅本仓库局部配置）独立核实，本地 = 远端 ✓ |
 | 重构进度 | **P4-1 完成**（`CalendarMonthView` 592 → 358 行）· **P4-2 ② 完成**（`AIAssistantView` 657 → 425 行） |
 
