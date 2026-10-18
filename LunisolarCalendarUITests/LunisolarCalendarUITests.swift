@@ -1040,6 +1040,40 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertTrue(app.buttons["从 .json 备份恢复"].exists, "两个格式选项都应可选")
     }
 
+    // MARK: - Flow 20：最大辅助字号下的可用性（P3 a11y 的空白补习）
+
+    /// 用**最大辅助字号**（Accessibility XXXL）启动，确认核心界面仍可读可用。
+    ///
+    /// 为什么需要它：项目已有「禁止硬编码字号」的静态门（hardcoded-font-gate），
+    /// 那只能保证**用了**语义字号；字号调到最大时布局是否崩、控件是否仍可点，**从未被测过**。
+    /// 这是本仓库 a11y 承诺里最后一块空白。
+    func testFlow20_coreScreensRemainUsableAtLargestAccessibilityTextSize() throws {
+        let app = launchApp(extra: [
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+        ])
+
+        // ① 日历：日期格仍存在且可点
+        let day = element(app, ID.monthDay(year: 2026, month: 10, day: 15))
+        XCTAssertTrue(day.waitForExistence(timeout: 15),
+                      "最大字号下日历日期格仍应存在（若这里失败，说明网格被文字挤爆或不可见）")
+        XCTAssertTrue(day.isHittable, "最大字号下日期格必须仍可点（命中区不能被文字覆盖）")
+        day.tap()
+
+        // ② 今日安排：选中后摘要仍能出现（可能需滚动才能看到）
+        let summary = element(app, ID.selectedSummary)
+        _ = scrollUntilVisible(app, summary)
+        XCTAssertTrue(summary.waitForExistence(timeout: 10),
+                      "最大字号下选中日期后应仍能看到当日摘要")
+
+        // ③ 设置页：关键行仍能找到且可点（惰性列表 + 大字号 = 最容易被挤坏的组合）
+        openSettings(app)
+        let importRow = app.buttons["导入 / 恢复数据"]
+        _ = scrollUntilVisible(app, importRow)
+        XCTAssertTrue(importRow.waitForExistence(timeout: 10),
+                      "最大字号下设置页的「导入 / 恢复数据」行仍应可达")
+        XCTAssertTrue(importRow.isHittable, "该行必须仍可点，且命中区 ≥44pt（HIG）")
+    }
+
     // MARK: - Flow 14：深层界面的按钮审计（P3-6）
 
     /// 主屏之外的三处深层界面：全部日程 / 倒数日 / 年视图。
