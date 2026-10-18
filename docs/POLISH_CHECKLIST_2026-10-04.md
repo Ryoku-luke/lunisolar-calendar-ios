@@ -823,3 +823,23 @@ Xcode 27 在本项目上会持续打印 `IDESchemeActionSDKRecord: operatingSyst
 <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232)` —— 这是 Xcode 解析 SDK build
 版本号（位数）的内部噪声，**与代码无关**，两条 UI 通道仍 TEST SUCCEEDED。
 它只是让日志变吵；不要为此改动项目配置。
+
+## P4-1 遗留两项的处置：**带理由关闭**（2026-10-18）
+
+### 1. `swipeMonthGesture` 不迁入 `MonthGridInteraction`（关闭）
+
+**原计划**：把横滑翻月手势从视图扩展移进状态模型。**复核后判为不该做**：
+- 它**已经**在自己的文件里（`Views/CalendarMonthSwipeGesture.swift`，42 行），视图侧只剩一行调用；
+  原笔记"它还在视图里"的说法**已过时**；
+- 它是 `some Gesture` 的**构造器**，天然属于视图装配层；放进 `MonthGridInteraction`（状态模型）
+  会让模型依赖 SwiftUI 的手势类型，把"状态"与"装配"的边界搅浑；
+- 收益是**纯架构洁癖**，代价是触碰一条**红线手势**（`testFlow17` 横滑翻月）—— 不划算。
+
+### 2. `gridCache` 暂不迁出视图（保留，附条件）
+
+它是视图内的 `@State`，只服务于 `body` 的取数；迁入 `@Observable` 模型会引入
+"缓存与观察刷新"的耦合问题，且当前没有可测收益。**触发迁移的条件**：若将来出现
+"缓存导致视图刷新异常"或"需要在模型层单测缓存命中"，再做；届时须配一条能证伪的测试。
+
+> 原则：技术债清单里的条目**不是必须做完的作业** —— 复核后价值不成立时，
+> **写明理由关闭**比"为洁癖冒险改红线"更负责。
