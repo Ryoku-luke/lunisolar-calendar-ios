@@ -23,6 +23,7 @@
 | 计划与进展（历史）| `PROGRESS_ANALYSIS_2026-09-25.md` · `PROJECT_IMPROVEMENTS_2026-09-20.md` · `HANDOFF_REVIEW_2026-09-30.md` · `ALLDAY_TIMEZONE_PLAN.md` |
 | 数据来源与专项 | `HUANGLI_DATA_SOURCE.md` · `DATA_UPDATE_RUNBOOK.md` |
 | 工程与发布 | `XCODE_BUILD_GUIDE.md` · `DEVICE_TEST_CHECKLIST.md` · `ENTITLEMENTS.md` · `APP_STORE.md` |
+| 缺陷审查 | `BUG_AUDIT_2026-10-19.md`（全量静态扫描 + 逐条裁定 + 覆盖盲区）|
 | AI 协作上下文 | `AI_DEVELOPMENT_CONTEXT.md` |
 
 ## 一点五、验证一律走 `Tools/run_tests.sh`（血泪规则）
