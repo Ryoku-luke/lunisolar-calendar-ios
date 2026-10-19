@@ -78,7 +78,7 @@ struct AllEventsView: View {
                 Toggle(isOn: $showCompleted) {
                     Label(NSLocalizedString("显示已完成", comment: ""), systemImage: "checkmark.circle")
                 }
-                .tint(Color.appTint)
+                .tint(Color.todayAccent)
             } footer: {
                 Text(summaryText)
             }
@@ -109,7 +109,7 @@ struct AllEventsView: View {
                         Label(String(format: NSLocalizedString("显示已过去（%d 条）", comment: ""), derived.past.count),
                               systemImage: "clock.arrow.circlepath")
                     }
-                    .tint(Color.appTint)
+                    .tint(Color.todayAccent)
                 }
                 if showPast {
                     ForEach(derived.pastGroups, id: \.day) { group in
@@ -242,7 +242,7 @@ struct AllEventsView: View {
                     HStack(spacing: AppTheme.Spacing.sm) {
                         Image(systemName: selection.contains(event.id) ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: 20)) // N-9-exempt: SF Symbol 图标固定方框（豁免①）
-                            .foregroundStyle(selection.contains(event.id) ? Color.appTint : Color.tertiaryLabel)
+                            .foregroundStyle(selection.contains(event.id) ? Color.todayAccent : Color.tertiaryLabel)
                         EventRow(event: event, showsCompleteToggle: false)
                     }
                 }
@@ -300,7 +300,7 @@ struct AllEventsView: View {
                 Label(String(format: NSLocalizedString("完成 %d 项", comment: ""), selection.count),
                       systemImage: "checkmark.circle")
                     .font(AppTheme.Font.subheadline.weight(.semibold))
-                    .foregroundStyle(selection.isEmpty ? Color.tertiaryLabel : Color.appTint)
+                    .foregroundStyle(selection.isEmpty ? Color.tertiaryLabel : Color.todayAccent)
             }
             .buttonStyle(.plain)
             .pressableFeedback()

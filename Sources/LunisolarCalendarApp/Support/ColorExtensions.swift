@@ -110,6 +110,10 @@ extension Color {
     }
     /// 主题强调色：现代暖调靛蓝（比纯系统蓝更有辨识度，且与节日红/金不冲突）
     /// 浅色模式：柔和的蓝紫调，高级感；深色模式：提亮饱和度保持活力
+    /// **跟随今天**的节日强调色；当天无节日时与 `appTint` 完全相同。
+    /// 供"app 外壳"类界面使用（全局 tint 已在 App 根部接好；这里用于显式 foregroundStyle 处）。
+    static var todayAccent: Color { DayAccent(date: Date()).controlTint }
+
     static var appTint: Color {
         Color(UIColor { tc in
             tc.userInterfaceStyle == .dark
@@ -121,6 +125,10 @@ extension Color {
     // macOS / Linux fallback（固定色值）
     static var festiveRed: Color { Color(red: 0.77, green: 0.10, blue: 0.10) }
     static var festiveGold: Color { Color(red: 0.88, green: 0.72, blue: 0.35) }
+    /// **跟随今天**的节日强调色；当天无节日时与 `appTint` 完全相同。
+    /// 供"app 外壳"类界面使用（全局 tint 已在 App 根部接好；这里用于显式 foregroundStyle 处）。
+    static var todayAccent: Color { DayAccent(date: Date()).controlTint }
+
     static var appTint: Color { Color(red: 75/255, green: 111/255, blue: 242/255) } // #4B6FF2 设计稿主色
     #endif
 }

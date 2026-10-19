@@ -41,7 +41,7 @@ struct CountdownView: View {
                     CountdownRow(event: event, today: today) { islandProblem = $0 }
                         // 卡片点击深链直达 / iPad Inspector 选中：高亮对应条目，帮助用户一眼定位
                         .listRowBackground((focusID == event.id || selectedID == event.id)
-                                           ? Color.appTint.opacity(0.12) : nil)
+                                           ? Color.todayAccent.opacity(0.12) : nil)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             // iPad：点击 = 选中（右栏 Inspector 跟随显示详情）；
@@ -180,11 +180,11 @@ private struct CountdownRow: View {
                         Text(isOnIsland ? NSLocalizedString("灵动岛显示中", comment: "") : NSLocalizedString("显示在灵动岛", comment: ""))
                             .font(.caption2.weight(.semibold))
                     }
-                    .foregroundStyle(isOnIsland ? Color.appTint : Color.secondaryLabel)
+                    .foregroundStyle(isOnIsland ? Color.todayAccent : Color.secondaryLabel)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(Capsule().fill(isOnIsland ? Color.appTint.opacity(0.12) : Color.clear))
-                    .overlay(Capsule().stroke(isOnIsland ? Color.appTint.opacity(0.35) : Color.clear,
+                    .background(Capsule().fill(isOnIsland ? Color.todayAccent.opacity(0.12) : Color.clear))
+                    .overlay(Capsule().stroke(isOnIsland ? Color.todayAccent.opacity(0.35) : Color.clear,
                                               lineWidth: AppTheme.Stroke.hair))
                     .contentShape(Capsule())
                 }
@@ -304,7 +304,7 @@ struct CountdownEditor: View {
                             Text(e)
                                 .font(AppTheme.Font.compactNumber)
                                 .frame(width: 44, height: 44)
-                                .background(emoji == e ? Color.appTint.opacity(0.2) : Color.clear)
+                                .background(emoji == e ? Color.todayAccent.opacity(0.2) : Color.clear)
                                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.sm))
                                 .onTapGesture { emoji = e }
                         }

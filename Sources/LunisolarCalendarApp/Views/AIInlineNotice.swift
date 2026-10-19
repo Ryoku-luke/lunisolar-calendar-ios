@@ -39,7 +39,7 @@ struct AIInlineNotice: View {
                         } label: {
                             Label(NSLocalizedString("去看看", comment: "AI助手：日程建在别的日子时跳过去"), systemImage: "arrow.right.circle")
                         }
-                        .buttonStyle(SecondaryActionButtonStyle(accent: Color.appTint))
+                        .buttonStyle(SecondaryActionButtonStyle(accent: Color.todayAccent))
                         .accessibilityIdentifier(AccessibilityID.aiGoToCreatedDay)
                     }
                 }

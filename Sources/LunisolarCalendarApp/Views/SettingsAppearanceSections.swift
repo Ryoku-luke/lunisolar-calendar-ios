@@ -43,7 +43,7 @@ extension SettingsView {
                     }
                 } icon: {
                     Image(systemName: "calendar")
-                        .foregroundStyle(Color.appTint)
+                        .foregroundStyle(Color.todayAccent)
                 }
             }
         }

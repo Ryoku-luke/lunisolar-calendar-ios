@@ -48,10 +48,10 @@ struct QingheSettingsHeroCard: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.tertiaryLabel)
                 }
-                .foregroundStyle(Color.appTint)
+                .foregroundStyle(Color.todayAccent)
                 .padding(.horizontal, 12)
                 .frame(minHeight: 40)
-                .background(Color.appTint.opacity(0.08), in: RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous))
+                .background(Color.todayAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous))
             }
             .buttonStyle(.plain)
         }
@@ -61,7 +61,7 @@ struct QingheSettingsHeroCard: View {
                                  shape: RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: AppTheme.Radius.xl, style: .continuous)
-                        .stroke(Color.appTint.opacity(0.10), lineWidth: 0.6)
+                        .stroke(Color.todayAccent.opacity(0.10), lineWidth: 0.6)
                 }
         }
         .shadow(color: Color.black.opacity(0.04), radius: 8, y: 3)
