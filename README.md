@@ -7,7 +7,7 @@
 一款 iOS / iPadOS 日历应用：内置公历↔农历转换、黄历宜忌、日程/记事/提醒、天气、倒数日灵动岛、本地通知、iCloud 同步。界面遵循 iOS 26/27 设计规范（Liquid Glass 液态玻璃 + 节日自适应主题色 + 按压反馈），支持 iPhone / iPad 自适应布局，兼容 iOS 27 / iPadOS 27。
 
 > **接手开发请先读这两份**：
-> - [`docs/HANDOFF_REVIEW_2026-09-30.md`](docs/HANDOFF_REVIEW_2026-09-30.md) —— 现状是什么、哪里有坑：
+> - [`docs/docs/archive/HANDOFF_REVIEW_2026-09-30.md`](docs/docs/archive/HANDOFF_REVIEW_2026-09-30.md) —— 现状是什么、哪里有坑：
 >   逐条核对到代码与行号的接手审查报告，含已修复的阻断性缺陷、必读陷阱、
 >   未决高危项（CloudKit 版本校验、喜神/财神用柱）与有确定到期日的数据悬崖。
 >   它同时更正了本仓库多份旧文档里与代码不符的结论。
@@ -125,7 +125,7 @@ Tools/                           # 一键验证脚本（run_tests.sh）/ 截图�
 Tests/LunisolarCalendarTests/    # 单元测试（走 SwiftPM；数量以 swift test 输出为准，README 不写死）
 LunisolarCalendarUITests/        # UI 测试（XCUITest，走 Xcode 工程）
 docs/                            # 上架 / 签名 / 构建 / 真机复测清单 / 进度分析与待做方案
-                                 # ⚠️ 接手先读 HANDOFF_REVIEW_2026-09-30.md（现状）+ EXECUTION_PLAN_2026-09-30.md（排期）
+                                 # ⚠️ 接手先读 docs/archive/HANDOFF_REVIEW_2026-09-30.md（现状）+ EXECUTION_PLAN_2026-09-30.md（排期）
 ```
 
 ## 构建与测试
@@ -230,7 +230,7 @@ target `LunisolarCalendarUITests` 已在 Xcode 工程里，测试文件是
 第三条更是只断言 `staticTexts.count > 5` 的空断言。）
 
 所有用例带 `-uitest-empty-store` 启动参数：store 落临时目录，跑在干净空库上，
-「空态 / 首次使用」类断言与真实容器数据无关（详见 `docs/UI_POLISH_REVIEW_2026-09-25.md` §7.1）。
+「空态 / 首次使用」类断言与真实容器数据无关（详见 `docs/docs/archive/UI_POLISH_REVIEW_2026-09-25.md` §7.1）。
 
 覆盖内容按《UI 整体界面打磨总报告》§55 的真实用户路径：
 

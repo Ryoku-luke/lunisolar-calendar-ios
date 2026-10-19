@@ -5,7 +5,7 @@
 > `CalendarMonthView.swift`（`isIPadSplit` 分支）、`YearOverviewView.swift`、
 > `CountdownDetailView.swift`、`DayDetailView.swift`。
 > 优先级：**P0 = 功能/布局硬伤，P1 = 体验打磨，P2 = 细节**。
-> 配套总评审见 `UI_DESIGN_REVIEW_2026-09-27.md`（本文不重复通用项）。
+> 配套总评审见 `archive/UI_DESIGN_REVIEW_2026-09-27.md`（本文不重复通用项）。
 > **施工进度**：批次 0（P1-3）、批次 1（P2-1）、批次 2（P0-4 第 2 条）与
 > **批次 3（P0-1 / P0-2 / P0-3 / P0-4 第 1 条 / P1-1）已完成 2026-09-27**，其余未动；
 > P0-1 已裁决并落地走方案 C，实施记录见文末。
@@ -140,7 +140,7 @@ Inspector 的"扫一眼"价值被削弱。
 **进度（2026-09-27）**：第 **1**、**2** 条**已完成**，第 3 条未做。
 
 - 第 2 条（「更多黄历」改 2 列网格）随通用评审 P1-1 一并落地，改法见
-  `UI_DESIGN_REVIEW_2026-09-27.md` 的 P1-1 落地记录；
+  `archive/UI_DESIGN_REVIEW_2026-09-27.md` 的 P1-1 落地记录；
 - 第 1 条（右栏 `min: 320`（不变）/ `ideal: 380 → 480` / `max: 460 → 560`）已在批次 3
   落地，改的是 `iPadRootView.detailColumn` 里的两处（日历节与倒数日节）。
   ⚠️ **本文要求的三档设备截图未做**：12.9" 横屏（1024pt）下「侧栏 + 中栏 340~480 +
@@ -228,7 +228,7 @@ Flow 4 只走「日历 ↔ 倒数日」，两者都是 `.all`，从未覆盖无 
 `Date.FormatStyle(date: .long, time: .omitted)`（默认 locale = `.autoupdatingCurrent`）。
 同类问题在通用评审 P1-3 里一并清完——**全仓实为 9 处**，本文只点到 iPad 这一处，
 通用评审当时也漏了 `CountdownView.swift`、`AllEventsView.swift`、`CalendarMonthGridBuilder.swift`
-与 `AICommandValidator.swift`（详见 `UI_DESIGN_REVIEW_2026-09-27.md` 的 P1-3 落地记录）。
+与 `AICommandValidator.swift`（详见 `archive/UI_DESIGN_REVIEW_2026-09-27.md` 的 P1-3 落地记录）。
 ⚠️ **英/日界面截图验收未做**，并入截图批次。
 
 ### ~~P1-4 分屏 / Slide Over 回退路径回归~~ **清单已落地（2026-09-27）；分屏本体只能真机**

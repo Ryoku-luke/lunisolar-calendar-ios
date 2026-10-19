@@ -1,6 +1,6 @@
 # 执行计划（2026-09-30 起）
 
-> 配套文档：[`HANDOFF_REVIEW_2026-09-30.md`](HANDOFF_REVIEW_2026-09-30.md)（证据与行号都在那里，本文件只排「怎么做、按什么顺序、如何验收」）。
+> 配套文档：[`archive/HANDOFF_REVIEW_2026-09-30.md`](archive/HANDOFF_REVIEW_2026-09-30.md)（证据与行号都在那里，本文件只排「怎么做、按什么顺序、如何验收」）。
 >
 > **排序原则**：
 > 1. **先建「可验证」，再改代码**。当前项目 CI 必红、无版本控制，任何改动都无法证伪。
@@ -92,7 +92,7 @@
 
      **新增（3）**
      ```
-     docs/HANDOFF_REVIEW_2026-09-30.md
+     docs/archive/HANDOFF_REVIEW_2026-09-30.md
      docs/EXECUTION_PLAN_2026-09-30.md
      Assets/Assets.xcassets/AppIcon.appiconset/Contents.json   ← 远端缺失，必须补提交
      ```
@@ -1114,7 +1114,7 @@ macOS + iOS SDK 构建；UI 测试 target 类型检查。
 | **P4-1 无障碍系统化** | 把 `AccessibilityID` 补到倒数日行、全部日程行、设置行；统一 `accessibilityLabel` 规范 | P3 完成后 |
 | **P4-2 数据可信度标识** | `AI_DEVELOPMENT_CONTEXT.md` §6 要求区分「验证库 vs 算法推算」。**注意：现有 `.discreteDB` 枚举不是可信度信号**（离散库就是算法自身输出，0 差异） | 需先有真实外部数据源 |
 | **P4-3 大文件拆分** | `Stores/EventStore.swift` 992 行、`Widgets/LunisolarWidgetViews.swift` 894 行、`Sync/RealCloudKitProvider.swift` 636 行 | 仅在改动这些文件时顺带拆 |
-| **P4-4 目录重排** | `Features/`/`Domain/`/`DesignSystem/` | **不建议做**：功能等价、只改路径（详见 `PROGRESS_ANALYSIS_2026-09-25.md` §4-C） |
+| **P4-4 目录重排** | `Features/`/`Domain/`/`DesignSystem/` | **不建议做**：功能等价、只改路径（详见 `archive/PROGRESS_ANALYSIS_2026-09-25.md` §4-C） |
 
 ---
 
