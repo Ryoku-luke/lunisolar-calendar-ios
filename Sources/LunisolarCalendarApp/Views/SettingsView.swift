@@ -169,7 +169,7 @@ struct SettingsView: View {
             Toggle(isOn: $liveActivityEnabled) {
                 Label(NSLocalizedString("时间胶囊", comment: "Live Activities"), systemImage: "rectangle.topthird.inset.filled")
             }
-            .tint(Color.appTint)
+            .tint(controlTint)
             // P1：设置变化即时反馈——关闭时立即结束所有活动，开启时给出提示
             .onChange(of: liveActivityEnabled) { _, newValue in
                 if !newValue {

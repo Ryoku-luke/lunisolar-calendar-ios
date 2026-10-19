@@ -48,7 +48,7 @@ public struct AppRootView: View {
             .environment(store)
             .environment(countdownStore)
             .preferredColorScheme(appearance.colorScheme)
-            .tint(Color.appTint)
+            .tint(DayAccent(date: Date()).controlTint)
             // 报告 §44：尊重「减弱动态效果」——开启时在**整棵子树**内关闭动画。
             // 为什么集中在这里而不是逐个动画点加判断：全仓 22 处动画调用散在 6 个文件里，
             // 逐处判断既容易漏、也会出现「有的降级有的没降」的不一致。
@@ -134,7 +134,7 @@ struct PhoneTabRootView: View {
             .tabItem { Label(NSLocalizedString("我的", comment: ""), systemImage: "person.crop.circle") }
             .tag(NavigationCoordinator.PhoneTab.me)
         }
-        .tint(Color.appTint)
+        .tint(DayAccent(date: Date()).controlTint)
     }
 }
 //

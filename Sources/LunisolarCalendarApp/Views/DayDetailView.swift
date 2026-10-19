@@ -179,7 +179,7 @@ struct DayDetailView: View {
                     .font(AppTheme.Font.caption)
                     .foregroundStyle(Color.secondaryLabel)
             }
-            .tint(Color.appTint)
+            .tint(controlTint)
             // 节假日 / 调休 / 节气标记（类型与节气名取自 summary）
             let holidayType = summary.holidayType
             let termName = summary.solarTermName
