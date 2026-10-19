@@ -53,7 +53,6 @@
 "产品需求评审会" = "Product Requirements Review";
 "仅在所选日期出现一次" = "Appears once on the selected date";
 "今天" = "Today";
-"今天很空闲" = "Free Today";
 "今日安排" = "Today's Schedule";
 "今日待办" = "Today's To-Dos";
 "今日必读，保持学习节奏" = "Today's must-read — keep the streak going";
@@ -102,7 +101,6 @@
 "冲突处理" = "Conflict Handling";
 "冻雨" = "Freezing Rain";
 "准时" = "On Time";
-"切换到春节图标" = "Switch to Spring Festival Icon";
 "创建时间" = "Created";
 "创建：「今天/明天/后天」或「M月D日」+「X点X分」+ 标题；查询：「今天/明天有什么安排」。本地解析，不上传数据。" = "Create: “today / tomorrow” or “M/D” + “X:XX” + title; query: “what's on today/tomorrow”. Parsed on device — nothing is uploaded.";
 "删除" = "Delete";
@@ -111,7 +109,6 @@
 "删除此%@" = "Delete This %@";
 "删除选中的 %d 条日程？" = "Delete %d selected events?";
 "前往系统设置开启" = "Open System Settings";
-"加载天气…" = "Loading Weather…";
 "正在加载" = "Loading";
 "劳动节" = "Labour Day";
 "勿做" = "Avoid";
@@ -165,13 +162,10 @@
 "导入 / 恢复数据" = "Import / Restore";
 "导入、恢复与系统数据" = "Import, Restore & System Data";
 "已导入日程" = "Imported Event";
-"导入冲突策略" = "Import Conflict Strategy";
 "导入前：冲突处理策略" = "Before Import: Conflict Handling";
 "导入失败：%@" = "Import Failed: %@";
 "导入失败：文件无法读取或编码不支持（请使用 UTF-8 文本）" = "Import Failed: File unreadable or unsupported encoding (use UTF-8 text)";
 "导入失败：无权限读取该文件，请重新选择" = "Import Failed: No permission to read this file. Please choose another.";
-"导入完成" = "Import Complete";
-"导入完成：新增 %d · 更新 %d" = "Import Complete: %d added · %d updated";
 "导入结果" = "Import Results";
 "将永久删除所有日程、提醒和设置，此操作无法撤销" = "Permanently deletes all events, reminders and settings. This cannot be undone.";
 "小寒" = "Minor Cold";
@@ -221,7 +215,6 @@
 "推送 / 拉取" = "Push / Pull";
 "提醒" = "Reminder";
 "提醒与时间胶囊" = "Reminders & Live Activities";
-"提醒通知" = "Reminder Notifications";
 "搜索标题 / 地点 / 备注" = "Search title / location / notes";
 "支持范围：%d 年 1 月 1 日 — %d 年 12 月 31 日" = "Supported range: Jan 1, %d — Dec 31, %d";
 "支持范围：%d 年 1 月 — %d 年 12 月" = "Supported range: Jan %d — Dec %d";
@@ -230,7 +223,6 @@
 "数据" = "Data";
 "数据与同步" = "Data & Sync";
 "数据损坏" = "Data Corrupted";
-"数据统计" = "Data Statistics";
 "新增 %d" = "Added %d";
 "新建%@" = "New %@";
 "新建倒数日" = "New Countdown";
@@ -264,7 +256,6 @@
 "显示节假日" = "Show Holidays";
 "显示节气" = "Show Solar Terms";
 "晴" = "Clear";
-"暂不支持该年份" = "This year is not supported yet";
 "暂无数据" = "No Data";
 "暂无该日天气" = "No Weather for This Day";
 "暂时无法启动实时活动，请稍后重试。" = "Live Activity can't start right now. Please try again later.";
@@ -274,7 +265,6 @@
 "最近同步" = "Last Sync";
 "月" = "Month";
 "未启用" = "Disabled";
-"未导入任何新日程（已存在或数据无效）" = "No new events imported (already exist or invalid data)";
 "未开启" = "Off";
 "未开启通知权限，提醒将不会送达" = "Notification permission is off — reminders won't be delivered";
 "未知" = "Unknown";
@@ -315,15 +305,12 @@
 "添加" = "Add";
 "添加备注" = "Add Note";
 "清和日历" = "Qinghe Calendar";
-"清和日历 © 2026 清和日历工作室。\\n保留所有权利。" = "Qinghe Calendar © 2026 Qinghe Calendar Studio.\\nAll rights reserved.";
 "清和日历支持的日期范围为 %d 年 1 月至 %d 年 12 月。" = "Qinghe Calendar supports dates from Jan %d through Dec %d.";
 "清明" = "Pure Brightness";
 "清明节" = "Qingming Festival";
 "清空全部 %d 条" = "Clear All %d Items";
 "清空全部日程" = "Clear All Events";
-"清空后无法恢复，请谨慎操作" = "Cannot be undone. Please proceed with caution.";
 "清空输入" = "Clear Input";
-"时间胶囊未开启" = "Live Activities Off";
 "点击右上角添加生日、纪念日或重要日期" = "Tap + to add birthdays, anniversaries or important dates";
 "状态" = "Status";
 "环形进度条展示今日已完成日程占比，激励每日打卡，Medium 尺寸还显示节日与冲煞信息。" = "The circular progress ring shows today's completion rate; Medium size also shows festivals and clashes.";
@@ -333,7 +320,6 @@
 "用一句话描述" = "Describe it in one sentence";
 "用户协议" = "Terms of Use";
 "申请通知权限" = "Request Notification Permission";
-"留在当前页" = "Stay on This Page";
 "白露" = "White Dew";
 "确定要删除这个%@吗？删除后无法恢复。" = "Delete this %@? This cannot be undone.";
 "确认" = "Confirm";
@@ -380,7 +366,6 @@
 "该时间" = "that time";
 "请先输入一句话，例如「明天下午3点提醒我开会」。" = "Type something first, for example “Remind me about the meeting tomorrow at 3 PM”.";
 "请在「设置 → 通知 → 清和日历」中开启「实时活动」后重试。" = "Enable Live Activities in Settings → Notifications → Qinghe Calendar, then retry.";
-"请在此范围内选择，或点击上方「回到今天」直接返回。" = "Pick a date within this range, or tap “Back to Today” above.";
 "请将日期调整到 %d 年 1 月 1 日 — %d 年 12 月 31 日之间。" = "Please choose a date between Jan 1, %d and Dec 31, %d.";
 "请打开 App 刷新" = "Open App to Refresh";
 "请求过频" = "Too Many Requests";
