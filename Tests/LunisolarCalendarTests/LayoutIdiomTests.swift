@@ -12,46 +12,29 @@ import SwiftUI
 
 final class LayoutIdiomTests: XCTestCase {
 
-    // MARK: P3-2 的验收：iPhone 横屏保留 TabBar
+    // MARK: 尺寸判据（折叠屏适配后的唯一判据）
 
-    /// **回归点**：iPhone + regular（横屏）必须走单栏
-    func testPhoneInLandscapeKeepsPhoneLayout() {
-        XCTAssertFalse(
-            LayoutIdiom.usesSplitLayout(device: .phone, horizontalSizeClass: .regular),
-            "iPhone 横屏（regular 宽度）必须保留底部 TabBar，不能切成 iPad 三栏"
-        )
+    private func split(_ w: CGFloat, _ h: CGFloat) -> Bool {
+        LayoutIdiom.usesSplitLayout(size: CGSize(width: w, height: h))
     }
 
-    func testPhoneInPortraitKeepsPhoneLayout() {
-        XCTAssertFalse(LayoutIdiom.usesSplitLayout(device: .phone, horizontalSizeClass: .compact))
+    /// **Duo 外屏（实测 466×678）必须不分栏** —— 回退那次的教训，钉死
+    func testDuoOuterScreenDoesNotSplit() { XCTAssertFalse(split(466, 678)) }
+
+    /// Duo 内屏（7.6"，估算 ≈700×1000）应分栏；iPad Pro 11 行为不变
+    func testDuoInnerScreenAndPadSplit() {
+        XCTAssertTrue(split(700, 1000))
+        XCTAssertTrue(split(834, 1194))
     }
 
-    // MARK: 另一侧的验收：iPad 仍然三栏
+    /// iPhone 横屏（宽而矮）保持手机布局（P3-2 意图不变）
+    func testPhoneLandscapeDoesNotSplit() { XCTAssertFalse(split(932, 430)) }
 
-    func testPadInRegularWidthUsesSplitLayout() {
-        XCTAssertTrue(LayoutIdiom.usesSplitLayout(device: .pad, horizontalSizeClass: .regular))
-    }
+    /// iPad 分屏窄栏回落单栏（既有行为不变）
+    func testPadCompactWidthDoesNotSplit() { XCTAssertFalse(split(320, 1024)) }
 
-    /// iPad 分屏/侧拉的窄栏（compact）保持既有行为：回落单栏
-    func testPadInCompactWidthKeepsSingleColumn() {
-        XCTAssertFalse(LayoutIdiom.usesSplitLayout(device: .pad, horizontalSizeClass: .compact),
-                       "iPad 侧拉窄栏回落到单栏是既有行为，本次不改变")
-    }
-
-    // MARK: 边界
-
-    /// 宽度未知时保守走单栏：宁可少切一次三栏，也不要误切
-    func testUnknownSizeClassFallsBackToSingleColumn() {
-        XCTAssertFalse(LayoutIdiom.usesSplitLayout(device: .pad, horizontalSizeClass: nil))
-        XCTAssertFalse(LayoutIdiom.usesSplitLayout(device: .phone, horizontalSizeClass: nil))
-    }
-
-    func testNonIPadDevicesNeverUseSplitLayout() {
-        for device in [LayoutIdiom.Device.mac, .other] {
-            XCTAssertFalse(LayoutIdiom.usesSplitLayout(device: device, horizontalSizeClass: .regular),
-                           "\(device) 不该走 iPad 分栏")
-        }
-    }
+    /// 未知尺寸保守单栏
+    func testUnknownSizeFallsBackToSingleColumn() { XCTAssertFalse(split(0, 0)) }
 
     // MARK: 反例守卫：证明这条修复针对的是真实差异
 
@@ -63,7 +46,7 @@ final class LayoutIdiomTests: XCTestCase {
         XCTAssertTrue(sizeClassOnly(.regular), "只按宽度时 iPhone 横屏=regular → 被判成分栏（缺陷）")
         XCTAssertNotEqual(
             sizeClassOnly(.regular),
-            LayoutIdiom.usesSplitLayout(device: .phone, horizontalSizeClass: .regular),
+            LayoutIdiom.usesSplitLayout(size: CGSize(width: 932, height: 430)),
             "新判据必须在 iPhone 横屏上给出与旧判据不同的结论（否则这次修复等于没做）"
         )
     }

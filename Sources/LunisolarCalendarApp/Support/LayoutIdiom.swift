@@ -31,9 +31,20 @@ public enum LayoutIdiom {
     ///   - iPhone 横屏（regular）→ false：手机永远保留底部 TabBar（P3-2 的验收）；
     ///   - iPad 分屏/侧拉（compact）→ false：窄栏回落单栏（保持既有行为）；
     ///   - 宽度未知（`nil`，例如某些宿主环境）→ false：保守走单栏，避免误切三栏。
-    public static func usesSplitLayout(device: Device,
-                                       horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
-        device == .pad && horizontalSizeClass == .regular
+    /// 分栏阈值：`min(宽, 高) >= 600pt` 才分栏。
+    ///
+    /// 依据（全部实测）：
+    /// · **尺寸类别不可靠**：iPhone Duo 外屏（466×678pt）同样报 `.regular`，
+    ///   只看宽度或类别会把它切成三栏（2026-10-22 实机跑验证后回退）；
+    /// · **只看宽度也不够**：iPhone Plus/Max 横屏宽 932pt，会误分栏（P3-2 的既有缺陷）；
+    /// · `min(宽,高)` 同时表达"宽而高"：外屏 466 ✗ / 横屏 430 ✗ / 内屏 ≈700 ✓ / iPad ✓。
+    /// 两端都远离 600（外屏差 134，内屏余 ≥70），不依赖精确值。
+    public static let splitMinSideThreshold: CGFloat = 600
+
+    /// 纯尺寸判据（便于单测；不读任何环境）
+    public static func usesSplitLayout(size: CGSize) -> Bool {
+        guard size.width > 0, size.height > 0 else { return false }
+        return min(size.width, size.height) >= splitMinSideThreshold
     }
 
     /// 当前设备形态。
@@ -61,7 +72,21 @@ public enum LayoutIdiom {
     /// 读 `current`（MainActor 隔离）→ 本方法也必须 `@MainActor`；调用方均为视图 body。
     @MainActor
     public static func usesSplitLayout(horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
-        usesSplitLayout(device: current, horizontalSizeClass: horizontalSizeClass)
+        _ = horizontalSizeClass   // 保留参数以兼容调用点；判据只看尺寸（见上）
+        return usesSplitLayout(size: currentSceneSize)
+    }
+
+    /// 当前场景**窗口**尺寸（不是屏幕尺寸 —— 折叠屏上二者不同，`UIScreen.main` 会给出错误答案）。
+    /// 每次读取都取最新值：窗口尺寸变化（展开/合起/分屏）后 SwiftUI 重新求值 body 即拿到新值。
+    @MainActor
+    public static var currentSceneSize: CGSize {
+        #if canImport(UIKit)
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        return scene?.coordinateSpace.bounds.size ?? .zero
+        #else
+        return .zero
+        #endif
     }
 }
 #endif
