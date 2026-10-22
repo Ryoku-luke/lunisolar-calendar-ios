@@ -311,7 +311,7 @@ final class LunisolarCalendarUITests: XCTestCase {
                           "仅在 iPhone 上运行（iPad 为侧栏布局，无 TabBar；AI 助手在 iPad 的入口路径不同）")
         let app = launchApp()
 
-        app.tabBars.buttons["AI 助手"].tap()
+        tabButton(app, "AI 助手").tap()
 
         let input = element(app, ID.aiInput)
         XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
@@ -374,7 +374,7 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 唯一标题，避免模拟器容器里的历史数据混淆断言
         let title = "AI日程-\(Int(Date().timeIntervalSince1970))"
 
-        app.tabBars.buttons["AI 助手"].tap()
+        tabButton(app, "AI 助手").tap()
 
         let input = element(app, ID.aiInput)
         XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
@@ -426,7 +426,7 @@ final class LunisolarCalendarUITests: XCTestCase {
         dismissKeyboardIfNeeded(app)
         XCTAssertFalse(app.keyboards.element.exists,
                        "切 Tab 前键盘必须已收起；否则点「日历」会落在键盘上，界面不会切换")
-        app.tabBars.buttons["日历"].tap()
+        tabButton(app, "日历").tap()
 
         // 目标行可能在折叠线以下，**并且是切 Tab 之后异步出现的**：
         // 初版"先滚动 8 次（约 2 秒）再等 10 秒"顺序是错的 —— 滚动在行出现之前就跑完了，
@@ -471,7 +471,7 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 「日程-<ts>」——断言会去找一个永远不存在的字符串。
         // 这里用不含日期词的标题；其原样落库已由探针验证。
         let title = "AI跨日日程-\(Int(Date().timeIntervalSince1970))"
-        app.tabBars.buttons["AI 助手"].tap()
+        tabButton(app, "AI 助手").tap()
 
         let input = element(app, ID.aiInput)
         XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
@@ -535,7 +535,7 @@ final class LunisolarCalendarUITests: XCTestCase {
                           "仅在 iPhone 上运行（iPad 为侧栏布局，无 TabBar；AI 助手在 iPad 的入口路径不同）")
         let app = launchApp()
 
-        app.tabBars.buttons["AI 助手"].tap()
+        tabButton(app, "AI 助手").tap()
 
         let input = element(app, ID.aiInput)
         XCTAssertTrue(input.waitForExistence(timeout: 10), "AI 助手应有输入区")
@@ -717,7 +717,7 @@ final class LunisolarCalendarUITests: XCTestCase {
                           "仅在 iPhone 上运行（iPad 为侧栏布局，无 TabBar；设置在 iPad 走月历菜单的 sheet 入口）")
         let app = launchApp()
 
-        app.tabBars.buttons["我的"].tap()
+        tabButton(app, "我的").tap()
 
         // 同步状态行在「可用（有开关）」与「不可用（只有说明）」两个分支里都存在，
         // 恰好渲染其中之一，因此是跨账号状态都成立的可断言点。
@@ -948,12 +948,22 @@ final class LunisolarCalendarUITests: XCTestCase {
         _ = app.keyboards.element.waitForNonExistence(timeout: 3)
     }
 
+    /// 取 Tab 元素 —— **不依赖 `app.tabBars`**。
+    ///
+    /// 为什么：iOS 27 的 `TabView` 不再以 `TabBar` 形式暴露元素（实测 iPhone Duo 上
+    /// `tabBars == 0`，而四个 Tab 仍在，呈自适应竖排栏；失败时的元素树里它们是
+    /// `Button, label: 'Calendar'` 这类按钮）。所以先找 tabBars，找不到就退回 buttons。
+    private func tabButton(_ app: XCUIApplication, _ title: String) -> XCUIElement {
+        let byTabBar = app.tabBars.buttons[title]
+        return byTabBar.exists ? byTabBar : app.buttons[title]
+    }
+
     private func openSettings(_ app: XCUIApplication) {
         dismissKeyboardIfNeeded(app)          // 键盘会盖住 Tab/侧栏，先收掉再切界面
         if UIDevice.current.userInterfaceIdiom == .pad {
             tapSidebarItem(app, ID.iPadSidebarSettings)
         } else {
-            app.tabBars.buttons["我的"].tap()
+            tabButton(app, "我的").tap()
         }
     }
 
@@ -998,7 +1008,7 @@ final class LunisolarCalendarUITests: XCTestCase {
         if isPad {
             tapSidebarItem(app, ID.iPadSidebarCalendar)
         } else {
-            app.tabBars.buttons["日历"].tap()
+            tabButton(app, "日历").tap()
         }
         var calendarDump: [String] = []
         for button in app.buttons.allElementsBoundByIndex where button.exists {
@@ -1024,7 +1034,7 @@ final class LunisolarCalendarUITests: XCTestCase {
             tapSidebarItem(app, ID.iPadSidebarSettings)
         } else {
             dismissKeyboardIfNeeded(app)      // 审计遍历后可能仍留着键盘（否则点不中 Tab）
-            app.tabBars.buttons["我的"].tap()
+            tabButton(app, "我的").tap()
         }
         // 设置页是惰性 List：**不在屏内的行根本不在元素树里**（iPad 侧早就因此加过滚动，
         // iPhone 侧一直没加）。不滚动直接 waitForExistence 会假红 —— 先滚到它出现。
