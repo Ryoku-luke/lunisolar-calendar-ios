@@ -953,6 +953,18 @@ final class LunisolarCalendarUITests: XCTestCase {
     /// 为什么：iOS 27 的 `TabView` 不再以 `TabBar` 形式暴露元素（实测 iPhone Duo 上
     /// `tabBars == 0`，而四个 Tab 仍在，呈自适应竖排栏；失败时的元素树里它们是
     /// `Button, label: 'Calendar'` 这类按钮）。所以先找 tabBars，找不到就退回 buttons。
+    /// 底部 Tab 栏的"可测替代物"：优先 `tabBars`，iOS 27 上退回**第一个 Tab 按钮**。
+    /// 用途：断言"内容没被底部栏压住"——iOS 27 的 TabView 不再以 TabBar 呈现，
+    /// 直接断言 `tabBars.exists` 会假红（iPhone Duo 实测 tabBars == 0）。
+    private func bottomTabElement(_ app: XCUIApplication) -> XCUIElement? {
+        if app.tabBars.firstMatch.exists { return app.tabBars.firstMatch }
+        for title in ["日历", "黄历", "AI 助手", "我的"] {
+            let b = app.buttons[title]
+            if b.exists { return b }
+        }
+        return nil
+    }
+
     private func tabButton(_ app: XCUIApplication, _ title: String) -> XCUIElement {
         let byTabBar = app.tabBars.buttons[title]
         return byTabBar.exists ? byTabBar : app.buttons[title]
@@ -981,7 +993,7 @@ final class LunisolarCalendarUITests: XCTestCase {
             ]
         }
         return ["日历", "黄历", "AI 助手", "我的"].map { title in
-            (title, { app.tabBars.buttons[title].tap() })
+            (title, { self.tabButton(app, title).tap() })
         }
     }
 
@@ -1343,13 +1355,15 @@ final class LunisolarCalendarUITests: XCTestCase {
         // 再加一条量化的：网格最后一行必须整体位于底部 TabBar 之上。
         // `isHittable` 只看元素中心点——被 TabBar 压住一点点也仍算「可点」；
         // 这条把「完全没被压住」也钉住，两条合起来才是「打开即见整月」。
-        let tabBar = app.tabBars.firstMatch
-        XCTAssertTrue(tabBar.exists, "应有底部 TabBar")
-        XCTAssertLessThanOrEqual(last.frame.maxY, tabBar.frame.minY,
-                                 """
-                                 网格最后一行不应被底部 TabBar 压住：
-                                 日期格底边 y=\(last.frame.maxY)，TabBar 顶边 y=\(tabBar.frame.minY)。
-                                 """)
+        let tabBar = bottomTabElement(app)
+        XCTAssertNotNil(tabBar, "应有底部 Tab 栏（iOS 27 上它可能不是 TabBar 类型）")
+        if let tabBar {
+            XCTAssertLessThanOrEqual(last.frame.maxY, tabBar.frame.minY,
+                                     """
+                                     网格最后一行不应被底部 Tab 栏压住：
+                                     日期格底边 y=\(last.frame.maxY)，栏顶边 y=\(tabBar.frame.minY)。
+                                     """)
+        }
     }
 
     // MARK: - 截图巡游（仅在 Tools/shots.sh --tour 时运行）
@@ -1556,7 +1570,7 @@ final class LunisolarCalendarUITests: XCTestCase {
     /// 实测一次要 2~3 秒（4 次切换就是十几秒）；而每站「到了没」由调用方等一个
     /// 该页独有的元素来保证，一次约 1 秒，加起来反而更快也更准。
     private func switchTab(_ app: XCUIApplication, _ title: String) {
-        app.tabBars.buttons[tourLabel(title)].tap()
+        tabButton(app, tourLabel(title)).tap()
     }
 
     /// 经月历工具栏菜单进二级页并截图（iPhone 上进「全部日程 / 倒数日」的唯一路径，见 Flow 6/7/8）
@@ -1612,8 +1626,9 @@ final class LunisolarCalendarUITests: XCTestCase {
 
         let summary = element(app, ID.selectedSummary)
         XCTAssertTrue(summary.waitForExistence(timeout: 5), "选中后应出现选中日摘要卡")
-        let tabBar = app.tabBars.firstMatch
-        XCTAssertTrue(tabBar.exists, "应有底部 TabBar")
+        guard let tabBar = bottomTabElement(app) else {
+            XCTFail("找不到底部 Tab 栏（tabBars 与 Tab 按钮都不存在）"); return
+        }
         for _ in 0..<3 where summary.frame.maxY > tabBar.frame.minY {
             scrollCalendarUp(app)
         }
