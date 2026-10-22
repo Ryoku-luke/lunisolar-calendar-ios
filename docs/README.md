@@ -24,6 +24,7 @@
 | 数据来源与专项 | `HUANGLI_DATA_SOURCE.md` · `DATA_UPDATE_RUNBOOK.md` |
 | 工程与发布 | `XCODE_BUILD_GUIDE.md` · `DEVICE_TEST_CHECKLIST.md` · `ENTITLEMENTS.md` · `APP_STORE.md` |
 | 缺陷审查 | `BUG_AUDIT_2026-10-19.md`（全量静态扫描 + 逐条裁定 + 覆盖盲区）|
+| 折叠屏适配 | `FOLDABLE_ADAPTATION_PLAN_2026-10-22.md`（评估稿，未实施）|
 | AI 协作上下文 | `AI_DEVELOPMENT_CONTEXT.md` |
 
 ## 一点五、验证一律走 `Tools/run_tests.sh`（血泪规则）
