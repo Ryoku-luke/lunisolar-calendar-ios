@@ -1081,6 +1081,26 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertTrue(importRow.isHittable, "该行必须仍可点，且命中区 ≥44pt（HIG）")
     }
 
+    // MARK: - 布局自省（诊断用，不构成断言）
+
+    /// 打印当前设备上**实际**的容器宽度与布局形态，用于折叠屏（iPhone Duo）适配取样。
+    ///
+    /// 为什么必须实测：iPhone Duo 的**外屏同样报告 `.regular`**（2026-10-22 实测，
+    /// 见 8210226 的回退说明），所以尺寸类别无法区分内外屏；唯一可靠的是**容器宽度**。
+    /// 本用例只打印、不判定，跑完是 skipped（不污染通道结果）。
+    func testDiagnostic_containerWidthAndLayoutShape() throws {
+        let app = launchApp()
+        let window = app.windows.firstMatch
+        let metrics = """
+        [DIAG] window frame = \(window.frame)
+        [DIAG] app frame    = \(app.frame)
+        [DIAG] tabBars      = \(app.tabBars.count)
+        [DIAG] navBars      = \(app.navigationBars.count)
+        [DIAG] sidebar(设置) = \(app.descendants(matching: .any).matching(identifier: ID.iPadSidebarSettings).firstMatch.exists)
+        """
+        throw XCTSkip(metrics)
+    }
+
     // MARK: - Flow 14：深层界面的按钮审计（P3-6）
 
     /// 主屏之外的三处深层界面：全部日程 / 倒数日 / 年视图。
