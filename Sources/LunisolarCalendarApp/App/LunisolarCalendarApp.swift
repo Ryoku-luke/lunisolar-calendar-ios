@@ -87,12 +87,13 @@ public struct AppRootView: View {
 /// iPhone Plus/Max **横屏**宽度也是 regular，只按宽度判会把手机切成三栏、TabBar 消失（P3-2）。
 public struct AdaptiveRootView: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    @Environment(\.verticalSizeClass) private var vSizeClass
 
     public init() {}
 
     public var body: some View {
         Group {
-            if LayoutIdiom.usesSplitLayout(horizontalSizeClass: hSizeClass) {
+            if LayoutIdiom.usesSplitLayout(horizontalSizeClass: hSizeClass, verticalSizeClass: vSizeClass) {
                 // iPad：双栏布局
                 iPadRootView()
             } else {

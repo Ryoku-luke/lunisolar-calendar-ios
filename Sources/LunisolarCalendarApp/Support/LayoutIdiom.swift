@@ -32,8 +32,23 @@ public enum LayoutIdiom {
     ///   - iPad 分屏/侧拉（compact）→ false：窄栏回落单栏（保持既有行为）；
     ///   - 宽度未知（`nil`，例如某些宿主环境）→ false：保守走单栏，避免误切三栏。
     public static func usesSplitLayout(device: Device,
-                                       horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
-        device == .pad && horizontalSizeClass == .regular
+                                       horizontalSizeClass: UserInterfaceSizeClass?,
+                                       verticalSizeClass: UserInterfaceSizeClass? = nil) -> Bool {
+        _ = device   // 保留参数以兼容既有调用；判据不再依赖设备种类（折叠屏 idiom 仍是 .phone）
+        // 2026-10-22 折叠屏适配：**同时看宽与高**，而不是只看宽。
+        //
+        // 为什么不能只看"宽"（P3-2 的教训）：iPhone Plus/Max **横屏**宽度也是 regular，
+        // 只看宽会把手机切成三栏、TabBar 消失（仓库有专门的源码扫描守卫禁止这么写）。
+        //
+        // 为什么"高"能区分：横屏手机是**宽而矮**（vertical == .compact）；
+        // iPad 与**折叠屏展开**都是**宽而高**（vertical == .regular）。
+        //
+        // ⚠️ 已知未知：iPhone Duo 展开后 horizontalSizeClass 是否报 .regular，SDK 无公开说明；
+        //   若实测仍为 .compact，则本条规则不足以分栏，下一步需要把容器宽度提到分栏决策之上
+        //   （宽度通道）。这一点必须由真机/模拟器实测确认，不能靠猜。
+        guard horizontalSizeClass == .regular else { return false }
+        guard verticalSizeClass != .compact else { return false }
+        return true
     }
 
     /// 当前设备形态。
@@ -60,8 +75,11 @@ public enum LayoutIdiom {
     /// 当前环境是否走 iPad 分栏（视图侧的唯一入口）。
     /// 读 `current`（MainActor 隔离）→ 本方法也必须 `@MainActor`；调用方均为视图 body。
     @MainActor
-    public static func usesSplitLayout(horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
-        usesSplitLayout(device: current, horizontalSizeClass: horizontalSizeClass)
+    public static func usesSplitLayout(horizontalSizeClass: UserInterfaceSizeClass?,
+                                       verticalSizeClass: UserInterfaceSizeClass? = nil) -> Bool {
+        usesSplitLayout(device: current,
+                        horizontalSizeClass: horizontalSizeClass,
+                        verticalSizeClass: verticalSizeClass)
     }
 }
 #endif
