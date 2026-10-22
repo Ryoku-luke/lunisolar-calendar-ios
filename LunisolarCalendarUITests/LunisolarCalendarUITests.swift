@@ -1516,6 +1516,9 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertGreaterThan(app.buttons.count, before,
                              "面板打开后按钮数应增加（before=\(before), after=\(app.buttons.count)）")
 
+        // 矮屏/折叠外屏（iPhone Duo 外屏 466×678）下面板的「快捷跳转」区在折叠线以下，
+        // 元素不在树里 —— 诊断实测需下滚 2 次才会出现（2026-10-22）。
+        _ = scrollUntilVisible(app, app.buttons["全年视图"])
         let hasYearEntry = app.buttons["全年视图"].waitForExistence(timeout: 3)
         if UIDevice.current.userInterfaceIdiom == .phone {
             XCTAssertTrue(hasYearEntry, "iPhone 上跳转面板应含「全年视图」入口")
