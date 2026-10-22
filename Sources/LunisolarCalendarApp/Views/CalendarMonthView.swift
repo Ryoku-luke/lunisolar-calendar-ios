@@ -55,7 +55,6 @@ struct CalendarMonthView: View {
     @AppStorage("Lunisolar.weekStart") var weekStart: Int = 1
     @Environment(EventStore.self) var store
     @Environment(\.horizontalSizeClass) private var hSizeClass
-    @Environment(\.verticalSizeClass) private var vSizeClass
 
     /// 是否由本视图自行包一层 NavigationStack。
     /// - iPhone 根页：true（自身即导航根）
@@ -88,7 +87,7 @@ struct CalendarMonthView: View {
     /// 是否走 iPad 分栏布局（弹性行高/更大间距）。
     /// ⚠️ 不能用 `hSizeClass == .regular`：iPhone Plus/Max 横屏也是 regular，
     /// 会让手机套上 iPad 的网格布局（P3-2）。判据统一在 `LayoutIdiom`。
-    private var isIPadSplit: Bool { LayoutIdiom.usesSplitLayout(horizontalSizeClass: hSizeClass, verticalSizeClass: vSizeClass) }
+    private var isIPadSplit: Bool { LayoutIdiom.usesSplitLayout(horizontalSizeClass: hSizeClass) }
 
     // MARK: - 视图主体
     // 目录（P4-1）：本文件已按职责分成若干私有方法，抽取成独立 struct 时按这些分段走即可：
@@ -122,11 +121,7 @@ struct CalendarMonthView: View {
             // 让格子按可视区高度弹性分配（56~96pt），避免月卡下方留出大片空白。
             // 量高度放在背景 GeometryReader 里：不参与布局、不改变高度（与 interaction.monthWidth 同一手法）。
             ScrollView(showsIndicators: false) {
-                // 折叠屏展开态是"宽而高的单列"：不加约束时卡片/宜忌/按钮会被拉满
-                // 整个 7.6" 宽度（实测截图），出现超长行与巨大按钮。
-                // 720pt 上限与本仓 DayDetailView:62 的既有做法一致。
                 monthColumn(accent: dayAccent)
-                    .frame(maxWidth: 720)
             }
             // N-3：读取月卡 chrome 真实高度（月份标题 + 节气条 + 星期表头）
             .onPreferenceChange(MonthChromeHeightKey.self) { value in
