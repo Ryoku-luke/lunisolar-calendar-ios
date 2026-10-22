@@ -1356,8 +1356,15 @@ final class LunisolarCalendarUITests: XCTestCase {
         // `isHittable` 只看元素中心点——被 TabBar 压住一点点也仍算「可点」；
         // 这条把「完全没被压住」也钉住，两条合起来才是「打开即见整月」。
         let tabBar = bottomTabElement(app)
-        XCTAssertNotNil(tabBar, "应有底部 Tab 栏（iOS 27 上它可能不是 TabBar 类型）")
+        XCTAssertNotNil(tabBar, "应有 Tab 栏（iOS 27 上它可能不是 TabBar 类型）")
         if let tabBar {
+            // 竖排 Tab 栏（iOS 27 在宽屏/折叠外屏上如此呈现）不是"底部栏"：
+            // 「网格不得压住底部栏」这条几何断言对它没有意义 —— 实测 iPhone Duo 外屏
+            // 就是右侧竖排栏（首项顶边 444pt），而网格在它**左侧**，并不被遮挡。
+            // 2026-10-22 实测数字：网格底边 508.3 / 栏顶 444.0 —— 曾被我误判为真 bug，
+            // 实际是"拿底部栏的判据套在侧栏上"。这里按朝向分流。
+            try XCTSkipIf(tabBar.frame.height > tabBar.frame.width,
+                          "当前 Tab 栏为竖排（高 \(tabBar.frame.height) > 宽 \(tabBar.frame.width)），不适用底部遮挡断言")
             XCTAssertLessThanOrEqual(last.frame.maxY, tabBar.frame.minY,
                                      """
                                      网格最后一行不应被底部 Tab 栏压住：
