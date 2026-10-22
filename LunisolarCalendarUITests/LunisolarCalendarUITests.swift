@@ -1123,6 +1123,33 @@ final class LunisolarCalendarUITests: XCTestCase {
         throw XCTSkip(metrics)
     }
 
+    // MARK: - 日期跳转面板自省（诊断用，不构成断言）
+
+    /// 打开「跳转日期」面板，报告「全年视图」入口是**一开始就在**、还是**滚动后才出现**，
+    /// 以及「快捷跳转」区是否在树里。用于判定 Duo 上 3 条用例（Flow12/14/19）的红是
+    /// 测试没滚动、还是 App 真没显示。跑完 skipped，不污染通道。
+    func testDiagnostic_dateJumpPanelTree() throws {
+        let app = launchApp()
+        let title = app.buttons["选择月份或年份"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 10), "月历标题应存在")
+        title.tap()
+        XCTAssertTrue(app.buttons["跳转"].waitForExistence(timeout: 5), "点标题应打开日期跳转面板")
+
+        let immediately = app.buttons["全年视图"].exists
+        let quickSectionImmediately = app.staticTexts["快捷跳转"].exists
+        var afterScroll = immediately
+        var swipes = 0
+        while !afterScroll && swipes < 6 {
+            app.swipeUp(); swipes += 1
+            afterScroll = app.buttons["全年视图"].waitForExistence(timeout: 1)
+        }
+        throw XCTSkip("""
+        [DIAG-PANEL] 打开后立即存在=\(immediately) / 滚动后存在=\(afterScroll) / 用了 \(swipes) 次 swipe
+        [DIAG-PANEL] 「快捷跳转」区立即在树里=\(quickSectionImmediately)
+        [DIAG-PANEL] 当前按钮名：\(app.buttons.allElementsBoundByIndex.prefix(18).map { $0.label })
+        """)
+    }
+
     // MARK: - Flow 14：深层界面的按钮审计（P3-6）
 
     /// 主屏之外的三处深层界面：全部日程 / 倒数日 / 年视图。
@@ -1188,6 +1215,9 @@ final class LunisolarCalendarUITests: XCTestCase {
             let title = app.buttons["选择月份或年份"].firstMatch
             XCTAssertTrue(title.waitForExistence(timeout: 10), "月历标题应可点开日期跳转")
             title.tap()
+            // 矮屏/折叠外屏（如 iPhone Duo 外屏 466×678）下面板的「快捷跳转」区在折叠线以下，
+            // 元素不在树里 —— 2026-10-22 诊断实测：打开后立即不存在，下滚 2 次后出现。
+            _ = scrollUntilVisible(app, app.buttons["全年视图"])
             let yearEntry = app.buttons["全年视图"]
             XCTAssertTrue(yearEntry.waitForExistence(timeout: 5), "跳转面板应有「全年视图」入口")
             yearEntry.tap()
@@ -1220,6 +1250,9 @@ final class LunisolarCalendarUITests: XCTestCase {
         XCTAssertTrue(dateJump.waitForExistence(timeout: 5))
         dateJump.tap()
 
+        // 矮屏/折叠外屏（如 iPhone Duo 外屏 466×678）下面板的「快捷跳转」区在折叠线以下，
+        // 元素不在树里 —— 2026-10-22 诊断实测：打开后立即不存在，下滚 2 次后出现。
+        _ = scrollUntilVisible(app, app.buttons["全年视图"])
         let yearEntry = app.buttons["全年视图"]
         XCTAssertTrue(yearEntry.waitForExistence(timeout: 5), "跳转面板应有「全年视图」入口")
         yearEntry.tap()
