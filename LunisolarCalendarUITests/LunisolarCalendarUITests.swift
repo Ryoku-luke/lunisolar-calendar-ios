@@ -1066,6 +1066,13 @@ final class LunisolarCalendarUITests: XCTestCase {
                       "最大字号下选中日期后应仍能看到当日摘要")
 
         // ③ 设置页：关键行仍能找到且可点（惰性列表 + 大字号 = 最容易被挤坏的组合）
+        // ⚠️ iPad 上设置入口在**侧栏列表**里：最大字号时它可能已被挤出可视区，
+        //    必须先滚动侧栏再点，否则 tapSidebarItem 找不到（2026-10-22 iPad 通道实测）。
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let settingsItem = app.descendants(matching: .any)
+                .matching(identifier: ID.iPadSidebarSettings).firstMatch
+            _ = scrollUntilVisible(app, settingsItem)
+        }
         openSettings(app)
         let importRow = app.buttons["导入 / 恢复数据"]
         _ = scrollUntilVisible(app, importRow)
