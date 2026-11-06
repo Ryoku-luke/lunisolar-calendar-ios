@@ -209,4 +209,68 @@ final class SystemImportTests: XCTestCase {
         XCTAssertEqual(r2.updated, 2, "同 id 的应走更新分支")
         XCTAssertEqual(store.events.count, 2)
     }
+
+    // MARK: - D-01 重复事件 occurrence 去重
+
+    func testRecurringOccurrencesWithSameSourceIDCollapseToEarliest() {
+        let cal = Calendar(identifier: .gregorian)
+        let first = cal.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 10))!
+        let second = cal.date(byAdding: .day, value: 7, to: first)!
+        let dtos = [
+            SystemImportEvent(sourceID: "ek:series-A", title: "周会",
+                              startDate: second, repeatRule: .weekly),
+            SystemImportEvent(sourceID: "ek:series-A", title: "周会",
+                              startDate: first, repeatRule: .weekly)
+        ]
+        let events = SystemImportMapper.toCalendarEvents(dtos)
+        XCTAssertEqual(events.count, 1, "同一重复系列只应导入一条")
+        XCTAssertEqual(events[0].startDate, first, "应保留窗口内最早的 occurrence")
+        XCTAssertEqual(events[0].repeatRule, .weekly)
+    }
+
+    func testDistinctSourceIDsAreNotDeduplicated() {
+        let a = SystemImportEvent(sourceID: "ek:1", title: "A", startDate: Date())
+        let b = SystemImportEvent(sourceID: "ek:2", title: "B", startDate: Date())
+        XCTAssertEqual(SystemImportMapper.toCalendarEvents([a, b]).count, 2)
+    }
+
+    // MARK: - D-02 全天事件 endDate 排他语义归一化
+
+    func testAllDayEndAtMidnightBecomesInclusive() {
+        let cal = Calendar(identifier: .gregorian)
+        let start = cal.date(from: DateComponents(year: 2026, month: 11, day: 6))!
+        let nextMidnight = cal.date(byAdding: .day, value: 1, to: start)!
+        let dto = SystemImportEvent(sourceID: "ek:all-day", title: "全天",
+                                    startDate: start, endDate: nextMidnight, isAllDay: true)
+        let ev = SystemImportMapper.toCalendarEvent(dto)
+        XCTAssertEqual(ev.endDate, nextMidnight.addingTimeInterval(-1))
+        XCTAssertFalse(ev.occurs(on: nextMidnight), "全天事件不应延续到次日")
+    }
+
+    func testAllDayEndNotAtMidnightIsLeftUnchanged() {
+        let cal = Calendar(identifier: .gregorian)
+        let start = cal.date(from: DateComponents(year: 2026, month: 11, day: 6))!
+        let end = start.addingTimeInterval(12 * 3600)   // 12:00
+        let dto = SystemImportEvent(sourceID: "ek:all-day-noon", title: "半天",
+                                    startDate: start, endDate: end, isAllDay: true)
+        XCTAssertEqual(SystemImportMapper.toCalendarEvent(dto).endDate, end)
+    }
+
+    func testNonAllDayMidnightEndIsLeftUnchanged() {
+        let cal = Calendar(identifier: .gregorian)
+        let start = cal.date(from: DateComponents(year: 2026, month: 11, day: 6, hour: 22))!
+        let end = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: start))!
+        let dto = SystemImportEvent(sourceID: "ek:late", title: "跨午夜",
+                                    startDate: start, endDate: end, isAllDay: false)
+        XCTAssertEqual(SystemImportMapper.toCalendarEvent(dto).endDate, end)
+    }
+
+    func testAllDayWithoutEndFallsBackToWholeDay() {
+        let cal = Calendar(identifier: .gregorian)
+        let start = cal.date(from: DateComponents(year: 2026, month: 11, day: 6))!
+        let dto = SystemImportEvent(sourceID: "ek:all-day-nil", title: "无结束",
+                                    startDate: start, isAllDay: true)
+        let ev = SystemImportMapper.toCalendarEvent(dto)
+        XCTAssertEqual(ev.endDate.timeIntervalSince(start), 86_399)
+    }
 }

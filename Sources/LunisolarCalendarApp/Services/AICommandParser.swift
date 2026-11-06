@@ -534,10 +534,21 @@ public enum AICommandParser {
                  .replacingOccurrences(of: "今日", with: "今天")
         }
 
-        s = s.replacingOccurrences(of: " AM", with: " 上午", options: .caseInsensitive)
-             .replacingOccurrences(of: " PM", with: " 下午", options: .caseInsensitive)
-             .replacingOccurrences(of: "am", with: "上午")
-             .replacingOccurrences(of: "pm", with: "下午")
+        // 只转换紧邻数字的 am/pm（标题里的 team/example 不能被误改），
+        // 并直接归一成带「点/冒号」锚点的中文时间，保证 parseClock 能识别。
+        // 12am 是午夜 0 点，必须先于通用规则处理，避免得到「上午12点」。
+        s = s.replacingOccurrences(
+            of: #"(?i)12:(\d{2})\s*am\b"#, with: "凌晨12:$1", options: .regularExpression)
+        s = s.replacingOccurrences(
+            of: #"(?i)(?<![:：\d])12\s*am\b"#, with: "凌晨12点", options: .regularExpression)
+        s = s.replacingOccurrences(
+            of: #"(?i)(\d{1,2}):(\d{2})\s*pm\b"#, with: "下午$1:$2", options: .regularExpression)
+        s = s.replacingOccurrences(
+            of: #"(?i)(\d{1,2}):(\d{2})\s*am\b"#, with: "上午$1:$2", options: .regularExpression)
+        s = s.replacingOccurrences(
+            of: #"(?i)(?<![:：\d])(\d{1,2})\s*pm\b"#, with: "下午$1点", options: .regularExpression)
+        s = s.replacingOccurrences(
+            of: #"(?i)(?<![:：\d])(\d{1,2})\s*am\b"#, with: "上午$1点", options: .regularExpression)
 
         // 「明早 / 明晚」等**时间词变体**：口语里高频，但不含完整的「明天」二字，
         // 旧实现识别不出，于是「明早10点开会」变成"今天 10:00 + 标题『明开会』"

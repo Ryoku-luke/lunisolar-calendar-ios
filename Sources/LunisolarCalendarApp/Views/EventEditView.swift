@@ -291,8 +291,13 @@ struct EventEditView: View {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         var end = endDate
-        if type == .note { end = startDate }
-        if end < startDate { end = startDate }
+        if type == .note {
+            end = CalendarEvent.normalizedEnd(forNoteStartingAt: startDate, isAllDay: isAllDay)
+        }
+        // 存储不变量：endDate 必须严格大于 startDate（EventStore.merge / 导出往返都依赖）
+        if end <= startDate {
+            end = startDate.addingTimeInterval(isAllDay ? 86_399 : 1)
+        }
         // 提醒偏移的口径（与 NotificationManager.shouldScheduleNotification 对齐）：
         // 记事不参与提醒，必须清空——否则把「日程+10分钟前」切成记事时旧偏移会残留；
         // 其余类型取界面上生效的提前量（提醒类型未选时是 0 = 准时）。

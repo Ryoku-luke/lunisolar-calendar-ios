@@ -106,6 +106,7 @@
 "删除" = "Delete";
 "删除 %d 项" = "Delete %d";
 "删除所有数据" = "Delete All Data";
+"删除所有日程" = "Delete All Events";
 "删除此%@" = "Delete This %@";
 "删除选中的 %d 条日程？" = "Delete %d selected events?";
 "前往系统设置开启" = "Open System Settings";
@@ -168,6 +169,7 @@
 "导入失败：无权限读取该文件，请重新选择" = "Import Failed: No permission to read this file. Please choose another.";
 "导入结果" = "Import Results";
 "将永久删除所有日程、提醒和设置，此操作无法撤销" = "Permanently deletes all events, reminders and settings. This cannot be undone.";
+"将永久删除所有日程及其提醒，此操作无法撤销。外观、周起始日等设置不会重置。" = "Permanently deletes all events and their reminders. This cannot be undone. Appearance, week start, and other settings will not be reset.";
 "小寒" = "Minor Cold";
 "小暑" = "Minor Heat";
 "小满" = "Grain Full";

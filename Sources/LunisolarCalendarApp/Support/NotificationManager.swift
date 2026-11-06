@@ -342,6 +342,24 @@ public final class NotificationManager {
         // 统一取 .gregorian 下的 hour/minute，避免 Calendar.current 跟随系统本地化日历
         let timeComps = gregorian.dateComponents([.hour, .minute], from: effectiveStart)
 
+        // 未来才开始的重复事件：UNCalendarNotificationTrigger 不能约束「起始日」，
+        // 直接挂 repeating 会从调度当刻起提前触发。先只排首发一次性，待首发过去后
+        // 由下一次 rescheduleAllReminders 安装 repeating 版本。
+        if rule != .never, rule != .lunarAnnually, Self.shouldDeferRepeating(effectiveStart: effectiveStart) {
+            let first = rule == .workday
+                ? Self.firstWorkday(onOrAfter: effectiveStart, calendar: gregorian)
+                : effectiveStart
+            var comps = gregorian.dateComponents(
+                [.year, .month, .day, .hour, .minute], from: first
+            )
+            comps.second = 0
+            return [UNNotificationRequest(
+                identifier: "\(baseID)-first",
+                content: content,
+                trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+            )]
+        }
+
         switch rule {
         case .never:
             let interval = effectiveStart.timeIntervalSinceNow
@@ -414,15 +432,45 @@ public final class NotificationManager {
         }
     }
 
+    /// 重复提醒是否需要延后到首发时刻：未来起始的重复事件不能直接挂 repeating trigger。
+    nonisolated static func shouldDeferRepeating(
+        effectiveStart: Date,
+        now: Date = Date()
+    ) -> Bool {
+        effectiveStart > now
+    }
+
+    /// 从 start 起找到第一个真正的工作日（跳过周末与法定节假日，包含调休补班日）。
+    /// 保持 start 的时分秒。
+    nonisolated static func firstWorkday(onOrAfter start: Date, calendar: Calendar) -> Date {
+        var day = calendar.startOfDay(for: start)
+        let hour = calendar.component(.hour, from: start)
+        let minute = calendar.component(.minute, from: start)
+        for _ in 0..<14 {
+            let weekday = calendar.component(.weekday, from: day)
+            let isWorkday: Bool
+            switch HolidayProvider.info(for: day).type {
+            case .workday: isWorkday = true
+            case .holiday: isWorkday = false
+            case .normal:  isWorkday = weekday >= 2 && weekday <= 6
+            }
+            if isWorkday {
+                return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
+            }
+            day = calendar.date(byAdding: .day, value: 1, to: day) ?? day
+        }
+        return start
+    }
+
     /// 该事件**可能用过**的全部通知 identifier（取消时一次性清干净）。
     ///
     /// 关键：不能只按"当前 repeatRule"生成。用户把「工作日」改成「每天」（或反向、
     /// 或从农历每年改成其它）时，旧规则那组 request 的 ID 与新规则不同，
     /// 按当前规则去 cancel 会漏掉旧的 → 幽灵提醒继续按旧规则弹。
-    /// 因此恒定返回全集：base / base-lunar / base-wd-2…6（最多 7 个 ID，开销可忽略）。
+    /// 因此恒定返回全集：base / base-first / base-lunar / base-wd-2…6（最多 8 个 ID）。
     private func notificationIdentifiers(for event: CalendarEvent) -> [String] {
         let base = event.id.uuidString
-        return [base, "\(base)-lunar"] + (2...6).map { "\(base)-wd-\($0)" }
+        return [base, "\(base)-first", "\(base)-lunar"] + (2...6).map { "\(base)-wd-\($0)" }
     }
 
     /// 计算未来第一个与 lunarSource 的农历月/日相同的公历日期，保留 timeSource 的时分秒。

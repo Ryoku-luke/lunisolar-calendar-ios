@@ -277,4 +277,80 @@ final class DataPortabilityTests: XCTestCase {
         XCTAssertEqual(endComps.day, 6,
                        "导入后全天事件 endDate 不应跨到次日（排他 DTEND 应转回 inclusive）")
     }
+
+    // MARK: - D-08 ICS 例外身份与规则提示（阶段一）
+
+    func testICSExceptionDoesNotOverwriteMaster() {
+        let ics = """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//CN
+        BEGIN:VEVENT
+        UID:series-1
+        SUMMARY:周会
+        DTSTART:20260101T100000
+        DTEND:20260101T110000
+        RRULE:FREQ=WEEKLY
+        END:VEVENT
+        BEGIN:VEVENT
+        UID:series-1
+        RECURRENCE-ID:20260108T100000
+        SUMMARY:周会（改期）
+        DTSTART:20260108T120000
+        DTEND:20260108T130000
+        END:VEVENT
+        END:VCALENDAR
+        """
+        let events = DataPortability.importICS(ics)
+        XCTAssertEqual(events.count, 2, "主系列与例外实例都必须保留")
+        guard let master = events.first(where: { $0.repeatRule == .weekly }),
+              let exception = events.first(where: {
+                  $0.notes?.contains("[ICS-RECURRENCE-ID]") == true
+              }) else {
+            return XCTFail("未找到主系列或例外实例，实际：\(events.map(\.title))")
+        }
+        XCTAssertNotEqual(master.id, exception.id, "例外实例必须拥有独立 UUID")
+        XCTAssertEqual(exception.repeatRule, .never, "例外实例应按一次性事件导入")
+        XCTAssertEqual(exception.title, "周会（改期）")
+    }
+
+    func testICSRRuleIntervalIsMarkedAsSimplified() {
+        let ics = """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:every-two-weeks
+        SUMMARY:双周会
+        DTSTART:20260101T100000
+        DTEND:20260101T110000
+        RRULE:FREQ=WEEKLY;INTERVAL=2
+        END:VEVENT
+        END:VCALENDAR
+        """
+        let events = DataPortability.importICS(ics)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events[0].repeatRule, .weekly)
+        XCTAssertTrue(events[0].notes?.contains("INTERVAL=2") == true,
+                      "被简化的 RRULE 必须可追溯")
+    }
+
+    func testICSExdateIsReported() {
+        let ics = """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:with-exdate
+        SUMMARY:有排除日期
+        DTSTART:20260101T100000
+        DTEND:20260101T110000
+        RRULE:FREQ=WEEKLY
+        EXDATE:20260108T100000,20260115T100000
+        END:VEVENT
+        END:VCALENDAR
+        """
+        let events = DataPortability.importICS(ics)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertTrue(events[0].notes?.contains("已忽略 2 个排除日期") == true,
+                      "EXDATE 暂不支持时必须提示，不能静默")
+    }
 }

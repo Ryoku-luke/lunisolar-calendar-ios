@@ -497,6 +497,91 @@ final class CalendarEventTests: XCTestCase {
                        "腊月三十生日不应匹配廿八（防止过度 fallback）")
     }
 
+    // MARK: - D-03 重复规则边界
+
+    func testYearlyFeb29FallsBackToFeb28InNonLeapYear() {
+        let cal = Calendar(identifier: .gregorian)
+        let start = cal.date(from: DateComponents(year: 2024, month: 2, day: 29, hour: 9))!
+        let ev = CalendarEvent(title: "闰日", startDate: start, repeatRule: .yearly)
+        let feb28_2025 = cal.date(from: DateComponents(year: 2025, month: 2, day: 28, hour: 9))!
+        let mar1_2025 = cal.date(from: DateComponents(year: 2025, month: 3, day: 1, hour: 9))!
+        let feb29_2028 = cal.date(from: DateComponents(year: 2028, month: 2, day: 29, hour: 9))!
+        XCTAssertTrue(ev.occurs(on: feb28_2025), "平年应回退到 2/28")
+        XCTAssertFalse(ev.occurs(on: mar1_2025))
+        XCTAssertTrue(ev.occurs(on: feb29_2028), "闰年仍应命中 2/29")
+    }
+
+    func testMonthly31FallsBackToLastDayOfShortMonth() {
+        let cal = Calendar(identifier: .gregorian)
+        let start = cal.date(from: DateComponents(year: 2026, month: 1, day: 31, hour: 9))!
+        let ev = CalendarEvent(title: "月末", startDate: start, repeatRule: .monthly)
+        let feb28 = cal.date(from: DateComponents(year: 2026, month: 2, day: 28, hour: 9))!
+        let feb27 = cal.date(from: DateComponents(year: 2026, month: 2, day: 27, hour: 9))!
+        let mar31 = cal.date(from: DateComponents(year: 2026, month: 3, day: 31, hour: 9))!
+        XCTAssertTrue(ev.occurs(on: feb28), "31 号在小月应回退到月末")
+        XCTAssertFalse(ev.occurs(on: feb27))
+        XCTAssertTrue(ev.occurs(on: mar31), "大月仍应为 31 号")
+    }
+
+    func testWorkdaySkipsStatutoryHolidayAndIncludesMakeupSaturday() {
+        let cal = Calendar(identifier: .gregorian)
+        let start = cal.date(from: DateComponents(year: 2026, month: 1, day: 1, hour: 9))!
+        let ev = CalendarEvent(title: "工作日", startDate: start, repeatRule: .workday)
+        let oct1 = cal.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 9))!
+        let oct10 = cal.date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 9))!
+        let oct11 = cal.date(from: DateComponents(year: 2026, month: 10, day: 11, hour: 9))!
+        let oct12 = cal.date(from: DateComponents(year: 2026, month: 10, day: 12, hour: 9))!
+        XCTAssertFalse(ev.occurs(on: oct1), "法定节假日不应触发工作日提醒")
+        XCTAssertTrue(ev.occurs(on: oct10), "调休补班日应触发")
+        XCTAssertFalse(ev.occurs(on: oct11), "普通周日不应触发")
+        XCTAssertTrue(ev.occurs(on: oct12), "普通周一应触发")
+    }
+
+    // MARK: - D-05 记事 endDate 不变量
+
+    func testNoteNormalizedEndIsStrictlyAfterStart() {
+        let start = Date()
+        XCTAssertEqual(
+            CalendarEvent.normalizedEnd(forNoteStartingAt: start, isAllDay: false),
+            start.addingTimeInterval(1)
+        )
+        XCTAssertEqual(
+            CalendarEvent.normalizedEnd(forNoteStartingAt: start, isAllDay: true),
+            start.addingTimeInterval(86_399)
+        )
+    }
+
+    @MainActor
+    func testMergeAcceptsNoteWithOneSecondDuration() {
+        let store = makeIsolatedEventStore()
+        _ = store.clearAll(skipSync: true)
+        var note = CalendarEvent(
+            title: "记事", type: .note, startDate: Date(),
+            endDate: CalendarEvent.normalizedEnd(forNoteStartingAt: Date(), isAllDay: false)
+        )
+        note.endDate = note.startDate.addingTimeInterval(1)
+        let result = store.merge([note], policy: .keepLatest, skipSync: true)
+        XCTAssertEqual(result.added, 1, "endDate == startDate + 1s 是合法事件")
+        XCTAssertEqual(result.invalid, 0)
+    }
+
+    @MainActor
+    func testLegacyInvalidDurationIsRepairedOnLoad() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lunisolar-repair-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        var legacy = CalendarEvent(title: "旧记事", type: .note, startDate: Date())
+        legacy.endDate = legacy.startDate   // 模拟修复前编辑分支写出的非法值
+        let data = try JSONEncoder().encode([legacy])
+        try data.write(to: dir.appendingPathComponent("calendar_events.json"))
+
+        let store = EventStore(storageBaseDir: dir)
+        XCTAssertEqual(store.events.count, 1)
+        XCTAssertGreaterThan(store.events[0].endDate, store.events[0].startDate,
+                             "加载时应把非法时长修成 endDate > startDate")
+    }
+
     // MARK: - Helper（与 NotificationManager 调度守卫保持语义一致）
     // 注：如果 NM 里的守卫再变更，这里也要同步更新——它是逻辑的镜像。
     private func notificationIsEligibleForScheduling(_ ev: CalendarEvent) -> Bool {

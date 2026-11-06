@@ -104,4 +104,29 @@ final class NotificationManagerTests: XCTestCase {
         XCTAssertEqual(NotificationManager.snoozeEpoch(of: "not-a-snooze-id"), 0)
         XCTAssertEqual(NotificationManager.snoozeEpoch(of: "snooze-\(event)"), 0)
     }
+
+    // MARK: - D-04 未来起始的重复提醒
+
+    #if canImport(UserNotifications)
+    func testFutureRepeatingStartIsDeferred() {
+        let now = Date()
+        XCTAssertTrue(NotificationManager.shouldDeferRepeating(
+            effectiveStart: now.addingTimeInterval(3600), now: now))
+        XCTAssertFalse(NotificationManager.shouldDeferRepeating(
+            effectiveStart: now.addingTimeInterval(-1), now: now),
+                       "已开始/已过去的重复事件应直接使用 repeating trigger")
+    }
+
+    func testFirstWorkdaySkipsWeekend() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        // 2026-11-07 是周六 → 首个工作日应为 11-09 周一
+        let saturday = cal.date(from: DateComponents(
+            year: 2026, month: 11, day: 7, hour: 9, minute: 30))!
+        let first = NotificationManager.firstWorkday(onOrAfter: saturday, calendar: cal)
+        let c = cal.dateComponents([.month, .day, .hour, .minute], from: first)
+        XCTAssertEqual([c.month, c.day, c.hour, c.minute], [11, 9, 9, 30],
+                       "周末应顺延到周一，并保留时分")
+    }
+    #endif
 }

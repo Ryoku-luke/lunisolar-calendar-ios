@@ -197,7 +197,7 @@ struct SettingsView: View {
                 showClearConfirm = true
             } label: {
                 HStack {
-                    Label(NSLocalizedString("删除所有数据", comment: ""), systemImage: "trash")
+                    Label(NSLocalizedString("删除所有日程", comment: ""), systemImage: "trash")
                     Spacer()
                     Text(String(format: NSLocalizedString("%d 项", comment: ""), store.events.count))
                         .font(AppTheme.Font.caption.weight(.semibold))
@@ -207,7 +207,7 @@ struct SettingsView: View {
             .disabled(store.events.isEmpty)
             .opacity(store.events.isEmpty ? 0.45 : 1)
         } footer: {
-            Text(NSLocalizedString("将永久删除所有日程、提醒和设置，此操作无法撤销", comment: ""))
+            Text(NSLocalizedString("将永久删除所有日程及其提醒，此操作无法撤销。外观、周起始日等设置不会重置。", comment: ""))
         }
     }
 

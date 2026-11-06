@@ -104,7 +104,7 @@ public enum SystemImportMapper {
             title: dto.title,
             type: dto.eventType,
             startDate: dto.startDate,
-            endDate: dto.endDate,
+            endDate: normalizedEndDate(for: dto),
             isAllDay: dto.isAllDay,
             location: dto.location,
             notes: dto.notes,
@@ -121,9 +121,37 @@ public enum SystemImportMapper {
         return ev
     }
 
-    /// 批量映射并过滤无效项（标题空 / endDate<=startDate 由 EventStore.merge 再兜底）
+    /// 批量映射。
+    ///
+    /// 同一 sourceID 只保留最早的一条：EventKit 会把重复事件展开成多个 occurrence，
+    /// 但它们的 eventIdentifier 相同。若逐条映射，同 UUID 会在 merge 中互相覆盖，
+    /// 最终只剩最后一次 occurrence（重复规则与所有中间实例都丢失）。
     public nonisolated static func toCalendarEvents(_ dtos: [SystemImportEvent]) -> [CalendarEvent] {
-        dtos.map(toCalendarEvent)
+        var bySource: [String: SystemImportEvent] = [:]
+        for dto in dtos {
+            if let existing = bySource[dto.sourceID] {
+                if dto.startDate < existing.startDate {
+                    bySource[dto.sourceID] = dto
+                }
+            } else {
+                bySource[dto.sourceID] = dto
+            }
+        }
+        return bySource.values
+            .sorted { $0.startDate < $1.startDate }
+            .map(toCalendarEvent)
+    }
+
+    /// 系统全天事件的结束时间是排他语义（次日 00:00），本 App 存 inclusive 当日 23:59:59。
+    /// 只对「全天 + 零点端点」归一化，避免误伤普通定时事件。
+    private nonisolated static func normalizedEndDate(for dto: SystemImportEvent) -> Date? {
+        guard dto.isAllDay, let end = dto.endDate, end > dto.startDate else {
+            return dto.endDate
+        }
+        let cal = Calendar(identifier: .gregorian)
+        let c = cal.dateComponents([.hour, .minute, .second], from: end)
+        guard c.hour == 0, c.minute == 0, c.second == 0 else { return end }
+        return end.addingTimeInterval(-1)
     }
 
     /// 用 sourceID 生成确定性 UUID：NSUUID(uuidBytes:) 接收 16 字节

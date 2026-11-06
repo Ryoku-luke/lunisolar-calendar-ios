@@ -247,6 +247,12 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         self.updatedAt = Date()
     }
 
+    /// 记事不展示时长，但必须满足 `endDate > startDate` 的存储不变量：
+    /// EventStore.merge 会把 `endDate <= startDate` 判为 invalid，导出/导入往返也会丢事件。
+    public static func normalizedEnd(forNoteStartingAt start: Date, isAllDay: Bool) -> Date {
+        start.addingTimeInterval(isAllDay ? 86_399 : 1)
+    }
+
     /// 判断事件是否在指定日期发生
     /// - Parameters:
     ///   - date: 目标公历日
@@ -268,20 +274,38 @@ public struct CalendarEvent: Identifiable, Codable, Sendable {
         case .daily:
             return target >= start
         case .workday:
+            guard target >= start else { return false }
             let weekday = cal.component(.weekday, from: target)
-            return target >= start && weekday >= 2 && weekday <= 6
+            // 工作日 = 非法定节假日，且（周一至周五 或 调休补班日）。
+            // 节假日数据未覆盖的年份回退为旧口径（周一至周五）。
+            switch HolidayProvider.info(for: target).type {
+            case .workday: return true    // 调休补班（可能是周末）
+            case .holiday: return false   // 法定放假
+            case .normal:  return weekday >= 2 && weekday <= 6
+            }
         case .weekly:
             let targetWeekday = cal.component(.weekday, from: target)
             let startWeekday = cal.component(.weekday, from: start)
             return target >= start && targetWeekday == startWeekday
         case .monthly:
+            guard target >= start else { return false }
             let targetDay = cal.component(.day, from: target)
             let startDay = cal.component(.day, from: start)
-            return target >= start && targetDay == startDay
+            let daysInTargetMonth = cal.range(of: .day, in: .month, for: target)?.count ?? 30
+            // 31 号在小月回退到该月最后一天，避免每月任务整月消失。
+            let expectedDay = min(startDay, daysInTargetMonth)
+            return targetDay == expectedDay
         case .yearly:
+            guard target >= start else { return false }
             let tm = cal.dateComponents([.month, .day], from: target)
             let sm = cal.dateComponents([.month, .day], from: start)
-            return target >= start && tm.month == sm.month && tm.day == sm.day
+            guard tm.month == sm.month else { return false }
+            if sm.month == 2, sm.day == 29 {
+                // 平年没有 2/29：回退到 2/28，与倒数日 nextAnniversary 口径一致。
+                let isLeapYear = cal.range(of: .day, in: .year, for: target)?.count == 366
+                return isLeapYear ? tm.day == 29 : tm.day == 28
+            }
+            return tm.day == sm.day
         case .lunarAnnually:
             // 农历每年重复：匹配农历月日（父母生日、传统节日等）
             // 优先使用调用方注入的缓存农历，避免重复转换

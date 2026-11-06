@@ -783,9 +783,34 @@ public final class EventStore {
                 AppLogger.app.error("本地数据部分损坏：已救回 \(salvaged.good.count) 条，隔离 \(salvaged.bad.count) 条坏记录（其余字段不变）")
             }
         }
+        let repairedCount = repairInvalidDurationsIfNeeded()
         rebuildIDIndex()
         clearLastInsertHint()
         invalidateCache()
+        if repairedCount > 0 {
+            // 修复前已复制 `.pre-repair.<ms>`，再立即落盘，避免每次启动重复修复
+            saveNow()
+        }
+    }
+
+    /// 一次性修存量：历史记事可能保存为 `endDate == startDate`，
+    /// 会被 merge 判 invalid，导出/导入往返时丢失。
+    private func repairInvalidDurationsIfNeeded() -> Int {
+        var repaired = 0
+        for i in events.indices where events[i].endDate <= events[i].startDate {
+            events[i].endDate = CalendarEvent.normalizedEnd(
+                forNoteStartingAt: events[i].startDate,
+                isAllDay: events[i].isAllDay
+            )
+            repaired += 1
+        }
+        guard repaired > 0, !storageIsReadOnly else { return repaired }
+        // 现有代码只有“损坏时隔离”，没有常规备份；修复写盘前先留一份原文件
+        let ms = Int64(Date().timeIntervalSince1970 * 1000)
+        let backup = saveURL.deletingLastPathComponent()
+            .appendingPathComponent("\(saveURL.lastPathComponent).pre-repair.\(ms)")
+        try? FileManager.default.copyItem(at: saveURL, to: backup)
+        return repaired
     }
 
     /// 逐条容错解码的结果

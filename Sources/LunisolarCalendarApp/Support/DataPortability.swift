@@ -264,6 +264,12 @@ public enum DataPortability {
                 var notes: String? = nil
                 var rawUID: String? = nil
                 var parsedRRULE: RepeatRule? = nil
+                /// 原始 RRULE 文本（用于「规则已简化」提示）
+                var rawRRULEValue: String? = nil
+                /// 重复系列中「单次改期/单次取消」的例外标识
+                var rawRecurrenceID: String? = nil
+                /// EXDATE 排除日期数量（当前目录不支持排除，仅提示）
+                var exdateCount = 0
                 var parsedPriority: Priority = .normal
                 var parsedIsCompleted = false
                 var hasStart = false
@@ -344,7 +350,12 @@ public enum DataPortability {
                     } else if key.hasPrefix("DESCRIPTION") {
                         notes = unescapeICS(value)
                     } else if key.hasPrefix("RRULE") {
+                        rawRRULEValue = value
                         parsedRRULE = parseRRULE(value)
+                    } else if key.hasPrefix("RECURRENCE-ID") {
+                        rawRecurrenceID = value
+                    } else if key.hasPrefix("EXDATE") {
+                        exdateCount += value.split(separator: ",").count
                     } else if key.hasPrefix("PRIORITY") {
                         // RFC 5545: 1 = 最高优先级，5/undefined = 普通，9 = 最低
                         if let p = Int(value) {
@@ -383,8 +394,14 @@ public enum DataPortability {
                         title: identitySeedTitle,
                         startDate: startDate,
                         endDate: endDate,
-                        isAllDay: isAllDay
+                        isAllDay: isAllDay,
+                        recurrenceID: rawRecurrenceID
                     )
+                    // RECURRENCE-ID 是重复系列里的「单次改期/取消」实例：
+                    // 必须独立身份，且按一次性事件导入，否则会覆盖主系列。
+                    let effectiveRule: RepeatRule = rawRecurrenceID == nil
+                        ? (parsedRRULE ?? .never)
+                        : .never
                     var event = CalendarEvent(
                         id: pseudoID,
                         title: displayTitle,
@@ -393,7 +410,7 @@ public enum DataPortability {
                         isAllDay: isAllDay,
                         location: location,
                         notes: notes,
-                        repeatRule: parsedRRULE ?? .never,
+                        repeatRule: effectiveRule,
                         priority: parsedPriority
                     )
                     // P2-3：时间戳必须取**源文件**的，而不是构造器写的「导入那一刻」。
@@ -416,6 +433,19 @@ public enum DataPortability {
                     if let uid = rawUID, !uid.isEmpty {
                         let suffix = "\n\n\(Self.icsUIDMarker)\(uid)"
                         event.notes = (event.notes ?? "") + suffix
+                    }
+                    // 记录无法完整表达的重复语义，避免“静默简化”：
+                    // - 例外实例
+                    // - RRULE 的 INTERVAL/COUNT/UNTIL/BYDAY 细节
+                    // - EXDATE 排除日期
+                    if let rid = rawRecurrenceID, !rid.isEmpty {
+                        event.notes = (event.notes ?? "") + "\n\n[ICS-RECURRENCE-ID]\(rid)"
+                    }
+                    if let rawRRULE = rawRRULEValue, isSimplifiedRRULE(rawRRULE) {
+                        event.notes = (event.notes ?? "") + "\n\n[原重复规则已简化：\(rawRRULE)]"
+                    }
+                    if exdateCount > 0 {
+                        event.notes = (event.notes ?? "") + "\n\n[已忽略 \(exdateCount) 个排除日期]"
                     }
                     events.append(event)
                 }
@@ -537,6 +567,19 @@ public enum DataPortability {
         return nil
     }
 
+    /// 判断 RRULE 是否包含当前 RepeatRule 无法表达的细节。
+    /// 命中的规则仍按最接近的 FREQ 导入，但会在 notes 留下可追溯提示。
+    private static func isSimplifiedRRULE(_ value: String) -> Bool {
+        let upper = value.uppercased()
+        if let intervalPart = upper.split(separator: ";").first(where: { $0.hasPrefix("INTERVAL=") }),
+           Int(intervalPart.dropFirst("INTERVAL=".count)) != 1 {
+            return true
+        }
+        if upper.contains("COUNT=") || upper.contains("UNTIL=") { return true }
+        if upper.contains("BYDAY="), parseRRULE(value) != .workday { return true }
+        return false
+    }
+
     // MARK: - ICS 辅助：TZID 时区解析（P2 修复）
 
     /// 从 ICS 属性原始 key 中提取 TZID 参数值（保留原始大小写）。
@@ -583,11 +626,17 @@ public enum DataPortability {
         title: String,
         startDate: Date,
         endDate: Date,
-        isAllDay: Bool
+        isAllDay: Bool,
+        recurrenceID: String? = nil
     ) -> UUID {
         var seed = "LUNISOLAR-ICS-IMPORT-V2|"
         if let uid = uid, !uid.isEmpty {
             seed += "uid:\(uid)"
+            // 仅例外实例追加 RECURRENCE-ID：无例外的旧数据种子保持不变，
+            // 重复导入不会产生新 UUID / 副本。
+            if let rid = recurrenceID, !rid.isEmpty {
+                seed += "|rid:\(rid)"
+            }
         } else {
             // 时间戳必须走固定口径的 formatter：种子里的年份若随系统历法变化，
             // 同一份 .ics 重复导入会算出不同 UUID → 去重失效、产生副本

@@ -83,13 +83,34 @@ final class AIAssistantTests: XCTestCase {
         XCTAssertEqual(cal.component(.weekday, from: d.startDate), 2)
     }
 
-    /// 英文/日文日期词归一化（P1-6b 候选：英文时段词如 "3pm" 尚无「点/时」锚点，暂只保证日期归一化）
+    /// 英文/日文日期词归一化
     func testNormalizeEnglishAndJapaneseDateWords() {
         XCTAssertTrue(AICommandParser.normalize("tomorrow meeting").contains("明天"))
         XCTAssertTrue(AICommandParser.normalize("today standup").contains("今天"))
         XCTAssertTrue(AICommandParser.normalize("day after tomorrow review").contains("后天"))
         XCTAssertTrue(AICommandParser.normalize("明後日 会議").contains("后天"))
         XCTAssertTrue(AICommandParser.normalize("明日 会議").contains("明天"))
+    }
+
+    // MARK: - D-07 am/pm 只转换紧邻数字的时段词
+
+    func testNormalizeAmPmDoesNotCorruptEnglishWords() {
+        XCTAssertEqual(AICommandParser.normalize("team meeting"), "team meeting")
+        XCTAssertEqual(AICommandParser.normalize("example review"), "example review")
+    }
+
+    func testNormalizeAmPmProducesChineseClockAnchor() {
+        XCTAssertTrue(AICommandParser.normalize("3pm meeting").contains("下午3点"))
+        XCTAssertTrue(AICommandParser.normalize("3:30 pm review").contains("下午3:30"))
+        XCTAssertTrue(AICommandParser.normalize("12am").contains("凌晨12点"),
+                      "12am 是午夜，不能变成上午12点")
+    }
+
+    func testParse3pmMeetingUses15hAndCleanTitle() throws {
+        let d = try XCTUnwrap(draft("3pm meeting"))
+        XCTAssertEqual(cal.component(.hour, from: d.startDate), 15)
+        XCTAssertEqual(cal.component(.minute, from: d.startDate), 0)
+        XCTAssertEqual(d.title, "meeting", "标题不应残留「3下午」")
     }
 
     func testParseErrorForEmptyInput() {
